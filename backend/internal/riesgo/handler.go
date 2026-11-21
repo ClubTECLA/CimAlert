@@ -4,7 +4,7 @@ import (
 	"context"
 	"math"
 
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/httpapi"
+	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 )
 
 // Handler implementa las operaciones de riesgo del contrato; el servidor lo
