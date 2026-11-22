@@ -29,6 +29,12 @@ register:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 login:
   post:
@@ -61,6 +67,12 @@ login:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 me:
   get:
@@ -76,6 +88,12 @@ me:
               $ref: '#/components/schemas/UsuarioMeResponse'
       '401':
         description: No autenticado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
         content:
           application/json:
             schema:
@@ -118,6 +136,12 @@ recovery:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 verifyRecovery:
   post:
@@ -150,6 +174,12 @@ verifyRecovery:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 resetPassword:
   post:
@@ -174,6 +204,12 @@ resetPassword:
               $ref: '#/components/schemas/ErrorResponse'
       '429':
         description: Demasiadas solicitudes.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
         content:
           application/json:
             schema:
