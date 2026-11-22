@@ -90,7 +90,7 @@ tipoCentroPorId:
         required: true
         schema:
           type: integer
-          minium: 1
+          minimum: 1
     responses:
       '200':
         description: Tipo de centro encontrado
