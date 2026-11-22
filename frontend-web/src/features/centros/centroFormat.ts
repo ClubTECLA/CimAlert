@@ -16,6 +16,15 @@ export interface CentroFilters {
 
 export const DEFAULT_CENTRO_FILTERS: CentroFilters = { tab: "activos", hiddenTipos: [] };
 
+/** Nombres de lo que difiere de DEFAULT_CENTRO_FILTERS; vacío si no hay filtro. */
+export function activeCentroFilterLabels({ tab, hiddenTipos }: CentroFilters): string[] {
+    const hidden = hiddenTipos.length;
+    return [
+        ...(tab !== DEFAULT_CENTRO_FILTERS.tab ? [tab === "ocupados" ? "Centros ocupados" : "Todos los centros"] : []),
+        ...(hidden ? [`${hidden} ${hidden === 1 ? "tipo de centro oculto" : "tipos de centro ocultos"}`] : []),
+    ];
+}
+
 /** Lugares libres; null si falta la capacidad o la gente que hay. Nunca baja de 0. */
 export function lugaresDisponibles({ capacidad, cantidad }: Pick<ApiCentro, "capacidad" | "cantidad">): number | null {
     if (capacidad === null || cantidad === null) return null;
