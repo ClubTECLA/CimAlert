@@ -514,10 +514,9 @@ export interface components {
              */
             longitude: number;
         };
-        /** @description Error devuelto por la API. Los errores de aplicación usan `message`; los errores de validación de parámetros o del cuerpo generados por el router usan `msg`. */
+        /** @description Error devuelto por la API. El detalle del error se incluye en `message`. */
         error_response: {
-            message?: string;
-            msg?: string;
+            message: string;
         };
         crear_reporte_request: {
             incidente_id: number;
@@ -869,7 +868,7 @@ export interface operations {
                     "application/json": components["schemas"]["reporte"];
                 };
             };
-            /** @description Datos inválidos, o coordenada fuera de la zona permitida (REPORTE_POLIGONO) */
+            /** @description Datos inválidos, incidente inexistente o coordenada fuera de la zona permitida (REPORTE_POLIGONO) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -889,15 +888,6 @@ export interface operations {
             };
             /** @description Un ciudadano no puede crear reportes oficiales */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["error_response"];
-                };
-            };
-            /** @description Incidente no encontrado */
-            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1743,6 +1733,15 @@ export interface operations {
             };
             /** @description Demasiadas solicitudes. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

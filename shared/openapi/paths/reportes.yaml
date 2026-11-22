@@ -62,7 +62,7 @@ coleccionReportes:
             schema:
               $ref: '#/components/schemas/Reporte'
       '400':
-        description: Datos inválidos, o coordenada fuera de la zona permitida (REPORTE_POLIGONO)
+        description: Datos inválidos, incidente inexistente o coordenada fuera de la zona permitida (REPORTE_POLIGONO)
         content:
           application/json:
             schema:
@@ -76,12 +76,6 @@ coleccionReportes:
               $ref: '#/components/schemas/ErrorResponse'
       '403':
         description: Un ciudadano no puede crear reportes oficiales
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ErrorResponse'
-      '404':
-        description: Incidente no encontrado
         content:
           application/json:
             schema:
