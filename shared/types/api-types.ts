@@ -492,8 +492,10 @@ export interface components {
              */
             longitude: number;
         };
+        /** @description Error devuelto por la API. Los errores de aplicación usan `message`; los errores de validación de parámetros o del cuerpo generados por el router usan `msg`. */
         error_response: {
-            message: string;
+            message?: string;
+            msg?: string;
         };
         crear_reporte_request: {
             incidente_id: number;
@@ -802,6 +804,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     crearReporte: {
@@ -846,6 +857,24 @@ export interface operations {
             };
             /** @description Un ciudadano no puede crear reportes oficiales */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Incidente no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -899,6 +928,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     listarMisReportes: {
@@ -939,6 +977,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     obtenerReporte: {
@@ -961,6 +1008,15 @@ export interface operations {
                     "application/json": components["schemas"]["reporte"];
                 };
             };
+            /** @description ID de reporte inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -972,6 +1028,15 @@ export interface operations {
             };
             /** @description Reporte no encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1035,6 +1100,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     agregarAvistamiento: {
@@ -1084,6 +1158,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     crearComentario: {
@@ -1121,6 +1204,24 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Reporte no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1208,6 +1309,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description El servicio de almacenamiento no está disponible; se puede reintentar */
             503: {
                 headers: {
@@ -1288,7 +1398,7 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
-            /** @description Usuario no encontrado */
+            /** @description Error interno del servidor */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1350,6 +1460,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     register: {
@@ -1385,6 +1504,15 @@ export interface operations {
             };
             /** @description El email ya está registrado */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1434,6 +1562,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     me: {
@@ -1456,6 +1593,15 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1521,6 +1667,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     verificarRecuperacion: {
@@ -1561,6 +1716,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     listarIncidentes: {
@@ -1583,8 +1747,26 @@ export interface operations {
                     "application/json": components["schemas"]["incidente"][];
                 };
             };
+            /** @description Parámetros de consulta inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1652,7 +1834,7 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
-            /** @description Usuario no encontrado */
+            /** @description Error interno del servidor */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1683,6 +1865,15 @@ export interface operations {
                     "application/json": components["schemas"]["incidente"];
                 };
             };
+            /** @description ID de incidente inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -1694,6 +1885,15 @@ export interface operations {
             };
             /** @description Incidente no encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1772,6 +1972,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     agregarTags: {
@@ -1843,7 +2052,7 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
-            /** @description Usuario no encontrado */
+            /** @description Error interno del servidor */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1890,6 +2099,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     listarRoles: {
@@ -1921,6 +2139,15 @@ export interface operations {
             };
             /** @description El usuario no tiene rol de administrador */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2057,6 +2284,15 @@ export interface operations {
                     "application/json": components["schemas"]["tipos_centro"];
                 };
             };
+            /** @description ID de tipo de centro inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -2104,6 +2340,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["centro"][];
+                };
+            };
+            /** @description Parámetros de consulta inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
                 };
             };
             /** @description No autenticado */
@@ -2204,6 +2449,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["centro"];
+                };
+            };
+            /** @description ID de centro inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
                 };
             };
             /** @description No autenticado */

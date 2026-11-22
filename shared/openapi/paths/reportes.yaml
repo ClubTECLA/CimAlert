@@ -37,6 +37,12 @@ coleccionReportes:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
   post:
     operationId: crearReporte
@@ -74,6 +80,18 @@ coleccionReportes:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '404':
+        description: Incidente no encontrado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 reportePorId:
   get:
@@ -104,6 +122,18 @@ reportePorId:
       
       '404':
         description: Reporte no encontrado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '400':
+        description: ID de reporte inválido
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
         content:
           application/json:
             schema:
@@ -151,6 +181,12 @@ reportePorId:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 avistamientosReporte:
   patch:
@@ -187,6 +223,12 @@ avistamientosReporte:
       
       '404':
         description: Reporte no encontrado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
         content:
           application/json:
             schema:
@@ -258,7 +300,7 @@ estadoReporte:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
       '500':
-        description: Usuario no encontrado
+        description: Error interno del servidor
         content:
           application/json:
             schema:
@@ -312,6 +354,12 @@ tagsReporte:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 listarReportesCercanos:
   get:
@@ -350,6 +398,12 @@ listarReportesCercanos:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 listarMisReportes:
   get:
@@ -375,6 +429,12 @@ listarMisReportes:
               $ref: '#/components/schemas/ErrorResponse'
       '401':
         description: No autenticado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
         content:
           application/json:
             schema:
