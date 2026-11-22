@@ -257,10 +257,30 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verificación de recuperación de contraseña
-         * @description Verifica el código de recuperación y permite al usuario establecer una nueva contraseña.
+         * Verificación del código de recuperación
+         * @description Verifica el código de recuperación y devuelve un token de un solo uso para establecer la nueva contraseña.
          */
         post: operations["verificarRecuperacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/recovery/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Establecer la nueva contraseña
+         * @description Cambia la contraseña con el token que devuelve la verificación del código. Invalida las sesiones anteriores.
+         */
+        post: operations["restablecerContrasena"];
         delete?: never;
         options?: never;
         head?: never;
@@ -452,6 +472,8 @@ export interface components {
         UsuarioMeResponse: components["schemas"]["usuario_me_response"];
         RecoveryRequest: components["schemas"]["recovery_request"];
         VerifyRecoveryRequest: components["schemas"]["verify_recovery_request"];
+        VerifyRecoveryResponse: components["schemas"]["verify_recovery_response"];
+        ResetPasswordRequest: components["schemas"]["reset_password_request"];
         Incidente: components["schemas"]["incidente"];
         CrearIncidenteRequest: components["schemas"]["crear_incidente_request"];
         ActualizarIncidenteRequest: components["schemas"]["actualizar_incidente_request"];
@@ -639,12 +661,22 @@ export interface components {
             /** Format: email */
             email: string;
         };
-        /** @description Solicitud para verificar y recuperar la contraseña de un usuario. */
+        /** @description Solicitud para verificar el código de recuperación de contraseña. */
         verify_recovery_request: {
             /** Format: email */
             email: string;
             /** @description Código de verificación enviado al correo del usuario. */
             pin: string;
+        };
+        /** @description Token de un solo uso que permite establecer la nueva contraseña. */
+        verify_recovery_response: {
+            /** @description Token opaco; vence a los 15 minutos y se invalida al usarse o al pedir un PIN nuevo. */
+            reset_token: string;
+        };
+        /** @description Solicitud para establecer la nueva contraseña con el token de recuperación. */
+        reset_password_request: {
+            /** @description Token devuelto por la verificación del código. */
+            reset_token: string;
             new_password: components["schemas"]["password"];
         };
         /** @description Tag del catálogo de un tipo de incidente (tabla tags), sin conteos por reporte. */
@@ -1681,6 +1713,57 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Código correcto. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["verify_recovery_response"];
+                };
+            };
+            /** @description Solicitud inválida o código de verificación incorrecto. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Demasiadas solicitudes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    restablecerContrasena: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["reset_password_request"];
+            };
+        };
+        responses: {
             /** @description Contraseña cambiada exitosamente. Sin contenido. */
             204: {
                 headers: {
@@ -1688,7 +1771,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Solicitud inválida o código de verificación incorrecto. */
+            /** @description Solicitud inválida o token inválido o expirado. */
             400: {
                 headers: {
                     [name: string]: unknown;

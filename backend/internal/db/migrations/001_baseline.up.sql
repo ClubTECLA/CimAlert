@@ -347,6 +347,9 @@ CREATE TABLE public.puntos_origen (
 
 -- Name: recovery_pins; Type: TABLE; Schema: public; Owner: -
 -- PINs de recuperación de contraseña. pin_hash = HMAC-SHA256(RECOVERY_SECRET, pin).
+-- Al verificar el PIN se llenan verified_at, reset_token_hash
+-- (HMAC-SHA256(RECOVERY_SECRET, token)) y reset_expires_at; el token es el
+-- que después acepta la nueva contraseña. used_at cierra la fila para ambos.
 CREATE TABLE public.recovery_pins (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -354,7 +357,10 @@ CREATE TABLE public.recovery_pins (
     created_at timestamptz DEFAULT now() NOT NULL,
     expires_at timestamptz NOT NULL,
     attempts integer DEFAULT 0 NOT NULL,
-    used_at timestamptz
+    used_at timestamptz,
+    verified_at timestamptz,
+    reset_token_hash bytea,
+    reset_expires_at timestamptz
 );
 
 -- Name: refresh_tokens; Type: TABLE; Schema: public; Owner: -
@@ -574,6 +580,10 @@ ALTER TABLE ONLY public.puntos_origen
 -- Name: recovery_pins recovery_pins_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 ALTER TABLE ONLY public.recovery_pins
     ADD CONSTRAINT recovery_pins_pkey PRIMARY KEY (id);
+
+-- Name: recovery_pins recovery_pins_reset_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+ALTER TABLE ONLY public.recovery_pins
+    ADD CONSTRAINT recovery_pins_reset_token_hash_key UNIQUE (reset_token_hash);
 
 -- Name: refresh_tokens refresh_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 ALTER TABLE ONLY public.refresh_tokens
