@@ -74,7 +74,7 @@ export default function MapFiltersView() {
                 ColSection va con overflow-visible: con scroll propio, lo que el scroll ocupa del relleno le daría una
                 barra horizontal. */}
             <div className="flex min-h-0 w-full flex-1 flex-col font-ui sm:w-[max(25rem,calc(25vw-2rem))]">
-                <div className="-mr-3 flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pb-5 pr-3 sm:-mr-4 sm:pr-4">
+                <div className="-mr-3 flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto pb-2 pr-3 sm:-mr-4 sm:pr-4 [scrollbar-width:thin] [&>*]:shrink-0">
                     <span className={sectionTitleStyle}>CATEGORÍAS</span>
                     <div className="flex flex-wrap gap-2">
                         {categoryList.map((category) =>
