@@ -25,7 +25,7 @@ obtenerMapaCalor:
             schema:
               $ref: '#/components/schemas/MapaCalor'
       '400':
-        description: Datos inválidos (área invertida o desde posterior a hasta)
+        description: Datos inválidos (área invertida, desde posterior a hasta o incidente_id fuera de rango)
         content:
           application/json:
             schema:
@@ -65,7 +65,7 @@ obtenerResumenRiesgo:
             schema:
               $ref: '#/components/schemas/ResumenRiesgo'
       '400':
-        description: Datos inválidos (desde posterior a hasta)
+        description: Datos inválidos (desde posterior a hasta o incidente_id fuera de rango)
         content:
           application/json:
             schema:

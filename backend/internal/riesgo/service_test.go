@@ -301,6 +301,24 @@ func TestService_Validaciones(t *testing.T) {
 		t.Errorf("ObtenerResumen(periodo invertido) = %v, want ErrPeriodoInvalido", err)
 	}
 
+	// incidentes.id es int4: un id fuera de rango es un 400, sin llegar a la base.
+	for _, id := range []int{math.MaxInt32 + 1, math.MinInt32 - 1} {
+		f := &fakeStore{}
+		fuera := Filtro{IncidenteIDs: []int{1, id}}
+		if _, err := NewService(f).ObtenerMapaCalor(ctx, areaTijuana, 12, fuera); !errors.Is(err, ErrIncidenteInvalido) {
+			t.Errorf("ObtenerMapaCalor(incidente %d) = %v, want ErrIncidenteInvalido", id, err)
+		}
+		if _, err := NewService(f).ObtenerResumen(ctx, fuera); !errors.Is(err, ErrIncidenteInvalido) {
+			t.Errorf("ObtenerResumen(incidente %d) = %v, want ErrIncidenteInvalido", id, err)
+		}
+		if f.argCeldas != nil || f.fotos != 0 {
+			t.Errorf("incidente %d: se consultó la base, want rechazarlo antes", id)
+		}
+	}
+	if _, err := svc.ObtenerResumen(ctx, Filtro{IncidenteIDs: []int{math.MaxInt32, math.MinInt32}}); err != nil {
+		t.Errorf("ObtenerResumen(límites de int4) = %v, want nil", err)
+	}
+
 	mismoDia := Filtro{Desde: fecha("2026-01-01T00:00:00Z"), Hasta: fecha("2026-01-01T00:00:00Z")}
 	if _, err := svc.ObtenerResumen(ctx, mismoDia); err != nil {
 		t.Errorf("ObtenerResumen(desde == hasta) = %v, want nil", err)

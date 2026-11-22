@@ -180,7 +180,9 @@ func TestRiesgo(t *testing.T) {
 	// El borde norte de la caja en geography es un arco de círculo máximo: con
 	// 90° de ancho a 32.5° llega hasta ~42° en el centro. Un reporte en Mexicali
 	// (32.6°, el centro de la caja) queda dentro de la caja, pero fuera del área
-	// pedida. Los reportes deben caer dentro de Baja California.
+	// pedida. El borde sur también es un arco: un reporte justo encima de
+	// min_lat debe seguir saliendo. Los reportes deben caer dentro de Baja
+	// California.
 	t.Run("reporte al norte de max_lat", func(t *testing.T) {
 		tc := *admin
 		tc.t = t
@@ -193,7 +195,7 @@ func TestRiesgo(t *testing.T) {
 		for _, c := range []struct {
 			lat  string
 			want int
-		}{{"min_lat=25&max_lat=32.5", 0}, {"min_lat=25&max_lat=32.7", 1}} {
+		}{{"min_lat=25&max_lat=32.5", 0}, {"min_lat=25&max_lat=32.7", 1}, {"min_lat=32.5999&max_lat=40", 1}} {
 			mapa := decode[httpapi.MapaCalor](t, tc.expect(http.StatusOK, http.MethodGet,
 				fmt.Sprintf("/v1/riesgo/mapa-calor?%s&min_lng=-160.5&max_lng=-70.5&zoom=3&incidente_id=%d", c.lat, norte.Id), nil))
 			total := 0
@@ -238,6 +240,9 @@ func TestRiesgo(t *testing.T) {
 		tc.expect(http.StatusBadRequest, http.MethodGet, "/v1/riesgo/mapa-calor?min_lat=32.6&max_lat=32.4&min_lng=-117&max_lng=-116&zoom=12", nil)
 		tc.expect(http.StatusBadRequest, http.MethodGet, "/v1/riesgo/resumen?desde=2026-02-01T00:00:00Z&hasta=2026-01-01T00:00:00Z", nil)
 		tc.expect(http.StatusBadRequest, http.MethodGet, "/v1/riesgo/mapa-calor?min_lat=32.4&max_lat=32.6&min_lng=-117&max_lng=-116", nil) // falta zoom
+		// incidentes.id es int4: fuera de rango es un 400, no un 500.
+		tc.expect(http.StatusBadRequest, http.MethodGet, "/v1/riesgo/resumen?incidente_id=2147483648", nil)
+		tc.expect(http.StatusBadRequest, http.MethodGet, "/v1/riesgo/mapa-calor?min_lat=32.4&max_lat=32.6&min_lng=-117&max_lng=-116&zoom=12&incidente_id=2147483648", nil)
 	})
 
 	t.Run("roles", func(t *testing.T) {

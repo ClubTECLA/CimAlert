@@ -2,6 +2,7 @@ package riesgo
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
@@ -198,6 +199,13 @@ func (s *Service) ObtenerResumen(ctx context.Context, filtro Filtro) (Resumen, e
 func validarFiltro(f Filtro) error {
 	if f.Desde != nil && f.Hasta != nil && f.Desde.After(*f.Hasta) {
 		return ErrPeriodoInvalido
+	}
+	for _, id := range f.IncidenteIDs {
+		// incidentes.id es integer (int4): un id fuera de rango no puede
+		// existir, y pgx no lo sabría codificar (sería un 500 en vez de un 400).
+		if id < math.MinInt32 || id > math.MaxInt32 {
+			return ErrIncidenteInvalido
+		}
 	}
 	return nil
 }
