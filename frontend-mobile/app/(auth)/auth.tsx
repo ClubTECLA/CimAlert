@@ -1,24 +1,32 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { AuthScreenShell } from '../../src/components/auth/AuthScreenShell';
-import { AuthTabs, AuthTab } from '../../src/components/auth/AuthTabs';
-import { TextField } from '../../src/components/auth/TextField';
-import { PasswordField } from '../../src/components/auth/PasswordField';
-import { PrimaryButton } from '../../src/components/auth/PrimaryButton';
-import { GoogleButton } from '../../src/components/auth/GoogleButton';
-import { TermsCheckbox } from '../../src/components/auth/TermsCheckbox';
-import { useGoogleSignIn } from '../../src/hooks/useGoogleSignIn';
-import { iniciarSesionYEntrar } from '../../src/features/sesion/entrar';
-import { esCorreoValido, PASSWORD_MIN } from '../../src/lib/correo';
-import { puedeSimularSesion } from '../../src/lib/session';
-import { colors } from '../../src/theme/colors';
-import { fontFamily } from '../../src/theme/typography';
+import { AuthScreenShell } from '@/components/auth/AuthScreenShell';
+import { AuthTabs, AuthTab } from '@/components/auth/AuthTabs';
+import { TextField } from '@/components/auth/TextField';
+import { PasswordField } from '@/components/auth/PasswordField';
+import { PrimaryButton } from '@/components/auth/PrimaryButton';
+import { GoogleButton } from '@/components/auth/GoogleButton';
+import { TermsCheckbox } from '@/components/auth/TermsCheckbox';
+import { useGoogleSignIn } from '@/hooks/useGoogleSignIn';
+import { iniciarSesionYEntrar } from '@/features/sesion/entrar';
+import { mensajeErrorAuth, sesionApi } from '@/features/sesion/api';
+import { esCorreoValido, PASSWORD_MIN } from '@/lib/correo';
+import { puedeSimularSesion } from '@/lib/session';
+import { colors } from '@/theme/colors';
+import { fontFamily } from '@/theme/typography';
 
 export default function AuthScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ tab?: string }>();
+  const params = useLocalSearchParams<{ tab?: string; email?: string }>();
   const [tab, setTab] = useState<AuthTab>(params.tab === 'login' ? 'login' : 'signup');
+
+  // Al volver de recuperar la contraseña llegan `tab=login` y el correo: la pantalla ya existía,
+  // así que el estado inicial no basta.
+  useEffect(() => {
+    if (params.tab === 'login') setTab('login');
+    if (params.email) setEmail(params.email);
+  }, [params.tab, params.email]);
 
   const { signIn: signInWithGoogle } = useGoogleSignIn({
     onSuccess: (profile) => {
@@ -37,6 +45,8 @@ export default function AuthScreen() {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
+  const [enviando, setEnviando] = useState(false);
+
   const correoValido = esCorreoValido(email);
   const canSubmitSignup =
     !!username.trim() &&
@@ -45,6 +55,30 @@ export default function AuthScreen() {
     password === confirmPassword &&
     acceptedTerms;
   const canSubmitLogin = correoValido && !!password;
+
+  /** Pide el token al backend y entra al mapa; si falla, avisa y deja el formulario como estaba. */
+  const autenticar = async (accion: 'login' | 'registro') => {
+    setEnviando(true);
+    try {
+      const { access_token } =
+        accion === 'login'
+          ? await sesionApi.login(email.trim(), password)
+          : await sesionApi.register(email.trim(), username.trim(), password);
+      iniciarSesionYEntrar(access_token);
+    } catch (error) {
+      Alert.alert(
+        accion === 'login' ? 'No se pudo iniciar sesión' : 'No se pudo crear la cuenta',
+        mensajeErrorAuth(error, accion)
+      );
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  // Con mocks se entra con una sesión simulada para poder probar la app como usuario. El backend
+  // crea la cuenta sin verificar el correo, así que el registro también entra directo.
+  const registrarse = () => (puedeSimularSesion ? iniciarSesionYEntrar() : void autenticar('registro'));
+  const iniciarSesion = () => (puedeSimularSesion ? iniciarSesionYEntrar() : void autenticar('login'));
 
   return (
     <AuthScreenShell title={tab === 'signup' ? 'Crear cuenta' : 'Iniciar sesión'}>
@@ -74,11 +108,9 @@ export default function AuthScreen() {
           <TermsCheckbox checked={acceptedTerms} onChange={setAcceptedTerms} />
 
           <PrimaryButton
-            label="Registrarse"
-            disabled={!canSubmitSignup}
-            onPress={() =>
-              router.push({ pathname: '/(auth)/verificar', params: { mode: 'registro', email: email.trim() } })
-            }
+            label={enviando ? 'Creando cuenta…' : 'Registrarse'}
+            disabled={!canSubmitSignup || enviando}
+            onPress={registrarse}
           />
         </>
       ) : (
@@ -97,18 +129,10 @@ export default function AuthScreen() {
           </View>
 
           <PrimaryButton
-            label="Iniciar sesión"
+            label={enviando ? 'Ingresando…' : 'Iniciar sesión'}
             showArrow={false}
-            disabled={!canSubmitLogin}
-            onPress={() =>
-              // Con mocks se entra con una sesión simulada para poder probar la app como usuario.
-              puedeSimularSesion
-                ? iniciarSesionYEntrar()
-                : Alert.alert(
-                    'Inicio de sesión no disponible todavía',
-                    'Esta pantalla es solo de diseño por ahora — el inicio de sesión con correo y contraseña todavía no está conectado al backend.'
-                  )
-            }
+            disabled={!canSubmitLogin || enviando}
+            onPress={iniciarSesion}
           />
         </>
       )}

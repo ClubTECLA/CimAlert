@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
-import { AuthScreenShell } from '../../src/components/auth/AuthScreenShell';
-import { OtpInput } from '../../src/components/auth/OtpInput';
-import { PrimaryButton } from '../../src/components/auth/PrimaryButton';
-import { StepDots } from '../../src/components/auth/StepDots';
-import { iniciarSesionYEntrar } from '../../src/features/sesion/entrar';
-import { colors } from '../../src/theme/colors';
-import { fontFamily } from '../../src/theme/typography';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AuthScreenShell } from '@/components/auth/AuthScreenShell';
+import { OTP_LENGTH, OtpInput } from '@/components/auth/OtpInput';
+import { PrimaryButton } from '@/components/auth/PrimaryButton';
+import { StepDots } from '@/components/auth/StepDots';
+import { mensajeErrorAuth, RECUPERACION, sesionApi } from '@/features/sesion/api';
+import { puedeSimularSesion } from '@/lib/session';
+import { colors } from '@/theme/colors';
+import { fontFamily } from '@/theme/typography';
 
-const OTP_SECONDS = 4 * 60 + 38;
+const OTP_SECONDS = RECUPERACION.minutosVigencia * 60;
 
 function formatTime(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
@@ -17,37 +18,57 @@ function formatTime(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+const codigoVacio = () => Array<string>(OTP_LENGTH).fill('');
+
+/** Paso 2 de recuperar contraseña: el código que se envía al correo. El backend no tiene una
+ * llamada solo para validarlo: se manda junto con la nueva contraseña en el paso 3. */
 export default function VerificarScreen() {
   const router = useRouter();
-  const { mode, email } = useLocalSearchParams<{ mode?: string; email?: string }>();
-  const isRecuperar = mode === 'recuperar';
+  const { email = '', pedidoEn } = useLocalSearchParams<{ email?: string; pedidoEn?: string }>();
 
-  const [code, setCode] = useState<string[]>(['', '', '', '']);
+  const [code, setCode] = useState<string[]>(codigoVacio);
+  // Se cuenta desde que se pidió el código (antes de la petición, en el paso 1 o en "Reenviar código"),
+  // no desde que se abrió la pantalla ni desde que respondió el backend.
+  const [enviadoEn, setEnviadoEn] = useState(() => Number(pedidoEn) || Date.now());
   const [secondsLeft, setSecondsLeft] = useState(OTP_SECONDS);
+  const [reenviando, setReenviando] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
-    }, 1000);
+    const tick = () =>
+      setSecondsLeft(Math.max(0, OTP_SECONDS - Math.floor((Date.now() - enviadoEn) / 1000)));
+    tick();
+    const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [enviadoEn]);
 
-  const canVerify = code.every((digit) => /^[0-9]$/.test(digit));
+  const vencido = secondsLeft === 0;
+  // Mientras se reenvía, el código escrito está por quedar invalidado: no se deja pasar con él.
+  const canVerify = !vencido && !reenviando && code.every((digit) => /^[0-9]$/.test(digit));
 
-  const handleVerify = () => {
-    if (isRecuperar) {
-      router.push({ pathname: '/(auth)/nueva-contrasena', params: { email } });
-    } else {
-      // Registro terminado. Sin backend de auth todavía, queda una sesión simulada.
-      iniciarSesionYEntrar();
+  const handleVerify = () =>
+    router.push({ pathname: '/(auth)/nueva-contrasena', params: { email, pin: code.join('') } });
+
+  const reenviar = async () => {
+    setReenviando(true);
+    const pedidoAhora = Date.now();
+    try {
+      if (!puedeSimularSesion) await sesionApi.solicitarRecuperacion(email);
+      // El backend cancela el código anterior al mandar uno nuevo.
+      setCode(codigoVacio());
+      setEnviadoEn(pedidoAhora);
+      Alert.alert('Código reenviado', `Te mandamos un código nuevo a ${email}.`);
+    } catch (error) {
+      Alert.alert('No se pudo reenviar el código', mensajeErrorAuth(error, 'recuperacion'));
+    } finally {
+      setReenviando(false);
     }
   };
 
   return (
-    <AuthScreenShell title={isRecuperar ? 'Ingresa el código' : 'Crear cuenta'}>
-      {isRecuperar && <StepDots total={3} current={2} />}
+    <AuthScreenShell title="Ingresa el código">
+      <StepDots total={3} current={2} />
 
-      <Text style={styles.subtitle}>Escribe el código de 4 dígitos</Text>
+      <Text style={styles.subtitle}>Escribe el código de {OTP_LENGTH} dígitos</Text>
 
       <Text style={styles.sentTo}>
         <Text style={styles.sentToMuted}>Código enviado a </Text>
@@ -58,14 +79,25 @@ export default function VerificarScreen() {
 
       <View style={styles.metaRow}>
         <Text style={styles.expiresLabel}>
-          <Text style={styles.sentToMuted}>Vence en: </Text>
-          {formatTime(secondsLeft)}
+          {vencido ? (
+            <Text style={styles.expiredLabel}>El código venció</Text>
+          ) : (
+            <>
+              <Text style={styles.sentToMuted}>Vence en: </Text>
+              {formatTime(secondsLeft)}
+            </>
+          )}
         </Text>
-        <Text style={styles.resendLabel}>Reenviar código</Text>
+        <Pressable onPress={() => void reenviar()} disabled={reenviando} hitSlop={8}>
+          <Text style={[styles.resendLabel, reenviando && styles.resendDisabled]}>
+            {reenviando ? 'Reenviando…' : 'Reenviar código'}
+          </Text>
+        </Pressable>
       </View>
 
       <Text style={styles.attemptsLabel}>
-        Tienes 3 intentos. Después hay que esperar 15 minutos para pedir otro código
+        Tienes {RECUPERACION.intentosPin} intentos por código y puedes pedir hasta {RECUPERACION.codigosPorHora}{' '}
+        códigos por hora
       </Text>
 
       <PrimaryButton label="Verificar" disabled={!canVerify} onPress={handleVerify} />
@@ -98,10 +130,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.black,
   },
+  expiredLabel: {
+    color: colors.danger,
+  },
   resendLabel: {
     fontFamily: fontFamily.semiBold,
     fontSize: 13,
     color: colors.primaryLight,
+  },
+  resendDisabled: {
+    opacity: 0.5,
   },
   attemptsLabel: {
     fontFamily: fontFamily.semiBold,

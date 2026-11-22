@@ -1,12 +1,14 @@
 import { StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { colors } from '../../theme/colors';
-import { fontFamily } from '../../theme/typography';
+import { colors } from '@/theme/colors';
+import { fontFamily } from '@/theme/typography';
+import { useAlEnfocar } from './teclado';
 
 type Props = TextInputProps & {
   label: string;
 };
 
-export function TextField({ label, style, ...inputProps }: Props) {
+export function TextField({ label, style, onFocus, ...inputProps }: Props) {
+  const alEnfocar = useAlEnfocar(onFocus);
   return (
     <View style={styles.container}>
       <Text style={styles.label}>{label}</Text>
@@ -15,6 +17,7 @@ export function TextField({ label, style, ...inputProps }: Props) {
           style={[styles.input, style]}
           placeholderTextColor={colors.inputPlaceholder}
           {...inputProps}
+          onFocus={alEnfocar}
         />
       </View>
     </View>

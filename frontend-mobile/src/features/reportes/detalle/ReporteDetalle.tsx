@@ -25,7 +25,7 @@ import { useEnLinea } from '@/lib/red';
 import { CategoriaBadge } from '../crear/CategoriaBadge';
 import { CerrarButton } from '../crear/CerrarButton';
 import { etiquetaLabel } from '../crear/categorias';
-import { resolverCategoria } from '../../categorias/categorias';
+import { resolverCategoria } from '@/features/categorias/categorias';
 import { useCategorias, useComentar, useComentarios, useReporteDetalle } from '../hooks';
 
 interface ReporteDetalleProps {

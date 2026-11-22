@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text } from 'react-native';
-import { colors } from '../../theme/colors';
-import { fontFamily } from '../../theme/typography';
+import { colors } from '@/theme/colors';
+import { fontFamily } from '@/theme/typography';
 import { GoogleIcon } from '../icons/GoogleIcon';
 
 type Props = {
