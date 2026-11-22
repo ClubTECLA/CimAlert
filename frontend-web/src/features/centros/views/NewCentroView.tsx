@@ -8,7 +8,7 @@ import { useCommonPanel } from "@/panels/useCommonPanel";
 import { useSysMessage } from "@/components/ui/SysMessageContext";
 import { useLocationPicker } from "@/features/mapa/useLocationPicker";
 import { useCentros } from "@/features/centros/useCentros";
-import { tipoStyle } from "@/features/centros/tiposCentro";
+import { esRefugio, tipoStyle } from "@/features/centros/tiposCentro";
 import type { ApiTipoCentro } from "@/types/api-types";
 
 // Límite del backend para el nombre de un centro (centro.yaml).
@@ -67,6 +67,8 @@ function NewCentroForm() {
     const tipoList = [...tipos.values()];
     const selectedTipo = tipoId === null ? undefined : tipos.get(tipoId);
     const selectedStyle = tipoStyle(selectedTipo);
+    // Solo los refugios llevan la cuenta de lugares: en los demás tipos ni se pide ni se envía.
+    const pideLugares = esRefugio(selectedTipo);
 
     // Al abrir se recargan los tipos (uno recién creado debe aparecer) y el marcador vuelve al mapa libre.
     useEffect(() => {
@@ -93,7 +95,7 @@ function NewCentroForm() {
 
     const handlePublish = async () => {
         const nombreLimpio = nombre.trim();
-        const lugares = capacidad.trim() === "" ? undefined : Number(capacidad);
+        const lugares = !pideLugares || capacidad.trim() === "" ? undefined : Number(capacidad);
         if (tipoId === null) {
             showMessage("Elige qué centro vas a crear.", { color: "red", type: "float", title: "Falta el tipo" });
             return;
@@ -194,7 +196,7 @@ function NewCentroForm() {
                     </span>
                 </div>
 
-                <div className="flex flex-col gap-1.5">
+                {pideLugares && <div className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between gap-4">
                         <label htmlFor="new-centro-lugares" className="text-caption font-semibold text-ink">Lugares disponibles</label>
                         <div className="flex h-11 w-35 shrink-0 items-center gap-2 rounded-full border border-line bg-white px-3 focus-within:border-brand">
@@ -213,9 +215,9 @@ function NewCentroForm() {
                         </div>
                     </div>
                     <span id="new-centro-lugares-ayuda" className={pendingNoteStyle}>
-                        Cantidad de lugares con los que contará el centro (opcional)
+                        Cantidad de lugares con los que contará el refugio (opcional)
                     </span>
-                </div>
+                </div>}
             </div>
 
             {/* px-4: así caben en una fila en el panel de 400 px; flex-wrap: en teléfono cada uno pasa a la suya. */}
