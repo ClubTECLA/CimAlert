@@ -1,6 +1,11 @@
 package config
 
-import "testing"
+import (
+	"slices"
+	"testing"
+
+	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+)
 
 // entornoMinimo define las variables obligatorias y deja sin valor las de multimedia.
 func entornoMinimo(t *testing.T) {
@@ -11,6 +16,7 @@ func entornoMinimo(t *testing.T) {
 	t.Setenv("MAIL_DRIVER", "")
 	t.Setenv("MULTIMEDIA_URL", "")
 	t.Setenv("MAX_MULTIMEDIA_BYTES", "")
+	t.Setenv("REPORTE_POLIGONO", "")
 	for _, v := range variablesFoto {
 		t.Setenv(v, "")
 	}
@@ -211,5 +217,40 @@ func TestLoad_MantenimientoInvalido(t *testing.T) {
 				t.Errorf("Load() con %s=%q error = nil, want error", tt.variable, tt.valor)
 			}
 		})
+	}
+}
+
+func TestLoad_ReportePoligono(t *testing.T) {
+	entornoMinimo(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	if !slices.Equal(cfg.ReportePoligono, reporte.PoligonoBC) {
+		t.Errorf("ReportePoligono = %v, want PoligonoBC por defecto", cfg.ReportePoligono)
+	}
+
+	// Solo espacios cuenta como vacío: usa el default.
+	t.Setenv("REPORTE_POLIGONO", "  ")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() con REPORTE_POLIGONO en blanco: error = %v, want nil", err)
+	}
+	if !slices.Equal(cfg.ReportePoligono, reporte.PoligonoBC) {
+		t.Errorf("ReportePoligono = %v, want PoligonoBC por defecto", cfg.ReportePoligono)
+	}
+
+	t.Setenv("REPORTE_POLIGONO", "0,0;0,1;1,1;1,0")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	if !cfg.ReportePoligono.Contiene(0.5, 0.5) || cfg.ReportePoligono.Contiene(32.5, -117) {
+		t.Errorf("ReportePoligono = %v, want el del entorno", cfg.ReportePoligono)
+	}
+
+	t.Setenv("REPORTE_POLIGONO", "0,0;0,1")
+	if _, err := Load(); err == nil {
+		t.Error("Load() con REPORTE_POLIGONO inválido: error = nil, want error")
 	}
 }
