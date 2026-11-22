@@ -40,6 +40,7 @@ const rutaMultimedia = "/v1/reportes/:reporteId/multimedia"
 type routerConfig struct {
 	maxMultimediaBytes int64
 	rateLimitRafaga    int
+	docs               bool
 }
 
 // RouterOption ajusta NewRouter.
@@ -55,6 +56,13 @@ func WithMaxMultimediaBytes(n int64) RouterOption {
 // integración la suben porque cada uno hace varias peticiones desde la misma IP.
 func WithRateLimitRafaga(n int) RouterOption {
 	return func(c *routerConfig) { c.rateLimitRafaga = n }
+}
+
+// WithDocs publica el contrato (/v1/openapi.json) y la documentación
+// interactiva (/v1/docs). Sin esta opción no se montan, para que producción no
+// exponga la API completa.
+func WithDocs(habilitar bool) RouterOption {
+	return func(c *routerConfig) { c.docs = habilitar }
 }
 
 // Handlers son los handlers de cada funcionalidad que sirve el router.
@@ -215,22 +223,24 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 		},
 	})
 
-	// El contrato, servido desde el propio binario, para que web y móvil puedan
-	// generar sus tipos contra la API que de verdad está corriendo.
-	r.GET("/v1/openapi.json", func(c *gin.Context) {
-		spec, err := httpapi.GetSpec()
-		if err != nil {
-			tabla.Responder(c, err)
-			return
-		}
-		// Relativo a la URL del contrato (/v1/ o /api/v1/ tras nginx), para
-		// que "Try it out" de Swagger UI llegue a las rutas reales.
-		spec.Servers = openapi3.Servers{{URL: "."}}
-		c.JSON(http.StatusOK, spec)
-	})
+	if cfg.docs {
+		// El contrato, servido desde el propio binario, para que web y móvil puedan
+		// generar sus tipos contra la API que de verdad está corriendo.
+		r.GET("/v1/openapi.json", func(c *gin.Context) {
+			spec, err := httpapi.GetSpec()
+			if err != nil {
+				tabla.Responder(c, err)
+				return
+			}
+			// Relativo a la URL del contrato (/v1/ o /api/v1/ tras nginx), para
+			// que "Try it out" de Swagger UI llegue a las rutas reales.
+			spec.Servers = openapi3.Servers{{URL: "."}}
+			c.JSON(http.StatusOK, spec)
+		})
 
-	// Documentación interactiva del contrato; carga /v1/openapi.json.
-	r.GET("/v1/docs", httpapi.ServeDocs)
+		// Documentación interactiva del contrato; carga /v1/openapi.json.
+		r.GET("/v1/docs", httpapi.ServeDocs)
+	}
 
 	return r
 }

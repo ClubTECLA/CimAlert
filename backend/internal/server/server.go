@@ -61,5 +61,5 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 		Centros: centro.NewHandler(centros),
 		Areas:   area.NewHandler(area.NewService(reportes, centros)),
 		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(pool))),
-	}, cfg.JWTSecret, usuarios.GetPasswordChangedAtByUserID, WithMaxMultimediaBytes(cfg.MaxMultimediaBytes)), nil
+	}, cfg.JWTSecret, usuarios.GetPasswordChangedAtByUserID, WithMaxMultimediaBytes(cfg.MaxMultimediaBytes), WithDocs(cfg.DocsEnabled)), nil
 }
