@@ -19,7 +19,9 @@ properties:
   radio_m:
     type: number
     format: double
-    description: Radio del círculo que cubre los reportes de la zona, en metros.
+    description: >-
+      Radio del círculo de la zona, en metros: el percentil 90 de las distancias de sus reportes al centro, no
+      la máxima. Algunos reportes de la zona pueden quedar fuera del círculo.
   score:
     type: number
     format: double

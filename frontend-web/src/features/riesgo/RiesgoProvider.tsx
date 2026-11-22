@@ -27,6 +27,9 @@ export function RiesgoProvider({ children }: { children: ReactNode }) {
     const [error, setError] = useState<string | null>(null);
     const [mapaCalor, setMapaCalor] = useState<ApiMapaCalor | null>(null);
     const [zonaEnfocada, setZonaEnfocada] = useState<ApiZonaRiesgo | null>(null);
+    // Cada selección guarda una copia nueva: elegir otra vez la misma zona (después de mover el mapa) también cambia
+    // el estado, y RiesgoLayer la vuelve a encuadrar. null limpia.
+    const enfocarZona = useCallback((zona: ApiZonaRiesgo | null) => setZonaEnfocada(zona && { ...zona }), []);
 
     const resumenAbortRef = useRef<AbortController | null>(null);
     const mapaAbortRef = useRef<AbortController | null>(null);
@@ -99,10 +102,10 @@ export function RiesgoProvider({ children }: { children: ReactNode }) {
         mapaCalor,
         cargarMapaCalor,
         zonaEnfocada,
-        enfocarZona: setZonaEnfocada,
+        enfocarZona,
         setPanelAbierto: cambiarPanelAbierto,
         refresh,
-    }), [puedeVer, activo, modoMapa, verEnMapa, salirModoMapa, resumen, error, mapaCalor, cargarMapaCalor, zonaEnfocada, cambiarPanelAbierto, refresh]);
+    }), [puedeVer, activo, modoMapa, verEnMapa, salirModoMapa, resumen, error, mapaCalor, cargarMapaCalor, zonaEnfocada, enfocarZona, cambiarPanelAbierto, refresh]);
 
     return (
         <RiesgoContext.Provider value={value}>

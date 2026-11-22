@@ -25,7 +25,7 @@ obtenerMapaCalor:
             schema:
               $ref: '#/components/schemas/MapaCalor'
       '400':
-        description: Datos inválidos (área invertida o desde posterior a hasta)
+        description: Datos inválidos (área invertida, desde posterior a hasta o incidente_id fuera de rango)
         content:
           application/json:
             schema:
@@ -47,7 +47,7 @@ obtenerResumenRiesgo:
   get:
     operationId: obtenerResumenRiesgo
     description: >-
-      Zonas de mayor riesgo, colonias con más incidentes y conteo por tipo de incidente de toda la ciudad, a partir de los reportes históricos.
+      Zonas de mayor riesgo, colonias con más riesgo (por la suma del peso de sus reportes) y conteo por tipo de incidente de toda la ciudad, a partir de los reportes históricos.
       Solo lectura: no registra nada en el historial.
     security:
       - bearerAuth: [admin, moderador, analista, proteccion_civil, rescatista]
@@ -65,7 +65,7 @@ obtenerResumenRiesgo:
             schema:
               $ref: '#/components/schemas/ResumenRiesgo'
       '400':
-        description: Datos inválidos (desde posterior a hasta)
+        description: Datos inválidos (desde posterior a hasta o incidente_id fuera de rango)
         content:
           application/json:
             schema:

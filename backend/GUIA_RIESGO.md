@@ -84,16 +84,26 @@ peso = credibilidad(estado) × (1 + ln(1 + avistamientos))
 `ListCeldasCalor` agrupa los reportes del área visible en una cuadrícula y devuelve,
 por celda, la suma de los pesos y cuántos reportes cayeron en ella.
 
-- La cuadrícula es en metros reales: `geom` se proyecta a UTM zona 11N (EPSG:32611,
-  la de Tijuana) y `ST_SnapToGrid` lleva cada punto al nodo más cercano, que queda
-  como el centro de la celda.
+- La cuadrícula es en metros reales: `geom` se proyecta con `a_metros` (migración
+  002) a UTM zona 11N (EPSG:32611, la de Tijuana) y `ST_SnapToGrid` lleva cada punto
+  al nodo de su celda. Las zonas usan la misma función. Para otra ciudad basta
+  cambiar la proyección dentro de `a_metros` (en una migración nueva).
+- **Punto de cada celda:** el promedio de la posición de sus reportes, no el nodo. El
+  nodo solo agrupa (la consulta lo devuelve como `celda_x`, `celda_y`, que no salen
+  en la API). Como el tamaño de la celda cambia con el zoom, con el nodo el punto
+  saltaba al acercarse o alejarse: un reporte solo quedaba hasta a ~2 km de su sitio
+  en zoom 10. Con el promedio, un reporte solo queda siempre en su lugar y un grupo,
+  en su centro.
 - El filtro por área (`&&` sobre `geography`) usa el índice GiST de
-  `puntos_origen.geom`.
+  `puntos_origen.geom`. Como los bordes norte y sur de esa caja son arcos de círculo
+  máximo (en el hemisferio norte se curvan hacia el polo), la consulta filtra además
+  la latitud exacta `[min_lat, max_lat]`.
 - **Áreas anchas:** en `geography` los bordes del rectángulo son arcos de círculo
   máximo. Con 180° o más de longitud se interpreta al revés (0 filas), y con
   exactamente 180° PostGIS falla ("Antipodal edge"). Pasa con el mapa muy alejado.
   Por eso el servicio parte el área en tramos de a lo más 90° (`PartirArea`), hace
-  una consulta por tramo y junta por su centro las celdas que salen en dos tramos.
+  una consulta por tramo y junta por su nodo (`celda_x`, `celda_y`) las celdas que
+  salen en dos tramos, con el punto en el promedio de los reportes de las dos partes.
   Como `&&` incluye el borde, cada tramo filtra además la longitud exacta como
   `[min, max)` (el último, `[min, max]`): un reporte justo en el borde cuenta una
   sola vez. El área de la ciudad queda en un solo tramo.
@@ -119,6 +129,11 @@ espacios sobrantes): dos escrituras distintas de la misma colonia cuentan por se
 `ListConteoCategorias` cuenta los reportes por tipo de incidente; la suma es el total
 de históricos del periodo. El nombre y el color de cada tipo los pone el cliente desde
 el catálogo (`GET /incidentes`).
+
+Las tres consultas del resumen (zonas, colonias y categorías) corren en una
+transacción de solo lectura `REPEATABLE READ` (`Store.LeerMismaFoto`): todas ven los
+mismos datos, así que un reporte que pasa a histórico a mitad de la petición no deja
+una zona con más reportes que `total_historicos`.
 
 ## Zonas de riesgo
 

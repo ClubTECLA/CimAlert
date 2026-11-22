@@ -56,8 +56,9 @@ export default function NavBar({ className }: { className?: string }) {
             },
             {
                 icon: <LuTent />,
-                title: "Refugios",
-                onClick: () => {}
+                title: "Centros",
+                panelView: 'Centros',
+                activeOnPanelViews: ['Detalle Centro', 'Nuevo Centro']
             },
             // Solo los roles oficiales ven el riesgo (el backend responde 403 a los ciudadanos).
             ...(puedeVerRiesgo ? [{

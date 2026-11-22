@@ -41,6 +41,7 @@ WHERE
 
 -- name: ListAllUsers :many
 SELECT
+    u.id,
     u.username,
     u.email,
     r.nombre AS rol_name,
@@ -70,9 +71,36 @@ WHERE
     user_id = $1
     AND expires_at > now()
     AND used_at IS NULL
+    AND verified_at IS NULL
 ORDER BY
     created_at DESC
 LIMIT 1;
+
+-- name: SetPinAsVerifiedByID :execrows
+-- Condicional para que de dos verificaciones concurrentes del mismo PIN solo
+-- una emita token.
+UPDATE
+    recovery_pins
+SET
+    verified_at = now(),
+    reset_token_hash = $2,
+    reset_expires_at = $3
+WHERE
+    id = $1
+    AND used_at IS NULL
+    AND verified_at IS NULL
+    AND expires_at > clock_timestamp();
+
+-- name: GetActiveResetByTokenHash :one
+SELECT
+    id,
+    user_id
+FROM
+    recovery_pins
+WHERE
+    reset_token_hash = $1
+    AND used_at IS NULL
+    AND reset_expires_at > now();
 
 -- name: LockUserByID :exec
 -- Serializa por cuenta la emisión de PIN: la segunda petición espera aquí hasta que la primera termine.
@@ -103,14 +131,15 @@ WHERE
 RETURNING attempts;
 
 -- name: CancelPINByUserID :exec
+-- Sin filtrar por expires_at: un PIN verificado puede haber expirado y
+-- tener todavía un token de reset vivo, que también hay que cancelar.
 UPDATE
     recovery_pins
 SET
     used_at = now()
 WHERE
     user_id = $1
-    AND used_at IS NULL
-    AND expires_at > now();
+    AND used_at IS NULL;
 
 -- name: DeleteUsedOrExpiredPINByUserID :exec
 DELETE FROM
@@ -131,15 +160,17 @@ SET
 WHERE
     id = $3;
 
--- name: SetPinAsUsedByID :execrows
+-- name: ConsumeResetByID :execrows
+-- Cierra el token de reset; 0 filas si ya se usó, se canceló o expiró.
 UPDATE
     recovery_pins
 SET
     used_at = now()
-WHERE   
+WHERE
     id = $1
     AND used_at IS NULL
-    AND expires_at > clock_timestamp();
+    AND verified_at IS NOT NULL
+    AND reset_expires_at > clock_timestamp();
 
 -- name: GetPasswordChangedAtByUserID :one
 SELECT

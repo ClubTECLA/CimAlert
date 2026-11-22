@@ -1,6 +1,6 @@
 type: object
-description: Solicitud para verificar y recuperar la contraseña de un usuario.
-required: [email, pin, new_password]
+description: Solicitud para verificar el código de recuperación de contraseña.
+required: [email, pin]
 properties:
   email:
     type: string
@@ -9,5 +9,3 @@ properties:
     type: string
     pattern: '^[0-9]{6}$'
     description: Código de verificación enviado al correo del usuario.
-  new_password:
-    $ref: './password.yaml'

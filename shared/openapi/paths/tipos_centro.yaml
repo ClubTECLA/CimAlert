@@ -90,7 +90,7 @@ tipoCentroPorId:
         required: true
         schema:
           type: integer
-          minium: 1
+          minimum: 1
     responses:
       '200':
         description: Tipo de centro encontrado
@@ -112,6 +112,12 @@ tipoCentroPorId:
               $ref: '#/components/schemas/ErrorResponse'
       '500':
         description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '400':
+        description: ID de tipo de centro inválido
         content:
           application/json:
             schema:

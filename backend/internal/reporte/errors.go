@@ -12,6 +12,7 @@ var (
 	ErrIncidenteNotFound    = errors.New("incidente not found")
 	ErrAreaIncompleta       = errors.New("area incompleta")
 	ErrAreaInvalida         = errors.New("area invalida")
+	ErrCoordenadaInvalida   = errors.New("coordenada fuera de la zona permitida")
 	ErrEstadoInvalido       = errors.New("estado invalido")
 	ErrTransicionInvalida   = errors.New("transicion invalida")
 	ErrOficialNoPermitido   = errors.New("rol no puede crear reportes oficiales")
@@ -30,6 +31,7 @@ var ReglasHTTP = []httperr.Regla{
 	{Err: ErrIncidenteNotFound, Status: http.StatusNotFound, Message: "incidente no encontrado"},
 	{Err: ErrAreaIncompleta, Status: http.StatusBadRequest, Message: "area incompleta"},
 	{Err: ErrAreaInvalida, Status: http.StatusBadRequest, Message: "area invalida"},
+	{Err: ErrCoordenadaInvalida, Status: http.StatusBadRequest, Message: "coordenada invalida"},
 	{Err: ErrEstadoInvalido, Status: http.StatusBadRequest, Message: "estado invalido"},
 	{Err: ErrOficialNoPermitido, Status: http.StatusForbidden, Message: "un ciudadano no puede crear reportes oficiales"},
 	{Err: ErrEstadoNoPermitido, Status: http.StatusForbidden, Message: "un ciudadano no puede cambiar el estado de un reporte"},

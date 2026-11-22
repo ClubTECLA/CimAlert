@@ -25,6 +25,29 @@ type fakeStore struct {
 	argZonas       *sqlc.ListZonasRiesgoParams
 	argColonias    *sqlc.ListColoniasHistoricoParams
 	argCategorias  *sqlc.ListConteoCategoriasParams
+
+	// LeerMismaFoto: cuántas veces se abrió, si hay una abierta, cuántas
+	// consultas del resumen corrieron fuera de ella y el error al abrirla.
+	fotos       int
+	enFoto      bool
+	fueraDeFoto int
+	errFoto     error
+}
+
+func (f *fakeStore) LeerMismaFoto(ctx context.Context, fn func(consultas) error) error {
+	if f.errFoto != nil {
+		return f.errFoto
+	}
+	f.fotos++
+	f.enFoto = true
+	defer func() { f.enFoto = false }()
+	return fn(f)
+}
+
+func (f *fakeStore) contarFoto() {
+	if !f.enFoto {
+		f.fueraDeFoto++
+	}
 }
 
 func (f *fakeStore) ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalorParams) ([]sqlc.ListCeldasCalorRow, error) {
@@ -35,16 +58,19 @@ func (f *fakeStore) ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalo
 
 func (f *fakeStore) ListZonasRiesgo(ctx context.Context, arg sqlc.ListZonasRiesgoParams) ([]sqlc.ListZonasRiesgoRow, error) {
 	f.argZonas = &arg
+	f.contarFoto()
 	return f.zonas, f.err
 }
 
 func (f *fakeStore) ListColoniasHistorico(ctx context.Context, arg sqlc.ListColoniasHistoricoParams) ([]sqlc.ListColoniasHistoricoRow, error) {
 	f.argColonias = &arg
+	f.contarFoto()
 	return f.colonias, f.err
 }
 
 func (f *fakeStore) ListConteoCategorias(ctx context.Context, arg sqlc.ListConteoCategoriasParams) ([]sqlc.ListConteoCategoriasRow, error) {
 	f.argCategorias = &arg
+	f.contarFoto()
 	return f.categorias, f.err
 }
 
@@ -103,8 +129,8 @@ func TestScoreYNivel(t *testing.T) {
 
 func TestService_ObtenerMapaCalor(t *testing.T) {
 	f := &fakeStore{celdas: []sqlc.ListCeldasCalorRow{
-		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3},
-		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7},
+		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3, CeldaX: 500000, CeldaY: 3600000},
+		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7, CeldaX: 505000, CeldaY: 3600000},
 	}}
 	svc := NewService(f)
 	filtro := Filtro{IncidenteIDs: []int{1, 6}, Desde: fecha("2025-01-01T00:00:00Z"), Hasta: fecha("2026-01-01T00:00:00Z")}
@@ -166,10 +192,10 @@ func TestPartirArea(t *testing.T) {
 }
 
 func TestService_ObtenerMapaCalor_AreaAncha(t *testing.T) {
-	// El store devuelve las mismas celdas en cada tramo: deben juntarse por su centro.
+	// El store devuelve las mismas celdas en cada tramo: deben juntarse por su clave.
 	f := &fakeStore{celdas: []sqlc.ListCeldasCalorRow{
-		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3},
-		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7},
+		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3, CeldaX: 500000, CeldaY: 3600000},
+		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7, CeldaX: 505000, CeldaY: 3600000},
 	}}
 	mapa, err := NewService(f).ObtenerMapaCalor(t.Context(), Area{MinLat: -85, MaxLat: 85, MinLng: -180, MaxLng: 180}, 0, Filtro{})
 	if err != nil {
@@ -190,6 +216,42 @@ func TestService_ObtenerMapaCalor_AreaAncha(t *testing.T) {
 	if mapa.PesoMaximo != 28 {
 		t.Errorf("PesoMaximo = %v, want 28", mapa.PesoMaximo)
 	}
+}
+
+// Una celda partida entre dos tramos: su punto es el promedio de los reportes
+// de las dos partes (por número de reportes), no el de la primera.
+func TestService_ObtenerMapaCalor_CeldaEntreTramos(t *testing.T) {
+	f := &fakeStoreTramos{filas: [][]sqlc.ListCeldasCalorRow{
+		{{Latitude: 32.0, Longitude: -117.10, Peso: 1, Reportes: 1, CeldaX: 1, CeldaY: 2}},
+		{{Latitude: 32.3, Longitude: -116.80, Peso: 3, Reportes: 3, CeldaX: 1, CeldaY: 2}},
+	}}
+	mapa, err := NewService(f).ObtenerMapaCalor(t.Context(), Area{MinLat: 0, MaxLat: 60, MinLng: -180, MaxLng: 0}, 0, Filtro{})
+	if err != nil {
+		t.Fatalf("ObtenerMapaCalor() error = %v", err)
+	}
+	if len(mapa.Celdas) != 1 {
+		t.Fatalf("Celdas = %+v, want 1 (la misma clave en los dos tramos)", mapa.Celdas)
+	}
+	c := mapa.Celdas[0]
+	if c.Reportes != 4 || c.Peso != 4 || math.Abs(c.Latitude-32.225) > 1e-9 || math.Abs(c.Longitude+116.875) > 1e-9 {
+		t.Errorf("Celda = %+v, want 4 reportes, peso 4, en (32.225, -116.875)", c)
+	}
+}
+
+// fakeStoreTramos devuelve una lista distinta de celdas en cada llamada (una
+// por tramo).
+type fakeStoreTramos struct {
+	fakeStore
+	filas [][]sqlc.ListCeldasCalorRow
+}
+
+func (f *fakeStoreTramos) ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalorParams) ([]sqlc.ListCeldasCalorRow, error) {
+	i := len(f.llamadasCeldas)
+	f.llamadasCeldas = append(f.llamadasCeldas, arg)
+	if i < len(f.filas) {
+		return f.filas[i], nil
+	}
+	return nil, nil
 }
 
 func TestService_ObtenerMapaCalor_SinCeldas(t *testing.T) {
@@ -237,6 +299,24 @@ func TestService_Validaciones(t *testing.T) {
 	}
 	if _, err := svc.ObtenerResumen(ctx, periodo); !errors.Is(err, ErrPeriodoInvalido) {
 		t.Errorf("ObtenerResumen(periodo invertido) = %v, want ErrPeriodoInvalido", err)
+	}
+
+	// incidentes.id es int4: un id fuera de rango es un 400, sin llegar a la base.
+	for _, id := range []int{math.MaxInt32 + 1, math.MinInt32 - 1} {
+		f := &fakeStore{}
+		fuera := Filtro{IncidenteIDs: []int{1, id}}
+		if _, err := NewService(f).ObtenerMapaCalor(ctx, areaTijuana, 12, fuera); !errors.Is(err, ErrIncidenteInvalido) {
+			t.Errorf("ObtenerMapaCalor(incidente %d) = %v, want ErrIncidenteInvalido", id, err)
+		}
+		if _, err := NewService(f).ObtenerResumen(ctx, fuera); !errors.Is(err, ErrIncidenteInvalido) {
+			t.Errorf("ObtenerResumen(incidente %d) = %v, want ErrIncidenteInvalido", id, err)
+		}
+		if f.argCeldas != nil || f.fotos != 0 {
+			t.Errorf("incidente %d: se consultó la base, want rechazarlo antes", id)
+		}
+	}
+	if _, err := svc.ObtenerResumen(ctx, Filtro{IncidenteIDs: []int{math.MaxInt32, math.MinInt32}}); err != nil {
+		t.Errorf("ObtenerResumen(límites de int4) = %v, want nil", err)
 	}
 
 	mismoDia := Filtro{Desde: fecha("2026-01-01T00:00:00Z"), Hasta: fecha("2026-01-01T00:00:00Z")}
@@ -308,6 +388,10 @@ func TestService_ObtenerResumen(t *testing.T) {
 		t.Errorf("Categorias = %+v", r.Categorias)
 	}
 
+	if f.fotos != 1 || f.fueraDeFoto != 0 {
+		t.Errorf("fotos = %d, consultas fuera de la foto = %d, want 1 y 0 (las tres en la misma)", f.fotos, f.fueraDeFoto)
+	}
+
 	// Parámetros del modelo y filtros, tal cual.
 	if a := f.argZonas; a.EpsM != EpsM || a.MinPuntos != MinPuntos || a.Limite != LimiteZonas ||
 		!reflect.DeepEqual(a.IncidenteIds, []int{1}) || a.Desde != filtro.Desde || a.Hasta != nil {
@@ -342,5 +426,9 @@ func TestService_ErrorDelStore(t *testing.T) {
 	}
 	if _, err := svc.ObtenerResumen(t.Context(), Filtro{}); !errors.Is(err, boom) {
 		t.Errorf("ObtenerResumen() = %v, want el error del store", err)
+	}
+	// Si no se puede abrir la transacción, el error llega igual.
+	if _, err := NewService(&fakeStore{errFoto: boom}).ObtenerResumen(t.Context(), Filtro{}); !errors.Is(err, boom) {
+		t.Errorf("ObtenerResumen() = %v, want el error al abrir la foto", err)
 	}
 }

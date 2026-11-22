@@ -2,18 +2,26 @@ package riesgo
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
 )
 
-// store declara solo las consultas que usa el servicio, con las firmas
+// consultas declara solo las consultas que usa el servicio, con las firmas
 // exactas de sqlc; *sqlc.Queries la cumple sin adaptadores.
-type store interface {
+type consultas interface {
 	ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalorParams) ([]sqlc.ListCeldasCalorRow, error)
 	ListZonasRiesgo(ctx context.Context, arg sqlc.ListZonasRiesgoParams) ([]sqlc.ListZonasRiesgoRow, error)
 	ListColoniasHistorico(ctx context.Context, arg sqlc.ListColoniasHistoricoParams) ([]sqlc.ListColoniasHistoricoRow, error)
 	ListConteoCategorias(ctx context.Context, arg sqlc.ListConteoCategoriasParams) ([]sqlc.ListConteoCategoriasRow, error)
+}
+
+// store agrega a las consultas la lectura en una sola foto de la base (ver
+// Store.LeerMismaFoto).
+type store interface {
+	consultas
+	LeerMismaFoto(ctx context.Context, fn func(consultas) error) error
 }
 
 type Service struct {
@@ -38,8 +46,9 @@ func (s *Service) ObtenerMapaCalor(ctx context.Context, area Area, zoom float64,
 	tamano := TamanoCelda(zoom)
 	mapa := MapaCalor{TamanoCeldaM: tamano, Celdas: []CeldaCalor{}}
 	// Una celda puede salir en dos tramos vecinos (sus reportes caen a ambos
-	// lados del borde): se junta por su centro, que es el mismo nodo de la
-	// cuadrícula en los dos. Cada reporte cuenta en un solo tramo (ver
+	// lados del borde): se junta por su clave, que es el mismo nodo de la
+	// cuadrícula en los dos, y su punto queda en el promedio de los reportes
+	// de ambas partes. Cada reporte cuenta en un solo tramo (ver
 	// MaxInclusivo), así que sumar no lo duplica.
 	indice := map[[2]float64]int{}
 	tramos := PartirArea(area)
@@ -61,10 +70,14 @@ func (s *Service) ObtenerMapaCalor(ctx context.Context, area Area, zoom float64,
 			return MapaCalor{}, err
 		}
 		for _, f := range filas {
-			clave := [2]float64{f.Latitude, f.Longitude}
+			clave := [2]float64{f.CeldaX, f.CeldaY}
 			if i, ok := indice[clave]; ok {
-				mapa.Celdas[i].Peso += f.Peso
-				mapa.Celdas[i].Reportes += f.Reportes
+				c := &mapa.Celdas[i]
+				n, m := float64(c.Reportes), float64(f.Reportes)
+				c.Latitude = (c.Latitude*n + f.Latitude*m) / (n + m)
+				c.Longitude = (c.Longitude*n + f.Longitude*m) / (n + m)
+				c.Peso += f.Peso
+				c.Reportes += f.Reportes
 				continue
 			}
 			indice[clave] = len(mapa.Celdas)
@@ -90,30 +103,40 @@ func (s *Service) ObtenerResumen(ctx context.Context, filtro Filtro) (Resumen, e
 	}
 	ids := idsONil(filtro.IncidenteIDs)
 
-	filasZonas, err := s.store.ListZonasRiesgo(ctx, sqlc.ListZonasRiesgoParams{
-		Limite:       LimiteZonas,
-		IncidenteIds: ids,
-		Desde:        filtro.Desde,
-		Hasta:        filtro.Hasta,
-		EpsM:         EpsM,
-		MinPuntos:    MinPuntos,
-	})
-	if err != nil {
-		return Resumen{}, err
-	}
-	filasColonias, err := s.store.ListColoniasHistorico(ctx, sqlc.ListColoniasHistoricoParams{
-		IncidenteIds: ids,
-		Desde:        filtro.Desde,
-		Hasta:        filtro.Hasta,
-		Limite:       LimiteColonias,
-	})
-	if err != nil {
-		return Resumen{}, err
-	}
-	filasCategorias, err := s.store.ListConteoCategorias(ctx, sqlc.ListConteoCategoriasParams{
-		IncidenteIds: ids,
-		Desde:        filtro.Desde,
-		Hasta:        filtro.Hasta,
+	// Las tres consultas leen la misma foto de la base: si no, un reporte que
+	// pasa a histórico entre una y otra dejaría, por ejemplo, una zona de 4
+	// reportes junto a total_historicos = 3.
+	var (
+		filasZonas      []sqlc.ListZonasRiesgoRow
+		filasColonias   []sqlc.ListColoniasHistoricoRow
+		filasCategorias []sqlc.ListConteoCategoriasRow
+	)
+	err := s.store.LeerMismaFoto(ctx, func(q consultas) error {
+		var err error
+		if filasZonas, err = q.ListZonasRiesgo(ctx, sqlc.ListZonasRiesgoParams{
+			Limite:       LimiteZonas,
+			IncidenteIds: ids,
+			Desde:        filtro.Desde,
+			Hasta:        filtro.Hasta,
+			EpsM:         EpsM,
+			MinPuntos:    MinPuntos,
+		}); err != nil {
+			return err
+		}
+		if filasColonias, err = q.ListColoniasHistorico(ctx, sqlc.ListColoniasHistoricoParams{
+			IncidenteIds: ids,
+			Desde:        filtro.Desde,
+			Hasta:        filtro.Hasta,
+			Limite:       LimiteColonias,
+		}); err != nil {
+			return err
+		}
+		filasCategorias, err = q.ListConteoCategorias(ctx, sqlc.ListConteoCategoriasParams{
+			IncidenteIds: ids,
+			Desde:        filtro.Desde,
+			Hasta:        filtro.Hasta,
+		})
+		return err
 	})
 	if err != nil {
 		return Resumen{}, err
@@ -176,6 +199,13 @@ func (s *Service) ObtenerResumen(ctx context.Context, filtro Filtro) (Resumen, e
 func validarFiltro(f Filtro) error {
 	if f.Desde != nil && f.Hasta != nil && f.Desde.After(*f.Hasta) {
 		return ErrPeriodoInvalido
+	}
+	for _, id := range f.IncidenteIDs {
+		// incidentes.id es integer (int4): un id fuera de rango no puede
+		// existir, y pgx no lo sabría codificar (sería un 500 en vez de un 400).
+		if id < math.MinInt32 || id > math.MaxInt32 {
+			return ErrIncidenteInvalido
+		}
 	}
 	return nil
 }

@@ -6,16 +6,26 @@
 -- incidente y de periodo son opcionales: NULL = sin filtro.
 
 -- name: ListCeldasCalor :many
--- Agrupa en metros reales: geom pasa a UTM 11N (EPSG:32611, la zona de
--- Tijuana) y ST_SnapToGrid lleva cada punto al nodo más cercano de la
--- cuadrícula, que queda como el centro de su celda. && sobre geography usa el
--- índice GiST de puntos_origen.geom.
-SELECT ST_Y(c.centro)::float8 AS latitude,
-       ST_X(c.centro)::float8 AS longitude,
+-- Agrupa en metros reales: geom pasa a la proyección métrica de a_metros (UTM
+-- 11N, la zona de Tijuana) y ST_SnapToGrid lleva cada punto al nodo de su
+-- celda, que solo sirve de clave (celda_x, celda_y, en metros). El punto de la
+-- celda es el promedio de la posición de sus reportes, no el nodo: el tamaño
+-- de la celda cambia con el zoom, y con el nodo el punto saltaba de lugar al
+-- acercarse o alejarse (un reporte solo quedaba hasta a 2 km de su sitio en
+-- zoom 10). && sobre geography usa el índice GiST de puntos_origen.geom.
+SELECT avg(ST_Y(c.g))::float8 AS latitude,
+       avg(ST_X(c.g))::float8 AS longitude,
        sum(c.peso)::float8 AS peso,
-       count(*)::int AS reportes
+       count(*)::int AS reportes,
+       ST_X(c.celda)::float8 AS celda_x,
+       ST_Y(c.celda)::float8 AS celda_y
 FROM (
-    SELECT ST_Transform(ST_SnapToGrid(ST_Transform(h.geom::geometry, 32611), sqlc.arg(tamano_celda_m)::float8), 4326) AS centro,
+    SELECT h.geom::geometry AS g,
+           ST_SnapToGrid(a_metros(h.geom::geometry),
+                         sqlc.arg(tamano_celda_m)::float8 / 2,
+                         sqlc.arg(tamano_celda_m)::float8 / 2,
+                         sqlc.arg(tamano_celda_m)::float8,
+                         sqlc.arg(tamano_celda_m)::float8) AS celda,
            h.peso
     FROM reporte_historico_peso h
     WHERE h.geom && ST_MakeEnvelope(sqlc.arg(min_lng)::float8, sqlc.arg(min_lat)::float8,
@@ -27,21 +37,26 @@ FROM (
     AND ST_X(h.geom::geometry) >= sqlc.arg(min_lng)::float8
     AND (ST_X(h.geom::geometry) < sqlc.arg(max_lng)::float8
          OR (sqlc.arg(max_inclusivo)::bool AND ST_X(h.geom::geometry) = sqlc.arg(max_lng)::float8))
+    -- Los bordes norte y sur de la caja en geography son arcos de círculo
+    -- máximo, que en el hemisferio norte se curvan hacia el polo: && deja
+    -- pasar reportes un poco al norte de max_lat. La latitud exacta es
+    -- [min, max].
+    AND ST_Y(h.geom::geometry) BETWEEN sqlc.arg(min_lat)::float8 AND sqlc.arg(max_lat)::float8
     AND (sqlc.narg(incidente_ids)::int[] IS NULL OR h.incidente_id = ANY(sqlc.narg(incidente_ids)::int[]))
     AND (sqlc.narg(desde)::timestamptz IS NULL OR h.created_at >= sqlc.narg(desde)::timestamptz)
     AND (sqlc.narg(hasta)::timestamptz IS NULL OR h.created_at <= sqlc.narg(hasta)::timestamptz)
 ) c
-GROUP BY c.centro;
+GROUP BY c.celda;
 
 -- name: ListZonasRiesgo :many
 -- Zonas = grupos de reportes históricos cercanos entre sí (DBSCAN). Un reporte
 -- forma zona si tiene al menos min_puntos reportes a menos de eps_m metros
 -- (contándose a sí mismo); los demás quedan como ruido (zona NULL) y no se
 -- devuelven. ST_ClusterDBSCAN solo acepta geometry: se trabaja en UTM 11N
--- (EPSG:32611) para que eps_m y radio_m sean metros reales. Los argumentos van
+-- (proyección métrica de a_metros) para que eps_m y radio_m sean metros reales. Los argumentos van
 -- por posición porque sqlc no entiende la notación eps := ...
 WITH puntos AS (
-    SELECT h.colonia, h.peso, ST_Transform(h.geom::geometry, 32611) AS g
+    SELECT h.colonia, h.peso, a_metros(h.geom::geometry) AS g
     FROM reporte_historico_peso h
     WHERE (sqlc.narg(incidente_ids)::int[] IS NULL OR h.incidente_id = ANY(sqlc.narg(incidente_ids)::int[]))
     AND (sqlc.narg(desde)::timestamptz IS NULL OR h.created_at >= sqlc.narg(desde)::timestamptz)
