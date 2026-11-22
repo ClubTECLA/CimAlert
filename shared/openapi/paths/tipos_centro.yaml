@@ -116,6 +116,12 @@ tipoCentroPorId:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '400':
+        description: ID de tipo de centro inválido
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
       
 components:
   schemas:

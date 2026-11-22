@@ -1,5 +1,11 @@
 type: object
-required: [message]
+description: >-
+  Error devuelto por la API. Los errores de aplicación usan `message`; los
+  errores de validación de parámetros o del cuerpo generados por el router usan `msg`.
 properties:
   message:
     type: string
+  msg:
+    type: string
+minProperties: 1
+additionalProperties: false
