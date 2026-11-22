@@ -72,7 +72,7 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         };
     }, [isAuthenticated, refresh]);
 
-    const filteredCentros = useMemo(() => filterCentros(centros ?? [], filters), [centros, filters]);
+    const filteredCentros = useMemo(() => filterCentros(centros ?? [], filters, tipos), [centros, filters, tipos]);
 
     const value = useMemo<CentrosContextType>(() => ({
         centros,

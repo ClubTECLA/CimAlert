@@ -1,6 +1,6 @@
 import type { ApiCentro, ApiTipoCentro } from "@/types/api-types";
 import { estaOcupado } from "@/features/centros/centroFormat";
-import { tipoStyle } from "@/features/centros/tiposCentro";
+import { esRefugio, tipoStyle } from "@/features/centros/tiposCentro";
 import CentroIcon from "./CentroIcon";
 
 interface CentroPinProps {
@@ -14,7 +14,8 @@ interface CentroPinProps {
 // marcador (CentrosLayer), que abre el detalle.
 export default function CentroPin({ centro, tipo, selected = false }: CentroPinProps) {
     const { color } = tipoStyle(tipo);
-    const label = `${centro.nombre}, ${tipo?.nombre ?? "Centro"}, ${estaOcupado(centro) ? "ocupado" : "disponible"}`;
+    const estado = esRefugio(tipo) ? `, ${estaOcupado(centro, tipo) ? "ocupado" : "disponible"}` : "";
+    const label = `${centro.nombre}, ${tipo?.nombre ?? "Centro"}${estado}`;
 
     return (
         <span title={label} data-selected={selected || undefined} className="relative flex items-center justify-center">

@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CENTRO_FILTERS, estaOcupado, filterCentros, lugaresDisponibles, lugaresTexto } from "./centroFormat";
-import type { ApiCentro } from "@/types/api-types";
+import type { ApiCentro, ApiTipoCentro } from "@/types/api-types";
 
 const centro = (id: string, tipo_centro: number, capacidad: number | null, cantidad: number | null) =>
     ({ id, tipo_centro, capacidad, cantidad }) as ApiCentro;
 
+const refugios = { id: 1, nombre: "Refugios" } as ApiTipoCentro;
+const salud = { id: 2, nombre: "Salud" } as ApiTipoCentro;
+const tipos = new Map([[1, refugios], [2, salud]]);
+
 const centros = [
-    centro("libre", 1, 50, 20),
-    centro("lleno", 1, 30, 30),
-    centro("sin-capacidad", 2, null, null),
-    centro("otro-tipo-lleno", 2, 10, 12),
+    centro("refugio-libre", 1, 50, 20),
+    centro("refugio-lleno", 1, 30, 30),
+    centro("hospital", 2, null, null),
+    centro("hospital-lleno", 2, 10, 12),
 ];
 const ids = (list: ApiCentro[]) => list.map((item) => item.id);
 
@@ -26,21 +30,27 @@ describe("lugaresDisponibles", () => {
 });
 
 describe("estaOcupado", () => {
-    it("solo sin lugares libres; sin capacidad registrada cuenta como disponible", () => {
-        expect(estaOcupado({ capacidad: 30, cantidad: 30 })).toBe(true);
-        expect(estaOcupado({ capacidad: 30, cantidad: 29 })).toBe(false);
-        expect(estaOcupado({ capacidad: null, cantidad: null })).toBe(false);
+    it("un refugio, solo sin lugares libres; sin capacidad registrada cuenta como disponible", () => {
+        expect(estaOcupado({ capacidad: 30, cantidad: 30 }, refugios)).toBe(true);
+        expect(estaOcupado({ capacidad: 30, cantidad: 29 }, refugios)).toBe(false);
+        expect(estaOcupado({ capacidad: null, cantidad: null }, refugios)).toBe(false);
+    });
+
+    it("los demás tipos nunca están ocupados, aunque tengan los lugares llenos", () => {
+        expect(estaOcupado({ capacidad: 10, cantidad: 12 }, salud)).toBe(false);
+        expect(estaOcupado({ capacidad: 10, cantidad: 12 })).toBe(false);
     });
 });
 
 describe("filterCentros", () => {
-    it("de entrada muestra los disponibles de todos los tipos", () => {
-        expect(ids(filterCentros(centros, DEFAULT_CENTRO_FILTERS))).toEqual(["libre", "sin-capacidad"]);
+    it("de entrada (activos) muestra todo menos los refugios llenos", () => {
+        expect(ids(filterCentros(centros, DEFAULT_CENTRO_FILTERS, tipos))).toEqual(["refugio-libre", "hospital", "hospital-lleno"]);
     });
 
-    it("separa ocupados y todos, y oculta los tipos apagados", () => {
-        expect(ids(filterCentros(centros, { tab: "ocupados", hiddenTipos: [] }))).toEqual(["lleno", "otro-tipo-lleno"]);
-        expect(ids(filterCentros(centros, { tab: "todos", hiddenTipos: [2] }))).toEqual(["libre", "lleno"]);
+    it("ocupados son solo los refugios llenos; todos, todo; y oculta los tipos apagados", () => {
+        expect(ids(filterCentros(centros, { tab: "ocupados", hiddenTipos: [] }, tipos))).toEqual(["refugio-lleno"]);
+        expect(ids(filterCentros(centros, { tab: "todos", hiddenTipos: [] }, tipos))).toEqual(ids(centros));
+        expect(ids(filterCentros(centros, { tab: "todos", hiddenTipos: [2] }, tipos))).toEqual(["refugio-libre", "refugio-lleno"]);
     });
 });
 

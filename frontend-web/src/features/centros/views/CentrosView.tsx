@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { LuPlus } from "react-icons/lu";
 import ColSection from "@/components/layout/ColSection";
 import CategoryChip from "@/components/ui/CategoryChip";
@@ -11,9 +11,9 @@ import { useCentros } from "@/features/centros/useCentros";
 import { toggled } from "@/features/reportes/reportFilters";
 import { estaOcupado, filterCentros, type CentroFilters, type CentroTab } from "@/features/centros/centroFormat";
 import CentroRow from "@/features/centros/components/CentroRow";
-import { tipoStyle } from "@/features/centros/tiposCentro";
+import { esRefugio, tipoStyle } from "@/features/centros/tiposCentro";
 
-// Filas por tanda de "Cargar N más", igual que la lista de incidentes. El backend no pagina: se pagina aquí.
+// Filas que añade cada "Cargar N más", igual que la lista de incidentes. El backend no pagina: se pagina aquí.
 const PAGE_SIZE = 5;
 
 const noteStyle = "py-6 text-center text-sm text-ink-muted";
@@ -24,19 +24,50 @@ export default function CentrosView() {
     const { user } = useAuth();
     const { openPanel } = useCommonPanel();
     const { centros, tipos, error, filteredCentros: filtered, filters, setFilters } = useCentros();
-    const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+    // La primera tanda son las filas que caben enteras en el panel (fitCount); "Cargar más" suma tandas (extra).
+    const [fitCount, setFitCount] = useState(PAGE_SIZE);
+    const [extra, setExtra] = useState(0);
+    const listRef = useRef<HTMLDivElement>(null);
+    const [listHeight, setListHeight] = useState(0);
 
     const all = centros ?? [];
-    const disponibles = all.filter((centro) => !estaOcupado(centro)).length;
-    const shown = filtered.slice(0, visibleCount);
+    const refugiosDisponibles = all.filter((centro) => {
+        const tipo = tipos.get(centro.tipo_centro);
+        return esRefugio(tipo) && !estaOcupado(centro, tipo);
+    }).length;
+    const shown = filtered.slice(0, fitCount + extra);
     const remaining = filtered.length - shown.length;
+    // Mientras no se carga más, la siguiente fila se pinta invisible para medir si cabe entera.
+    const probe = extra === 0 ? filtered[shown.length] : undefined;
+
+    // Ajusta la primera tanda al alto del panel antes de pintar: si la sonda cabe, se muestra (y se mide la siguiente);
+    // si la última fila ya no cabe (el panel se encogió), se quita. Las filas no miden todas lo mismo (los refugios
+    // llevan una línea más), por eso se mide cada una y no se divide el alto.
+    useLayoutEffect(() => {
+        const list = listRef.current;
+        if (!list || extra > 0) return;
+        const bottom = list.getBoundingClientRect().bottom;
+        const fits = (element: Element | null | undefined) => !!element && element.getBoundingClientRect().bottom <= bottom;
+        const rows = list.querySelectorAll(":scope > button");
+        if (rows.length > 1 && !fits(rows[rows.length - 1])) setFitCount(rows.length - 1);
+        else if (fits(list.querySelector(":scope > [data-probe]"))) setFitCount(rows.length + 1);
+    }, [extra, fitCount, filtered, listHeight]);
+
+    // Al cambiar el alto del panel (ventana, teléfono girado) se vuelve a medir.
+    useEffect(() => {
+        const list = listRef.current;
+        if (!list) return;
+        const observer = new ResizeObserver(() => setListHeight(list.clientHeight));
+        observer.observe(list);
+        return () => observer.disconnect();
+    }, []);
 
     // Cambiar el filtro vuelve a la primera tanda.
-    const update = (changes: Partial<CentroFilters>) => { setFilters({ ...filters, ...changes }); setVisibleCount(PAGE_SIZE) };
+    const update = (changes: Partial<CentroFilters>) => { setFilters({ ...filters, ...changes }); setExtra(0) };
 
     const tabs: { key: CentroTab; label: string }[] = [
         // El contador respeta los tipos elegidos, igual que la lista.
-        { key: "disponibles", label: centros ? `Disponibles · ${filterCentros(all, { ...filters, tab: "disponibles" }).length}` : "Disponibles" },
+        { key: "activos", label: centros ? `Activos · ${filterCentros(all, { ...filters, tab: "activos" }, tipos).length}` : "Activos" },
         { key: "ocupados", label: "Ocupados" },
         { key: "todos", label: "Todos" },
     ];
@@ -48,7 +79,7 @@ export default function CentrosView() {
     return (
         <ColSection
             title="Centros de ayuda"
-            subtitle={centros ? `${all.length} activos · ${disponibles} disponibles` : "Cargando…"}
+            subtitle={centros ? `${all.length} centros · ${refugiosDisponibles} refugios libres` : "Cargando…"}
             headerActions={newButton}
             arrangementSubsections="toUp"
             className="min-h-0 overflow-visible"
@@ -68,7 +99,8 @@ export default function CentrosView() {
 
                 {tipos.size > 0 &&
                     <div className="flex flex-wrap gap-2">
-                        {[...tipos.values()].map((tipo) =>
+                        {/* En "Ocupados" solo puede haber refugios: los chips de otros tipos no filtrarían nada. */}
+                        {[...tipos.values()].filter((tipo) => filters.tab !== "ocupados" || esRefugio(tipo)).map((tipo) =>
                             <CategoryChip
                                 key={tipo.id}
                                 label={tipo.nombre}
@@ -81,8 +113,12 @@ export default function CentrosView() {
                 }
 
                 {/* El scroll se extiende sobre el relleno del panel para quedar pegado a su borde derecho. Por eso
-                    ColSection va con overflow-visible: con scroll propio, ese sobrante le daría una barra horizontal. */}
-                <div className="-mr-3 flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-0.5 pr-3.5 sm:-mr-4 sm:pr-4.5">
+                    ColSection va con overflow-visible: con scroll propio, ese sobrante le daría una barra horizontal.
+                    Sin scroll hasta "Cargar más": las filas visibles caben enteras y la sonda que sobresale se recorta. */}
+                <div
+                    ref={listRef}
+                    className={`-mr-3 flex min-h-0 flex-1 flex-col gap-2 p-0.5 pr-3.5 sm:-mr-4 sm:pr-4.5 ${extra > 0 ? "overflow-y-auto" : "overflow-hidden"}`}
+                >
                     {error && <span className={noteStyle}>{error}</span>}
                     {!error && !centros && <span className={noteStyle}>Cargando centros…</span>}
                     {centros && filtered.length === 0 &&
@@ -98,12 +134,18 @@ export default function CentrosView() {
                             onClick={() => openPanel("Detalle Centro", { centroId: centro.id })}
                         />
                     )}
+                    {/* invisible (y no hidden): ocupa su alto para medirlo, pero no se ve, no se enfoca ni se lee. */}
+                    {probe &&
+                        <div data-probe className="invisible shrink-0" aria-hidden>
+                            <CentroRow centro={probe} tipo={tipos.get(probe.tipo_centro)} onClick={() => undefined} />
+                        </div>
+                    }
                 </div>
 
                 {remaining > 0 &&
                     <button
                         type="button"
-                        onClick={() => setVisibleCount((prev) => prev + PAGE_SIZE)}
+                        onClick={() => setExtra((prev) => prev + PAGE_SIZE)}
                         className="w-full shrink-0 rounded-full bg-canvas py-2 text-sm font-semibold text-ink transition-colors hover:bg-line-soft"
                     >
                         Cargar {Math.min(PAGE_SIZE, remaining)} más
