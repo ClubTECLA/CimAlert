@@ -50,8 +50,9 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         // Se añade ya el que devolvió el POST: si la recarga falla, su detalle (que se abre al publicar) lo encuentra
         // igual. Si la recarga sale bien, la lista del servidor lo sustituye.
         setCentros((prev) => [...(prev ?? []).filter((item) => item.id !== centro.id), centro]);
-        // Sin filtros, para que la lista y el mapa muestren el centro nuevo.
-        setFilters(DEFAULT_CENTRO_FILTERS);
+        // Sin filtros, para que la lista y el mapa muestren el centro nuevo, salvo el área dibujada: crear un centro
+        // no debe quitar el filtro que el usuario eligió (se quita con "Limpiar selección" o restableciendo filtros).
+        setFilters((prev) => ({ ...DEFAULT_CENTRO_FILTERS, polygon: prev.polygon }));
         await refresh();
         return centro;
     }, [refresh]);

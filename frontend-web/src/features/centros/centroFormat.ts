@@ -1,3 +1,5 @@
+import type { Polygon } from "geojson";
+import { pointInPolygon } from "@/lib/geo";
 import type { ApiCentro } from "@/types/api-types";
 
 // Reglas de presentación de un centro, compartidas por la lista, el mapa y el detalle. Mismo criterio que la app móvil
@@ -9,6 +11,8 @@ export interface CentroFilters {
     tab: CentroTab
     /** Se guardan los tipos ocultos y no los visibles: un tipo nuevo aparece sin tocar el filtro. */
     hiddenTipos: number[]
+    /** El mismo área que ReportFilters: el polígono lo coordina PolygonSelectionProvider en los dos módulos. */
+    polygon?: Polygon | null
 }
 
 
@@ -27,9 +31,10 @@ export const estaOcupado = (centro: Pick<ApiCentro, "capacidad" | "cantidad">) =
 export const lugaresTexto = (lugares: number) => `${lugares} ${lugares === 1 ? "lugar disponible" : "lugares disponibles"}`;
 
 /** Centros que pasan el filtro: los lista el panel "Centros" y los pinta el mapa, así siempre coinciden. */
-export function filterCentros(centros: ApiCentro[], { tab, hiddenTipos }: CentroFilters) {
+export function filterCentros(centros: ApiCentro[], { tab, hiddenTipos, polygon }: CentroFilters) {
     return centros.filter((centro) =>
         !hiddenTipos.includes(centro.tipo_centro)
         && (tab === "todos" || estaOcupado(centro) === (tab === "ocupados"))
+        && (!polygon || pointInPolygon([centro.longitude, centro.latitude], polygon))
     );
 }

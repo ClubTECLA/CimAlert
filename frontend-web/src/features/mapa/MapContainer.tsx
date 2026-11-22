@@ -5,7 +5,7 @@ import {
   setWorkerUrl,
   type StyleSpecification,
 } from 'maplibre-gl';
-import { LuFilter, LuLayers, LuMinus, LuNavigation, LuPlus } from 'react-icons/lu';
+import { LuFilter, LuLayers, LuMinus, LuNavigation, LuPentagon, LuPlus, LuX } from 'react-icons/lu';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import { useMap } from './useMap';
@@ -16,7 +16,11 @@ import useModals from '@/panels/useModals';
 import BellButton from '@/features/notificaciones/components/BellButton';
 import IncidentsLayer from './IncidentsLayer';
 import CentrosLayer from '@/features/centros/CentrosLayer';
+import { useAuth } from '@/features/sesion/useAuth';
+import { isOfficialRole } from '@/features/sesion/users';
 import LayersPill from './LayersPill';
+import PolygonLayer from './PolygonLayer';
+import { usePolygon } from './usePolygon';
 
 setWorkerUrl(workerUrl);
 
@@ -56,6 +60,8 @@ export default function MapContainer() {
   const { setMap } = useMap();
   const { openPanel } = useCommonPanel();
   const { openModal, closeModal, currentModal } = useModals();
+  const { user } = useAuth();
+  const { isDrawing, start, cancel } = usePolygon();
 
   useEffect(() => {
     // Create the map once the container is available.
@@ -124,6 +130,23 @@ export default function MapContainer() {
             <LuLayers className="max-lg:hidden" />
             <LuFilter className="lg:hidden" />
           </button>
+          {/* Seleccionar área es solo lectura, pero lo reservamos a roles oficiales: dibujar cambia lo que ve todo el
+              equipo y el ciudadano solo consulta el mapa tal como está. */}
+          {isOfficialRole(user?.rol_name) && (
+            <>
+              <button
+                type="button"
+                className={`${controlButtonStyle} ${isDrawing ? 'bg-brand text-white hover:bg-brand-text' : ''}`}
+                aria-label={isDrawing ? 'Cancelar selección de área' : 'Seleccionar área'}
+                aria-pressed={isDrawing}
+                title={isDrawing ? 'Cancelar dibujo (Esc)' : 'Seleccionar área'}
+                onClick={isDrawing ? cancel : start}
+              >
+                {isDrawing ? <LuX /> : <LuPentagon />}
+              </button>
+              <div className="h-px w-6 bg-line-soft" />
+            </>
+          )}
           <div className="h-px w-6 bg-line-soft" />
           <button type="button" className={controlButtonStyle} aria-label="Acercar" title="Acercar" disabled={atMaxZoom} onClick={() => mapRef.current?.zoomIn()}>
             <LuPlus />
@@ -143,6 +166,7 @@ export default function MapContainer() {
       <LayersPill />
       <IncidentsLayer />
       <CentrosLayer />
+      <PolygonLayer />
     </div>
   );
 }

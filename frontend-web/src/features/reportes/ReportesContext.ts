@@ -1,4 +1,4 @@
-import { createContext } from "react";
+import { createContext, type Dispatch, type SetStateAction } from "react";
 import type { ApiIncidente, ApiReporteResumen } from "@/types/api-types";
 import type { ReportFilters } from "./reportFilters";
 import type { FalloFoto, NuevoReporte, Publicacion } from "./publicarReporte";
@@ -18,7 +18,7 @@ export interface ReportesContextType {
     filteredReportes: ApiReporteResumen[]
     filters: ReportFilters
     /** Sustituye el filtro: lo usan "Mostrar N resultados" de "Capas y filtros" y los atajos de la lista. */
-    setFilters: (filters: ReportFilters) => void
+    setFilters: Dispatch<SetStateAction<ReportFilters>>
     /** Vuelve a DEFAULT_FILTERS (los abiertos de todas las capas y categorías). */
     resetFilters: () => void
     refresh: () => Promise<void>

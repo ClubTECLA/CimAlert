@@ -7,7 +7,7 @@ import { freeMapCenter } from "@/features/mapa/freeMapCenter";
 import { CLUSTER_MAX_ZOOM } from "@/features/mapa/useIncidentMarkers";
 import { useCommonPanel } from "@/panels/useCommonPanel";
 import { useCentros } from "./useCentros";
-import { isCentroPanel, isIncidentPanel } from "./centrosPanels";
+import { isAreaPanel, isCentroPanel, isIncidentPanel } from "./centrosPanels";
 import CentroPin from "./components/CentroPin";
 
 // Sin centros que pintar: lista estable para no recrear los marcadores en cada render.
@@ -109,7 +109,8 @@ export default function CentrosLayer() {
     const focusedRef = useRef<string | null>(null);
 
     const hidden = isIncidentPanel(currentPanel?.view);
-    const filtered = isCentroPanel(currentPanel?.view);
+    // Con el panel del área se pinta lo que pasa el filtro del polígono, igual que en el módulo de centros.
+    const filtered = isCentroPanel(currentPanel?.view) || isAreaPanel(currentPanel?.view);
     const activeId = currentPanel?.view === "Detalle Centro" ? currentPanel.props.centroId : null;
 
     // El abierto se pinta aunque el filtro lo oculte; si no, el mapa se centraría en un punto vacío.

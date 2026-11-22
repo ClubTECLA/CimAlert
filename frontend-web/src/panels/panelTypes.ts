@@ -17,6 +17,7 @@ export type PanelViewPropsMap = {
     "Centros": object;
     "Detalle Centro": { centroId: string };
     "Nuevo Centro": object;
+    "Área seleccionada": object;
 };
 
 export type PanelViewKey = keyof PanelViewPropsMap;

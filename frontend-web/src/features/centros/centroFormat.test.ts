@@ -1,9 +1,10 @@
+import type { Polygon } from "geojson";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CENTRO_FILTERS, estaOcupado, filterCentros, lugaresDisponibles, lugaresTexto } from "./centroFormat";
 import type { ApiCentro } from "@/types/api-types";
 
-const centro = (id: string, tipo_centro: number, capacidad: number | null, cantidad: number | null) =>
-    ({ id, tipo_centro, capacidad, cantidad }) as ApiCentro;
+const centro = (id: string, tipo_centro: number, capacidad: number | null, cantidad: number | null, latitude = 5, longitude = 5) =>
+    ({ id, tipo_centro, capacidad, cantidad, latitude, longitude }) as ApiCentro;
 
 const centros = [
     centro("libre", 1, 50, 20),
@@ -41,6 +42,14 @@ describe("filterCentros", () => {
     it("separa ocupados y todos, y oculta los tipos apagados", () => {
         expect(ids(filterCentros(centros, { tab: "ocupados", hiddenTipos: [] }))).toEqual(["lleno", "otro-tipo-lleno"]);
         expect(ids(filterCentros(centros, { tab: "todos", hiddenTipos: [2] }))).toEqual(["libre", "lleno"]);
+    });
+
+    it("el polígono se combina con la pestaña y los tipos ocultos", () => {
+        const area: Polygon = { type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] };
+        const dentro = centro("dentro", 1, 50, 10);
+        const fuera = centro("fuera", 1, 50, 10, 20, 20);
+        expect(ids(filterCentros([dentro, fuera], { ...DEFAULT_CENTRO_FILTERS, polygon: area }))).toEqual(["dentro"]);
+        expect(ids(filterCentros([dentro, fuera], { tab: "todos", hiddenTipos: [1], polygon: area }))).toEqual([]);
     });
 });
 

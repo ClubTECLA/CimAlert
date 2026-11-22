@@ -1,4 +1,4 @@
-import { createContext } from "react";
+import { createContext, type Dispatch, type SetStateAction } from "react";
 import type { ApiCentro, ApiCrearCentroRequest, ApiTipoCentro } from "@/types/api-types";
 import type { CentroFilters } from "./centroFormat";
 
@@ -14,7 +14,7 @@ export interface CentrosContextType {
     /** Centros que pasan el filtro: los lista el panel "Centros" y los pinta el mapa. */
     filteredCentros: ApiCentro[]
     filters: CentroFilters
-    setFilters: (filters: CentroFilters) => void
+    setFilters: Dispatch<SetStateAction<CentroFilters>>
     refresh: () => Promise<void>
     /** Crea un centro (solo administradores), quita el filtro para que se vea y recarga la lista y el mapa. */
     crear: (nuevo: ApiCrearCentroRequest) => Promise<ApiCentro>

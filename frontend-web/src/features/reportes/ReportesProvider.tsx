@@ -75,8 +75,9 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
 
     const publicar = useCallback(async (nuevo: NuevoReporte) => {
         const publicacion = await publicarReporte(nuevo);
-        // Sin filtros, para que la lista y el mapa muestren el reporte nuevo y su pin se anime.
-        setFilters(DEFAULT_FILTERS);
+        // Sin filtros, para que la lista y el mapa muestren el reporte nuevo y su pin se anime. El área dibujada se
+        // conserva: publicar no debe quitar un filtro que el usuario no pidió quitar.
+        setFilters((prev) => ({ ...DEFAULT_FILTERS, polygon: prev.polygon }));
         setCreatedId(publicacion.reporte.id);
         void refresh();
         return publicacion;

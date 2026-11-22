@@ -11,7 +11,8 @@ import { isCentroPanel } from "@/features/centros/centrosPanels";
 // píldora de capas, si se muestra, va en la fila del dock. Por debajo de 1024 px, con un panel abierto, no cabe en el
 // mapa libre: se oculta.
 // No se muestra sin filtros, con los paneles que ya enseñan el filtro ("Incidentes" y "Capas y filtros") ni con los de
-// centros, que ocultan los incidentes del mapa.
+// centros, que ocultan los incidentes del mapa. Con "Área seleccionada" sí se muestra: el polígono sigue filtrando al
+// cerrar el panel y el badge es la forma de volver a él o de quitarlo.
 const PANELS_SHOWING_FILTERS = ["Incidentes", "Capas y filtros"];
 
 export default function ActiveFiltersBadge() {
@@ -34,8 +35,8 @@ export default function ActiveFiltersBadge() {
         >
             <button
                 type="button"
-                onClick={() => openPanel("Capas y filtros")}
-                title="Ver o cambiar los filtros"
+                onClick={() => openPanel(filters.polygon ? "Área seleccionada" : "Capas y filtros")}
+                title={filters.polygon ? "Ver el área seleccionada" : "Ver o cambiar los filtros"}
                 className="flex min-w-0 items-center gap-2.5 rounded-full py-0.5 pl-0.5 pr-2 text-left transition-colors hover:bg-subtle"
             >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-white" aria-hidden>

@@ -1,0 +1,62 @@
+import type { Polygon } from "geojson";
+import { describe, expect, it } from "vitest";
+import { pointInPolygon, polygonFromPoints } from "./geo";
+
+const square = (x0: number, y0: number, x1: number, y1: number): number[][] => [
+    [x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0],
+];
+const polygon = (...rings: number[][][]): Polygon => ({ type: "Polygon", coordinates: rings });
+
+describe("pointInPolygon", () => {
+    const area = polygon(square(-117.1, 32.5, -117.0, 32.6));
+
+    it("acepta puntos interiores y rechaza los exteriores", () => {
+        expect(pointInPolygon([-117.05, 32.55], area)).toBe(true);
+        expect(pointInPolygon([-117.2, 32.55], area)).toBe(false);
+        expect(pointInPolygon([-117.05, 32.7], area)).toBe(false);
+    });
+
+    it("el borde y los vértices cuentan como dentro", () => {
+        expect(pointInPolygon([-117.1, 32.55], area)).toBe(true);
+        expect(pointInPolygon([-117.0, 32.6], area)).toBe(true);
+        expect(pointInPolygon([-117.05, 32.5], area)).toBe(true);
+    });
+
+    it("respeta cóncavos: el hueco de una L queda fuera", () => {
+        const l = polygon([
+            [0, 0], [4, 0], [4, 1], [1, 1], [1, 4], [0, 4], [0, 0],
+        ]);
+        expect(pointInPolygon([0.5, 0.5], l)).toBe(true);
+        expect(pointInPolygon([2, 2], l)).toBe(false);
+    });
+
+    it("excluye los huecos pero no el exterior", () => {
+        const conHueco = polygon(square(0, 0, 10, 10), square(3, 3, 7, 7));
+        expect(pointInPolygon([1, 1], conHueco)).toBe(true);
+        expect(pointInPolygon([5, 5], conHueco)).toBe(false);
+    });
+
+    it("un polígono vacío o degenerado no contiene nada", () => {
+        expect(pointInPolygon([0, 0], polygon())).toBe(false);
+        expect(pointInPolygon([0, 0], polygon([[0, 0], [0, 0]]))).toBe(false);
+    });
+});
+
+describe("polygonFromPoints", () => {
+    it("cierra el anillo con el primer vértice", () => {
+        expect(polygonFromPoints([[0, 0], [2, 0], [2, 2], [0, 2]])).toEqual(
+            polygon([[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]),
+        );
+    });
+
+    it("quita repetidos consecutivos y el cierre que ya traía el dibujo", () => {
+        expect(polygonFromPoints([[0, 0], [2, 0], [2, 0], [2, 2], [0, 0]])).toEqual(
+            polygon([[0, 0], [2, 0], [2, 2], [0, 0]]),
+        );
+    });
+
+    it("con menos de tres vértices no hay área", () => {
+        expect(polygonFromPoints([])).toBeNull();
+        expect(polygonFromPoints([[0, 0], [1, 1]])).toBeNull();
+    });
+});

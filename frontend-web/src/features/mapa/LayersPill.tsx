@@ -9,7 +9,7 @@ import { useReportes } from "@/features/reportes/useReportes";
 const MAX_DOTS = 4;
 // Vistas en las que el mapa trata de incidentes; en las demás (perfil, ajustes, centros) el
 // filtro no tiene que ver con lo que se hace y la píldora no se muestra. Sin panel abierto sí se muestra.
-const PANELS_WITH_INCIDENTS: PanelViewKey[] = ["Resumen", "Incidentes", "Detalle Incidente", "Nuevo Incidente", "Capas y filtros"];
+const PANELS_WITH_INCIDENTS: PanelViewKey[] = ["Resumen", "Incidentes", "Detalle Incidente", "Nuevo Incidente", "Capas y filtros", "Área seleccionada"];
 
 // Mapa libre mínimo para que la píldora (hasta ~330 px, con 16 de margen) quepa a la izquierda del dock centrado
 // (~450 px) sin tocarlo: 2 × (330 + 2 × 16) + 450.
