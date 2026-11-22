@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
@@ -63,6 +64,7 @@ type Handlers struct {
 	Usuarios    *usuario.Handler
 	Multimedia  *multimedia.Handler
 	Centros     *centro.Handler
+	Areas       *area.Handler
 }
 
 // Cada funcionalidad llama Handler a su handler, y dos campos embebidos no
@@ -75,6 +77,7 @@ type (
 	usuarios    = usuario.Handler
 	multimedias = multimedia.Handler
 	centros     = centro.Handler
+	areas       = area.Handler
 )
 
 // api junta los handlers de cada funcionalidad en la interfaz que genera
@@ -87,6 +90,7 @@ type api struct {
 	*usuarios
 	*multimedias
 	*centros
+	*areas
 }
 
 // Assertion en tiempo de compilación: si el contrato gana un endpoint y
@@ -156,7 +160,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 	// Los manejadores de error por defecto de oapi-codegen responden {"msg": ...};
 	// se reemplazan para que coincidan con ErrorResponse ({"message": ...}).
 	strict := httpapi.NewStrictHandlerWithOptions(
-		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros},
+		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros, areas: h.Areas},
 		nil,
 		httpapi.StrictGinServerOptions{
 			RequestErrorHandlerFunc: func(c *gin.Context, err error) {

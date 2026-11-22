@@ -69,6 +69,8 @@ type Querier interface {
 	GetUserWithRolByID(ctx context.Context, id uuid.UUID) (GetUserWithRolByIDRow, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
 	ListCentros(ctx context.Context, incluirInactivos bool) ([]ListCentrosRow, error)
+	// Solo activos, igual que la lista del mapa. Mismas columnas que ListCentros.
+	ListCentrosEnArea(ctx context.Context, poligono string) ([]ListCentrosEnAreaRow, error)
 	ListComentariosByReporteId(ctx context.Context, reporteID uuid.UUID) ([]ListComentariosByReporteIdRow, error)
 	ListHistorialPorEntidad(ctx context.Context, arg ListHistorialPorEntidadParams) ([]Historial, error)
 	// Los inactivos solo se incluyen si se piden (p. ej. para una pantalla de
@@ -82,6 +84,10 @@ type Querier interface {
 	ListMultimediaPathsExistentes(ctx context.Context, paths []string) ([]string, error)
 	// Incluye los históricos: es el historial del usuario, no el mapa.
 	ListReportesByUserId(ctx context.Context, arg ListReportesByUserIdParams) ([]ListReportesByUserIdRow, error)
+	// sqlc no conoce PostGIS: el polígono viaja como texto GeoJSON y se convierte en el servidor.
+	// ST_Covers sobre geography aprovecha el índice GiST de puntos_origen.geom.
+	// Mismas columnas que ListReportesResumen para reutilizar el resumen del mapa.
+	ListReportesEnArea(ctx context.Context, poligono string) ([]ListReportesEnAreaRow, error)
 	// sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 	// cast explícito; sin él se generaría como interface{}.
 	// ST_DWithin usa el índice GiST de puntos_origen.geom.

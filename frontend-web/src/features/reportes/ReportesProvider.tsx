@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Polygon } from "geojson";
 import { useAuth } from "@/features/sesion/useAuth";
+import { buscarArea } from "@/features/areas/areas.services";
 import { listarIncidentes } from "@/features/categorias/incidentes.services";
 import { listarReportes } from "./reportes.services";
 import { publicarReporte, subirFoto, type NuevoReporte } from "./publicarReporte";
@@ -37,13 +39,18 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
     // Pueden coincidir varias cargas (sondeo, volver a la pestaña, publicar o cambiar un estado): solo se aplica
     // la última que se pidió, para que una respuesta lenta y vieja no pise a una más nueva.
     const requestRef = useRef(0);
+    // El área se lee de un ref para que refresh no cambie de identidad al dibujar: si cambiara, el efecto de la sesión
+    // se volvería a ejecutar y reiniciaría el sondeo cada vez que el usuario selecciona un área.
+    const polygonRef = useRef<Polygon | null>(filters.polygon ?? null);
 
     const refresh = useCallback(async () => {
         const session = sessionRef.current;
         const request = ++requestRef.current;
         const isCurrent = () => session === sessionRef.current && request === requestRef.current;
+        const polygon = polygonRef.current;
         const [reportResult, categoryResult] = await Promise.allSettled([
-            listarReportes(),
+            // Con área dibujada, PostGIS devuelve solo los reportes dentro de ella; sin ella, la lista completa.
+            polygon ? buscarArea(polygon).then((respuesta) => respuesta.reportes) : listarReportes(),
             // También las inactivas: puede haber reportes de una categoría que ya se desactivó.
             listarIncidentes({ incluir_inactivos: true }),
         ]);
@@ -124,6 +131,15 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
             setLastSync(null);
         };
     }, [isAuthenticated, refresh]);
+
+    // La fuente de datos cambia al dibujar, limpiar o restablecer el área: recargar solo entonces, no en el montaje
+    // (la carga inicial ya la hace el efecto de la sesión) ni al cambiar los demás filtros (esos son solo del cliente).
+    useEffect(() => {
+        const polygon = filters.polygon ?? null;
+        if (polygonRef.current === polygon) return; // montaje inicial: ya lo carga el efecto de la sesión
+        polygonRef.current = polygon;
+        if (isAuthenticated) void refresh();
+    }, [filters.polygon, isAuthenticated, refresh]);
 
     useEffect(() => {
         if (!createdId) return;

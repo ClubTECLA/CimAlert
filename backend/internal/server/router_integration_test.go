@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
@@ -92,6 +93,7 @@ func newTestClient(t *testing.T) *testClient {
 			MaxDuracion: 6 * time.Second,
 		})),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(testPool(t)))),
+		Areas:   area.NewHandler(area.NewService(area.Store{Queries: sqlc.New(testPool(t))})),
 	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga))
 
 	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer}

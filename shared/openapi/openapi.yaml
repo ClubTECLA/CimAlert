@@ -79,6 +79,8 @@ paths:
     $ref: './paths/centros.yaml#/coleccionCentros'
   /centro/{centroId}:
     $ref: './paths/centros.yaml#/centrosPorId'
+  /areas/buscar:
+    $ref: './paths/areas.yaml#/buscarArea'
 
 components:
   schemas:
@@ -116,6 +118,12 @@ components:
       $ref: './schemas/reportes/crear_reporte_request.yaml'
     ErrorResponse:
       $ref: './schemas/error_response.yaml'
+    BuscarAreaRequest:
+      $ref: './schemas/areas/buscar_area_request.yaml'
+    BuscarAreaResponse:
+      $ref: './schemas/areas/buscar_area_response.yaml'
+    Poligono:
+      $ref: './schemas/areas/poligono.yaml'
     RegisterRequest:
       $ref: './schemas/auth/register_request.yaml'
     LoginRequest:

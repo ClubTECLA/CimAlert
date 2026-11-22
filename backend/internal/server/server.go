@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/almacen"
+	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/config"
@@ -54,5 +55,6 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 			MaxDuracion: time.Duration(cfg.MaxVideoSegundos) * time.Second,
 		})),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(pool))),
+		Areas:   area.NewHandler(area.NewService(area.Store{Queries: sqlc.New(pool)})),
 	}, cfg.JWTSecret, usuarios.GetPasswordChangedAtByUserID, WithMaxMultimediaBytes(cfg.MaxMultimediaBytes)), nil
 }

@@ -424,6 +424,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/areas/buscar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Devuelve los reportes y centros activos dentro de un polígono GeoJSON. Sustituye al filtrado por punto en el navegador; ambos clientes comparten la misma regla espacial. */
+        post: operations["buscarArea"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -445,6 +462,9 @@ export interface components {
         Location: components["schemas"]["location"];
         CrearReporteRequest: components["schemas"]["crear_reporte_request"];
         ErrorResponse: components["schemas"]["error_response"];
+        BuscarAreaRequest: components["schemas"]["buscar_area_request"];
+        BuscarAreaResponse: components["schemas"]["buscar_area_response"];
+        Poligono: components["schemas"]["poligono"];
         RegisterRequest: components["schemas"]["register_request"];
         LoginRequest: components["schemas"]["login_request"];
         AuthResponse: components["schemas"]["auth_response"];
@@ -749,6 +769,22 @@ export interface components {
             cantidad?: number;
             /** @default true */
             activo?: boolean;
+        };
+        /** @description Polígono GeoJSON en coordenadas [longitud, latitud] (EPSG:4326). El anillo externo cierra repitiendo el primer vértice. */
+        poligono: {
+            /** @enum {string} */
+            type: "Polygon";
+            /** @description Un solo anillo exterior; los huecos se incorporarían como anillos adicionales. */
+            coordinates: number[][][];
+        };
+        /** @description Área dibujada en el mapa. El backend devuelve solo lo que cae dentro, usando PostGIS en vez de filtrar en el cliente. */
+        buscar_area_request: {
+            poligono: components["schemas"]["poligono"];
+        };
+        /** @description Reportes y centros activos cuyo centroide cae dentro del polígono. Los filtros de categoría, estado o capacidad se siguen aplicando en el cliente sobre este subconjunto. */
+        buscar_area_response: {
+            reportes: components["schemas"]["reporte_resumen"][];
+            centros: components["schemas"]["centro"][];
         };
     };
     responses: never;
@@ -2224,6 +2260,39 @@ export interface operations {
             };
             /** @description Error interno del servidor */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    buscarArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["buscar_area_request"];
+            };
+        };
+        responses: {
+            /** @description Reportes y centros dentro del área */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["buscar_area_response"];
+                };
+            };
+            /** @description El polígono no es válido */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

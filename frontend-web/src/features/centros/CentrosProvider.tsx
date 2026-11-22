@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Polygon } from "geojson";
 import { useAuth } from "@/features/sesion/useAuth";
+import { buscarArea } from "@/features/areas/areas.services";
 import type { ApiCentro, ApiCrearCentroRequest, ApiTipoCentro } from "@/types/api-types";
 import { crearCentro, listarCentros, listarTiposCentro } from "./centros.services";
 import { DEFAULT_CENTRO_FILTERS, filterCentros, type CentroFilters } from "./centroFormat";
@@ -24,11 +26,17 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
     // coinciden solo se aplica la última.
     const sessionRef = useRef(0);
     const requestRef = useRef(0);
+    // Igual que en ReportesProvider: refresh no cambia de identidad al dibujar, para no reiniciar cargas ni efectos.
+    const polygonRef = useRef<Polygon | null>(filters.polygon ?? null);
 
     const refresh = useCallback(async () => {
         const session = sessionRef.current;
         const request = ++requestRef.current;
-        const [centroResult, tipoResult] = await Promise.allSettled([listarCentros(), listarTiposCentro()]);
+        const polygon = polygonRef.current;
+        const [centroResult, tipoResult] = await Promise.allSettled([
+            polygon ? buscarArea(polygon).then((respuesta) => respuesta.centros) : listarCentros(),
+            listarTiposCentro(),
+        ]);
         if (session !== sessionRef.current || request !== requestRef.current) return;
 
         // Cada lista por separado: si falla una, la otra se aplica y lo que falla conserva lo último que se cargó bien.
@@ -72,6 +80,14 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
             setError(null);
         };
     }, [isAuthenticated, refresh]);
+
+    // Al dibujar, limpiar o restablecer el área cambia la fuente de datos; los demás filtros siguen siendo del cliente.
+    useEffect(() => {
+        const polygon = filters.polygon ?? null;
+        if (polygonRef.current === polygon) return; // montaje inicial: ya lo carga el efecto de la sesión
+        polygonRef.current = polygon;
+        if (isAuthenticated) void refresh();
+    }, [filters.polygon, isAuthenticated, refresh]);
 
     const filteredCentros = useMemo(() => filterCentros(centros ?? [], filters), [centros, filters]);
 
