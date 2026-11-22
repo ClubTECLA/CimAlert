@@ -61,6 +61,8 @@ paths:
     $ref: './paths/auth.yaml#/recovery'
   /auth/recovery/verify:
     $ref: './paths/auth.yaml#/verifyRecovery'
+  /auth/recovery/reset:
+    $ref: './paths/auth.yaml#/resetPassword'
   /incidentes:
     $ref: './paths/incidentes.yaml#/coleccionIncidentes'
   /incidentes/{incidenteId}:
@@ -130,6 +132,10 @@ components:
       $ref: './schemas/auth/recovery_request.yaml'
     VerifyRecoveryRequest:
       $ref: './schemas/auth/verify_recovery_request.yaml'
+    VerifyRecoveryResponse:
+      $ref: './schemas/auth/verify_recovery_response.yaml'
+    ResetPasswordRequest:
+      $ref: './schemas/auth/reset_password_request.yaml'
     Incidente:
       $ref: './schemas/incidentes/incidente.yaml'
     CrearIncidenteRequest:

@@ -83,14 +83,15 @@ func (s *Store) CreatePinRecuperacion(ctx context.Context, arg CreatePinTxParams
 }
 
 // ResetPasswordTx, en una transacción, guarda el nuevo password_hash, pone
-// password_changed_at a la hora actual de la API y marca el PIN como usado.
+// password_changed_at a la hora actual de la API y cierra el token de reset.
+// Devuelve ErrCodigoInvalido si el token ya se usó, se canceló o expiró.
 func (s *Store) ResetPasswordTx(ctx context.Context, arg ResetPasswordTxParams) error {
 	return db.ExecTx(ctx, s.pool, func(q *sqlc.Queries) error {
 		// Mismo orden de bloqueo que CreatePinRecuperacion (usuario, luego PIN) para no causar deadlock.
 		if err := q.LockUserByID(ctx, arg.UserID); err != nil {
 			return err
 		}
-		filas, err := q.SetPinAsUsedByID(ctx, arg.PinID)
+		filas, err := q.ConsumeResetByID(ctx, arg.PinID)
 		if err != nil {
 			return err
 		}
@@ -105,7 +106,7 @@ func (s *Store) ResetPasswordTx(ctx context.Context, arg ResetPasswordTxParams) 
 		}); err != nil {
 			return err
 		}
-		// El actor es el propio usuario: demostró con el PIN que controla su email.
+		// El actor es el propio usuario: demostró con el PIN (vía el token) que controla su email.
 		return historial.Registrar(ctx, q, arg.UserID, "usuario.recuperar_password", "usuario", arg.UserID.String(), nil)
 	})
 }
