@@ -123,8 +123,8 @@ verifyRecovery:
   post:
     operationId: verificarRecuperacion
     security: []
-    summary: Verificación de recuperación de contraseña
-    description: Verifica el código de recuperación y permite al usuario establecer una nueva contraseña.
+    summary: Verificación del código de recuperación
+    description: Verifica el código de recuperación y devuelve un token de un solo uso para establecer la nueva contraseña.
     requestBody:
       required: true
       content:
@@ -132,10 +132,42 @@ verifyRecovery:
           schema:
             $ref: '../schemas/auth/verify_recovery_request.yaml'
     responses:
+      '200':
+        description: Código correcto.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRecoveryResponse'
+      '400':
+        description: Solicitud inválida o código de verificación incorrecto.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '429':
+        description: Demasiadas solicitudes.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+resetPassword:
+  post:
+    operationId: restablecerContrasena
+    security: []
+    summary: Establecer la nueva contraseña
+    description: Cambia la contraseña con el token que devuelve la verificación del código. Invalida las sesiones anteriores.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../schemas/auth/reset_password_request.yaml'
+    responses:
       '204':
         description: Contraseña cambiada exitosamente. Sin contenido.
       '400':
-        description: Solicitud inválida o código de verificación incorrecto.
+        description: Solicitud inválida o token inválido o expirado.
         content:
           application/json:
             schema:
@@ -163,5 +195,9 @@ components:
       $ref: '../schemas/auth/recovery_request.yaml'
     VerifyRecoveryRequest:
       $ref: '../schemas/auth/verify_recovery_request.yaml'
+    VerifyRecoveryResponse:
+      $ref: '../schemas/auth/verify_recovery_response.yaml'
+    ResetPasswordRequest:
+      $ref: '../schemas/auth/reset_password_request.yaml'
     ErrorResponse:
       $ref: '../schemas/error_response.yaml'
