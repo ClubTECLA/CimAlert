@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -22,6 +23,8 @@ const (
 	pinTTLMinutos       = 15
 	maxIntentosPin      = 5
 	maxSolicitudesPorHr = 3
+	resetTTLMinutos     = 15 // vigencia del token de reset, desde que se verifica el PIN
+	resetTokenBytes     = 32
 )
 
 // recoveryStore es lo que Recuperacion necesita de Store; los tests lo
@@ -31,6 +34,9 @@ type recoveryStore interface {
 	GetLatestActivePINByUserID(ctx context.Context, userID uuid.UUID) (sqlc.RecoveryPin, error)
 	AddPINAttemptByPINID(ctx context.Context, id uuid.UUID) (int, error)
 	CreatePinRecuperacion(ctx context.Context, arg CreatePinTxParams) (bool, error)
+	SetPinAsVerifiedByID(ctx context.Context, arg sqlc.SetPinAsVerifiedByIDParams) (int64, error)
+	GetActiveResetByTokenHash(ctx context.Context, resetTokenHash []byte) (sqlc.GetActiveResetByTokenHashRow, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	ResetPasswordTx(ctx context.Context, arg ResetPasswordTxParams) error
 }
 
@@ -87,14 +93,15 @@ func (r *Recuperacion) Solicitar(ctx context.Context, email string) error {
 }
 
 // Verificar valida el PIN (con HMAC dummy si no hay PIN activo) y, si es
-// correcto, cambia la contraseña en una transacción y manda el aviso.
-// Todo fallo devuelve ErrCodigoInvalido.
-func (r *Recuperacion) Verificar(ctx context.Context, email, pin, newPassword string) error {
+// correcto, lo cierra para nuevos intentos y devuelve un token de reset de un
+// solo uso que vence a los resetTTLMinutos. La contraseña no cambia aquí:
+// eso lo hace Restablecer con el token. Todo fallo devuelve ErrCodigoInvalido.
+func (r *Recuperacion) Verificar(ctx context.Context, email, pin string) (string, error) {
 	email = normalizeEmail(email)
 
 	user, err := r.store.GetUserByEmail(ctx, &email)
 	if err != nil && !db.IsNotFound(err) {
-		return err
+		return "", err
 	}
 
 	var activo sqlc.RecoveryPin
@@ -102,7 +109,7 @@ func (r *Recuperacion) Verificar(ctx context.Context, email, pin, newPassword st
 	if err == nil && user.PasswordHash != nil {
 		activo, err = r.store.GetLatestActivePINByUserID(ctx, user.ID)
 		if err != nil && !db.IsNotFound(err) {
-			return err
+			return "", err
 		}
 		hayPin = err == nil
 	}
@@ -110,15 +117,52 @@ func (r *Recuperacion) Verificar(ctx context.Context, email, pin, newPassword st
 	if !hayPin {
 		// Mismo trabajo que con un PIN real, para que el tiempo no revele nada.
 		hmac.Equal(r.hashPin(pin), dummyPinHash)
-		return ErrCodigoInvalido
+		return "", ErrCodigoInvalido
 	}
 
 	intentos, err := r.store.AddPINAttemptByPINID(ctx, activo.ID)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !hmac.Equal(r.hashPin(pin), activo.PinHash) || intentos > maxIntentosPin {
+		return "", ErrCodigoInvalido
+	}
+
+	token, err := generarResetToken()
+	if err != nil {
+		return "", err
+	}
+	expira := time.Now().Add(resetTTLMinutos * time.Minute)
+	verificado, err := r.store.SetPinAsVerifiedByID(ctx, sqlc.SetPinAsVerifiedByIDParams{
+		ID:             activo.ID,
+		ResetTokenHash: r.hashPin(token),
+		ResetExpiresAt: &expira,
+	})
+	if err != nil {
+		return "", err
+	}
+	if verificado == 0 {
+		// Otra verificación concurrente del mismo PIN ganó, o se canceló o expiró entretanto.
+		return "", ErrCodigoInvalido
+	}
+	return token, nil
+}
+
+// Restablecer cambia la contraseña con un token de Verificar, en una
+// transacción que también lo cierra, y manda el aviso. Todo fallo del token
+// devuelve ErrCodigoInvalido.
+func (r *Recuperacion) Restablecer(ctx context.Context, resetToken, newPassword string) error {
+	reset, err := r.store.GetActiveResetByTokenHash(ctx, r.hashPin(resetToken))
+	if db.IsNotFound(err) {
 		return ErrCodigoInvalido
+	}
+	if err != nil {
+		return err
+	}
+
+	user, err := r.store.GetUserByID(ctx, reset.UserID)
+	if err != nil {
+		return err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
@@ -126,16 +170,19 @@ func (r *Recuperacion) Verificar(ctx context.Context, email, pin, newPassword st
 		return err
 	}
 	if err := r.store.ResetPasswordTx(ctx, ResetPasswordTxParams{
-		UserID:       user.ID,
-		PinID:        activo.ID,
+		UserID:       reset.UserID,
+		PinID:        reset.ID,
 		PasswordHash: string(hash),
 	}); err != nil {
 		return err
 	}
 
-	enviarEnSegundoPlano(ctx, user.ID, func(ctx context.Context) error {
-		return r.mailer.EnviarAvisoPasswordCambiado(ctx, user.ID, email)
-	})
+	if user.Email != nil {
+		email := *user.Email
+		enviarEnSegundoPlano(ctx, user.ID, func(ctx context.Context) error {
+			return r.mailer.EnviarAvisoPasswordCambiado(ctx, user.ID, email)
+		})
+	}
 	return nil
 }
 
@@ -152,7 +199,16 @@ func generarPin() (string, error) {
 	return fmt.Sprintf("%06d", n.Int64()), nil
 }
 
-// hashPin devuelve HMAC-SHA256(secret, pin).
+// generarResetToken devuelve 32 bytes de crypto/rand en base64url sin relleno.
+func generarResetToken() (string, error) {
+	b := make([]byte, resetTokenBytes)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// hashPin devuelve HMAC-SHA256(secret, pin). También se usa para el token de reset.
 func (r *Recuperacion) hashPin(pin string) []byte {
 	mac := hmac.New(sha256.New, r.secret)
 	mac.Write([]byte(pin))

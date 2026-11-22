@@ -14,7 +14,11 @@ import (
 type Querier interface {
 	AddAvistamientoById(ctx context.Context, id uuid.UUID) (AddAvistamientoByIdRow, error)
 	AddPINAttemptByPINID(ctx context.Context, id uuid.UUID) (int, error)
+	// Sin filtrar por expires_at: un PIN verificado puede haber expirado y
+	// tener todavía un token de reset vivo, que también hay que cancelar.
 	CancelPINByUserID(ctx context.Context, userID uuid.UUID) error
+	// Cierra el token de reset; 0 filas si ya se usó, se canceló o expiró.
+	ConsumeResetByID(ctx context.Context, id uuid.UUID) (int64, error)
 	CountPINsLastHourByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Cuántos de los tag_ids pedidos son del catálogo del incidente: si no son
 	// todos, alguno es de otro incidente o no existe.
@@ -51,6 +55,7 @@ type Querier interface {
 	DeleteUsedOrExpiredPINByUserID(ctx context.Context, userID uuid.UUID) error
 	// users_reports solo se llena al crear el reporte, así que hoy equivale al creador.
 	EsCreadorDeReporte(ctx context.Context, arg EsCreadorDeReporteParams) (bool, error)
+	GetActiveResetByTokenHash(ctx context.Context, resetTokenHash []byte) (GetActiveResetByTokenHashRow, error)
 	GetCentroById(ctx context.Context, id uuid.UUID) (GetCentroByIdRow, error)
 	GetCorteMantenimiento(ctx context.Context, nombre string) (time.Time, error)
 	GetDefaultRole(ctx context.Context) (Role, error)
@@ -131,7 +136,9 @@ type Querier interface {
 	LockUserByID(ctx context.Context, id uuid.UUID) error
 	SetCorteMantenimiento(ctx context.Context, arg SetCorteMantenimientoParams) error
 	SetNewPasswordByUserID(ctx context.Context, arg SetNewPasswordByUserIDParams) error
-	SetPinAsUsedByID(ctx context.Context, id uuid.UUID) (int64, error)
+	// Condicional para que de dos verificaciones concurrentes del mismo PIN solo
+	// una emita token.
+	SetPinAsVerifiedByID(ctx context.Context, arg SetPinAsVerifiedByIDParams) (int64, error)
 	UpdateEstadoReporte(ctx context.Context, arg UpdateEstadoReporteParams) (Reporte, error)
 	UpdateHistoricoReporte(ctx context.Context, arg UpdateHistoricoReporteParams) error
 	UpdateIncidente(ctx context.Context, arg UpdateIncidenteParams) (Incidente, error)
