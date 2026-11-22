@@ -2512,7 +2512,7 @@ export interface operations {
                     "application/json": components["schemas"]["mapa_calor"];
                 };
             };
-            /** @description Datos inválidos (área invertida o desde posterior a hasta) */
+            /** @description Datos inválidos (área invertida, desde posterior a hasta o incidente_id fuera de rango) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -2563,7 +2563,7 @@ export interface operations {
                     "application/json": components["schemas"]["resumen_riesgo"];
                 };
             };
-            /** @description Datos inválidos (desde posterior a hasta) */
+            /** @description Datos inválidos (desde posterior a hasta o incidente_id fuera de rango) */
             400: {
                 headers: {
                     [name: string]: unknown;
