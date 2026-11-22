@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"slices"
 	"testing"
@@ -201,6 +202,32 @@ func TestRiesgo(t *testing.T) {
 			}
 			if total != c.want {
 				t.Errorf("%s: reportes en las celdas = %d, quería %d", c.lat, total, c.want)
+			}
+		}
+	})
+
+	// El punto de una celda es el promedio de sus reportes, no el nodo de la
+	// cuadrícula: un reporte solo queda en su lugar en cualquier zoom (con el
+	// nodo saltaba de sitio al cambiar el tamaño de la celda).
+	t.Run("el punto no se mueve con el zoom", func(t *testing.T) {
+		tc := *admin
+		tc.t = t
+		solo := tc.crearIncidente(map[string]any{"nombre": nombreIncidente(), "color": "#66AA33", "esta_activo": true})
+		const lat, lng = 32.5149, -117.0182
+		r := decode[httpapi.Reporte](t, tc.expect(http.StatusCreated, http.MethodPost, "/v1/reportes", map[string]any{
+			"incidente_id": solo.Id, "latitude": lat, "longitude": lng,
+		}))
+		tc.expect(http.StatusOK, http.MethodPut, "/v1/reportes/"+r.Id.String()+"/historico", nil)
+
+		for _, zoom := range []int{10, 13, 16} {
+			mapa := decode[httpapi.MapaCalor](t, tc.expect(http.StatusOK, http.MethodGet,
+				fmt.Sprintf("/v1/riesgo/mapa-calor?min_lat=32.4&max_lat=32.6&min_lng=-117.2&max_lng=-116.8&zoom=%d&incidente_id=%d", zoom, solo.Id), nil))
+			if len(mapa.Celdas) != 1 {
+				t.Fatalf("zoom %d: celdas = %+v, quería 1", zoom, mapa.Celdas)
+			}
+			c := mapa.Celdas[0]
+			if math.Abs(c.Latitude-lat) > 1e-7 || math.Abs(c.Longitude-lng) > 1e-7 {
+				t.Errorf("zoom %d: celda en (%v, %v), quería el reporte en (%v, %v)", zoom, c.Latitude, c.Longitude, lat, lng)
 			}
 		}
 	})

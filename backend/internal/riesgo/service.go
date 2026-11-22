@@ -45,8 +45,9 @@ func (s *Service) ObtenerMapaCalor(ctx context.Context, area Area, zoom float64,
 	tamano := TamanoCelda(zoom)
 	mapa := MapaCalor{TamanoCeldaM: tamano, Celdas: []CeldaCalor{}}
 	// Una celda puede salir en dos tramos vecinos (sus reportes caen a ambos
-	// lados del borde): se junta por su centro, que es el mismo nodo de la
-	// cuadrícula en los dos. Cada reporte cuenta en un solo tramo (ver
+	// lados del borde): se junta por su clave, que es el mismo nodo de la
+	// cuadrícula en los dos, y su punto queda en el promedio de los reportes
+	// de ambas partes. Cada reporte cuenta en un solo tramo (ver
 	// MaxInclusivo), así que sumar no lo duplica.
 	indice := map[[2]float64]int{}
 	tramos := PartirArea(area)
@@ -68,10 +69,14 @@ func (s *Service) ObtenerMapaCalor(ctx context.Context, area Area, zoom float64,
 			return MapaCalor{}, err
 		}
 		for _, f := range filas {
-			clave := [2]float64{f.Latitude, f.Longitude}
+			clave := [2]float64{f.CeldaX, f.CeldaY}
 			if i, ok := indice[clave]; ok {
-				mapa.Celdas[i].Peso += f.Peso
-				mapa.Celdas[i].Reportes += f.Reportes
+				c := &mapa.Celdas[i]
+				n, m := float64(c.Reportes), float64(f.Reportes)
+				c.Latitude = (c.Latitude*n + f.Latitude*m) / (n + m)
+				c.Longitude = (c.Longitude*n + f.Longitude*m) / (n + m)
+				c.Peso += f.Peso
+				c.Reportes += f.Reportes
 				continue
 			}
 			indice[clave] = len(mapa.Celdas)

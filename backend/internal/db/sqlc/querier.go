@@ -75,10 +75,13 @@ type Querier interface {
 	// sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 	// cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
 	// incidente y de periodo son opcionales: NULL = sin filtro.
-	// Agrupa en metros reales: geom pasa a UTM 11N (proyección métrica de a_metros, la zona de
-	// Tijuana) y ST_SnapToGrid lleva cada punto al nodo más cercano de la
-	// cuadrícula, que queda como el centro de su celda. && sobre geography usa el
-	// índice GiST de puntos_origen.geom.
+	// Agrupa en metros reales: geom pasa a la proyección métrica de a_metros (UTM
+	// 11N, la zona de Tijuana) y ST_SnapToGrid lleva cada punto al nodo de su
+	// celda, que solo sirve de clave (celda_x, celda_y, en metros). El punto de la
+	// celda es el promedio de la posición de sus reportes, no el nodo: el tamaño
+	// de la celda cambia con el zoom, y con el nodo el punto saltaba de lugar al
+	// acercarse o alejarse (un reporte solo quedaba hasta a 2 km de su sitio en
+	// zoom 10). && sobre geography usa el índice GiST de puntos_origen.geom.
 	ListCeldasCalor(ctx context.Context, arg ListCeldasCalorParams) ([]ListCeldasCalorRow, error)
 	ListCentros(ctx context.Context, incluirInactivos bool) ([]ListCentrosRow, error)
 	// Pestaña Histórico: colonias con más peso en el periodo. Los reportes sin

@@ -12,19 +12,20 @@ import (
 
 const listCeldasCalor = `-- name: ListCeldasCalor :many
 
-SELECT ST_Y(c.centro)::float8 AS latitude,
-       ST_X(c.centro)::float8 AS longitude,
+SELECT avg(ST_Y(c.g))::float8 AS latitude,
+       avg(ST_X(c.g))::float8 AS longitude,
        sum(c.peso)::float8 AS peso,
-       count(*)::int AS reportes
+       count(*)::int AS reportes,
+       ST_X(c.celda)::float8 AS celda_x,
+       ST_Y(c.celda)::float8 AS celda_y
 FROM (
-    SELECT ST_Transform(
-            ST_SnapToGrid(a_metros(h.geom::geometry),
-                            $1::float8 / 2,
-                            $1::float8 / 2,
-                            $1::float8,
-                            $1::float8),
-            4326) AS centro,
-        h.peso
+    SELECT h.geom::geometry AS g,
+           ST_SnapToGrid(a_metros(h.geom::geometry),
+                         $1::float8 / 2,
+                         $1::float8 / 2,
+                         $1::float8,
+                         $1::float8) AS celda,
+           h.peso
     FROM reporte_historico_peso h
     WHERE h.geom && ST_MakeEnvelope($2::float8, $3::float8,
                                     $4::float8, $5::float8, 4326)::geography
@@ -44,7 +45,7 @@ FROM (
     AND ($8::timestamptz IS NULL OR h.created_at >= $8::timestamptz)
     AND ($9::timestamptz IS NULL OR h.created_at <= $9::timestamptz)
 ) c
-GROUP BY c.centro
+GROUP BY c.celda
 `
 
 type ListCeldasCalorParams struct {
@@ -64,6 +65,8 @@ type ListCeldasCalorRow struct {
 	Longitude float64 `json:"longitude"`
 	Peso      float64 `json:"peso"`
 	Reportes  int     `json:"reportes"`
+	CeldaX    float64 `json:"celda_x"`
+	CeldaY    float64 `json:"celda_y"`
 }
 
 // Todas las consultas leen la vista reporte_historico_peso (migración 002):
@@ -72,10 +75,13 @@ type ListCeldasCalorRow struct {
 // sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 // cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
 // incidente y de periodo son opcionales: NULL = sin filtro.
-// Agrupa en metros reales: geom pasa a UTM 11N (proyección métrica de a_metros, la zona de
-// Tijuana) y ST_SnapToGrid lleva cada punto al nodo más cercano de la
-// cuadrícula, que queda como el centro de su celda. && sobre geography usa el
-// índice GiST de puntos_origen.geom.
+// Agrupa en metros reales: geom pasa a la proyección métrica de a_metros (UTM
+// 11N, la zona de Tijuana) y ST_SnapToGrid lleva cada punto al nodo de su
+// celda, que solo sirve de clave (celda_x, celda_y, en metros). El punto de la
+// celda es el promedio de la posición de sus reportes, no el nodo: el tamaño
+// de la celda cambia con el zoom, y con el nodo el punto saltaba de lugar al
+// acercarse o alejarse (un reporte solo quedaba hasta a 2 km de su sitio en
+// zoom 10). && sobre geography usa el índice GiST de puntos_origen.geom.
 func (q *Queries) ListCeldasCalor(ctx context.Context, arg ListCeldasCalorParams) ([]ListCeldasCalorRow, error) {
 	rows, err := q.db.Query(ctx, listCeldasCalor,
 		arg.TamanoCeldaM,
@@ -100,6 +106,8 @@ func (q *Queries) ListCeldasCalor(ctx context.Context, arg ListCeldasCalorParams
 			&i.Longitude,
 			&i.Peso,
 			&i.Reportes,
+			&i.CeldaX,
+			&i.CeldaY,
 		); err != nil {
 			return nil, err
 		}

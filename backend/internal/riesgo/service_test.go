@@ -129,8 +129,8 @@ func TestScoreYNivel(t *testing.T) {
 
 func TestService_ObtenerMapaCalor(t *testing.T) {
 	f := &fakeStore{celdas: []sqlc.ListCeldasCalorRow{
-		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3},
-		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7},
+		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3, CeldaX: 500000, CeldaY: 3600000},
+		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7, CeldaX: 505000, CeldaY: 3600000},
 	}}
 	svc := NewService(f)
 	filtro := Filtro{IncidenteIDs: []int{1, 6}, Desde: fecha("2025-01-01T00:00:00Z"), Hasta: fecha("2026-01-01T00:00:00Z")}
@@ -192,10 +192,10 @@ func TestPartirArea(t *testing.T) {
 }
 
 func TestService_ObtenerMapaCalor_AreaAncha(t *testing.T) {
-	// El store devuelve las mismas celdas en cada tramo: deben juntarse por su centro.
+	// El store devuelve las mismas celdas en cada tramo: deben juntarse por su clave.
 	f := &fakeStore{celdas: []sqlc.ListCeldasCalorRow{
-		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3},
-		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7},
+		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3, CeldaX: 500000, CeldaY: 3600000},
+		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7, CeldaX: 505000, CeldaY: 3600000},
 	}}
 	mapa, err := NewService(f).ObtenerMapaCalor(t.Context(), Area{MinLat: -85, MaxLat: 85, MinLng: -180, MaxLng: 180}, 0, Filtro{})
 	if err != nil {
@@ -216,6 +216,42 @@ func TestService_ObtenerMapaCalor_AreaAncha(t *testing.T) {
 	if mapa.PesoMaximo != 28 {
 		t.Errorf("PesoMaximo = %v, want 28", mapa.PesoMaximo)
 	}
+}
+
+// Una celda partida entre dos tramos: su punto es el promedio de los reportes
+// de las dos partes (por número de reportes), no el de la primera.
+func TestService_ObtenerMapaCalor_CeldaEntreTramos(t *testing.T) {
+	f := &fakeStoreTramos{filas: [][]sqlc.ListCeldasCalorRow{
+		{{Latitude: 32.0, Longitude: -117.10, Peso: 1, Reportes: 1, CeldaX: 1, CeldaY: 2}},
+		{{Latitude: 32.3, Longitude: -116.80, Peso: 3, Reportes: 3, CeldaX: 1, CeldaY: 2}},
+	}}
+	mapa, err := NewService(f).ObtenerMapaCalor(t.Context(), Area{MinLat: 0, MaxLat: 60, MinLng: -180, MaxLng: 0}, 0, Filtro{})
+	if err != nil {
+		t.Fatalf("ObtenerMapaCalor() error = %v", err)
+	}
+	if len(mapa.Celdas) != 1 {
+		t.Fatalf("Celdas = %+v, want 1 (la misma clave en los dos tramos)", mapa.Celdas)
+	}
+	c := mapa.Celdas[0]
+	if c.Reportes != 4 || c.Peso != 4 || math.Abs(c.Latitude-32.225) > 1e-9 || math.Abs(c.Longitude+116.875) > 1e-9 {
+		t.Errorf("Celda = %+v, want 4 reportes, peso 4, en (32.225, -116.875)", c)
+	}
+}
+
+// fakeStoreTramos devuelve una lista distinta de celdas en cada llamada (una
+// por tramo).
+type fakeStoreTramos struct {
+	fakeStore
+	filas [][]sqlc.ListCeldasCalorRow
+}
+
+func (f *fakeStoreTramos) ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalorParams) ([]sqlc.ListCeldasCalorRow, error) {
+	i := len(f.llamadasCeldas)
+	f.llamadasCeldas = append(f.llamadasCeldas, arg)
+	if i < len(f.filas) {
+		return f.filas[i], nil
+	}
+	return nil, nil
 }
 
 func TestService_ObtenerMapaCalor_SinCeldas(t *testing.T) {

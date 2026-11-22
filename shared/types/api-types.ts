@@ -811,7 +811,7 @@ export interface components {
             /** @default true */
             activo?: boolean;
         };
-        /** @description Celda de la cuadrícula del mapa de calor; su punto es el centro de la celda. */
+        /** @description Celda de la cuadrícula del mapa de calor. Su punto es el promedio de la posición de sus reportes (no el centro de la celda), así que no se mueve al cambiar el zoom: un reporte solo queda siempre en su lugar. */
         celda_calor: {
             /** Format: double */
             latitude: number;

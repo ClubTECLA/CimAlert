@@ -86,9 +86,14 @@ por celda, la suma de los pesos y cuántos reportes cayeron en ella.
 
 - La cuadrícula es en metros reales: `geom` se proyecta con `a_metros` (migración
   002) a UTM zona 11N (EPSG:32611, la de Tijuana) y `ST_SnapToGrid` lleva cada punto
-  al nodo más cercano, que queda como el centro de la celda. Las zonas usan la misma
-  función. Para otra ciudad basta cambiar la proyección dentro de `a_metros` (en una
-  migración nueva).
+  al nodo de su celda. Las zonas usan la misma función. Para otra ciudad basta
+  cambiar la proyección dentro de `a_metros` (en una migración nueva).
+- **Punto de cada celda:** el promedio de la posición de sus reportes, no el nodo. El
+  nodo solo agrupa (la consulta lo devuelve como `celda_x`, `celda_y`, que no salen
+  en la API). Como el tamaño de la celda cambia con el zoom, con el nodo el punto
+  saltaba al acercarse o alejarse: un reporte solo quedaba hasta a ~2 km de su sitio
+  en zoom 10. Con el promedio, un reporte solo queda siempre en su lugar y un grupo,
+  en su centro.
 - El filtro por área (`&&` sobre `geography`) usa el índice GiST de
   `puntos_origen.geom`. Como los bordes norte y sur de esa caja son arcos de círculo
   máximo (en el hemisferio norte se curvan hacia el polo), la consulta filtra además
@@ -97,7 +102,8 @@ por celda, la suma de los pesos y cuántos reportes cayeron en ella.
   máximo. Con 180° o más de longitud se interpreta al revés (0 filas), y con
   exactamente 180° PostGIS falla ("Antipodal edge"). Pasa con el mapa muy alejado.
   Por eso el servicio parte el área en tramos de a lo más 90° (`PartirArea`), hace
-  una consulta por tramo y junta por su centro las celdas que salen en dos tramos.
+  una consulta por tramo y junta por su nodo (`celda_x`, `celda_y`) las celdas que
+  salen en dos tramos, con el punto en el promedio de los reportes de las dos partes.
   Como `&&` incluye el borde, cada tramo filtra además la longitud exacta como
   `[min, max)` (el último, `[min, max]`): un reporte justo en el borde cuenta una
   sola vez. El área de la ciudad queda en un solo tramo.
