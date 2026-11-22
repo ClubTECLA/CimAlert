@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
 	"github.com/joho/godotenv"
 )
 
@@ -73,6 +76,9 @@ type Config struct {
 
 	RecoverySecret string
 	MailDriver     string
+
+	// ReportePoligono es la zona donde se permite crear reportes.
+	ReportePoligono reporte.Poligono
 }
 
 func Load() (Config, error) {
@@ -154,6 +160,14 @@ func Load() (Config, error) {
 
 	if err := cfg.cargarMantenimiento(); err != nil {
 		return Config{}, err
+	}
+
+	// Copia: así nadie modifica el default del paquete a través de cfg.
+	cfg.ReportePoligono = slices.Clone(reporte.PoligonoBC)
+	if raw := os.Getenv("REPORTE_POLIGONO"); strings.TrimSpace(raw) != "" {
+		if cfg.ReportePoligono, err = reporte.ParsePoligono(raw); err != nil {
+			return Config{}, fmt.Errorf("invalid REPORTE_POLIGONO: %w", err)
+		}
 	}
 
 	return cfg, nil

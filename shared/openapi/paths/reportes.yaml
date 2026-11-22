@@ -56,7 +56,7 @@ coleccionReportes:
             schema:
               $ref: '#/components/schemas/Reporte'
       '400':
-        description: Datos inválidos
+        description: Datos inválidos, o coordenada fuera de la zona permitida (REPORTE_POLIGONO)
         content:
           application/json:
             schema:

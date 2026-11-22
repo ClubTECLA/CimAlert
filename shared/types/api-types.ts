@@ -826,7 +826,7 @@ export interface operations {
                     "application/json": components["schemas"]["reporte"];
                 };
             };
-            /** @description Datos inválidos */
+            /** @description Datos inválidos, o coordenada fuera de la zona permitida (REPORTE_POLIGONO) */
             400: {
                 headers: {
                     [name: string]: unknown;

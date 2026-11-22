@@ -40,7 +40,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 	archivos := almacen.NewCliente(cfg.MultimediaURL, multimediaTimeout)
 
 	return NewRouter(Handlers{
-		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(pool), archivos)),
+		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(pool), archivos, cfg.ReportePoligono)),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(pool))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(pool))),
 		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), rec),
