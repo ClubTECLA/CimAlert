@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { validateChildren } from "@/lib/validateChildren";
 import PanelChrome from "./PanelChrome";
 import {
@@ -17,14 +17,16 @@ export function CommonPanelProvider({ children }: { children: ReactNode }) {
     const [routerState, setRouterState] = useState(createPanelRouterState);
 
     // El Provider adapta la API pública al router puro; las decisiones de historial viven en panelRouter.
-    const openPanel: OpenPanel = (view, ...args) => {
+    // Identidad estable: AuthPage usa closePanel como dependencia de un efecto; si cambiara en cada render,
+    // el efecto se volvería a ejecutar y podría entrar en un ciclo de actualizaciones.
+    const openPanel: OpenPanel = useCallback((view, ...args) => {
         const [props, options] = args;
         const entry = { view, props: props ?? {} } as PanelEntry;
         setRouterState((state) => navigateToPanel(state, entry, options));
-    };
+    }, []);
 
-    const backView = () => setRouterState((state) => navigateBack(state));
-    const closePanel = () => setRouterState((state) => resetPanel(state));
+    const backView = useCallback(() => setRouterState((state) => navigateBack(state)), []);
+    const closePanel = useCallback(() => setRouterState((state) => resetPanel(state)), []);
 
     return (
         <CommonPanelContext.Provider
