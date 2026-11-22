@@ -466,7 +466,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Zonas de mayor riesgo, colonias con más incidentes y conteo por tipo de incidente de toda la ciudad, a partir de los reportes históricos. Solo lectura: no registra nada en el historial. */
+        /** @description Zonas de mayor riesgo, colonias con más riesgo (por la suma del peso de sus reportes) y conteo por tipo de incidente de toda la ciudad, a partir de los reportes históricos. Solo lectura: no registra nada en el historial. */
         get: operations["obtenerResumenRiesgo"];
         put?: never;
         post?: never;
@@ -861,7 +861,7 @@ export interface components {
             longitude: number;
             /**
              * Format: double
-             * @description Radio del círculo que cubre los reportes de la zona, en metros.
+             * @description Radio del círculo de la zona, en metros: el percentil 90 de las distancias de sus reportes al centro, no la máxima. Algunos reportes de la zona pueden quedar fuera del círculo.
              */
             radio_m: number;
             /** Format: double */
@@ -897,7 +897,7 @@ export interface components {
             zonas_alto_riesgo: number;
             /** @description Zonas de mayor riesgo (grupos de reportes históricos cercanos entre sí), de mayor a menor score. */
             zonas: components["schemas"]["zona_riesgo"][];
-            /** @description Colonias con más reportes históricos en el periodo, de mayor a menor. */
+            /** @description Colonias con más riesgo en el periodo, ordenadas por la suma del peso de sus reportes históricos, de mayor a menor (no por el número de reportes). */
             colonias: components["schemas"]["colonia_riesgo"][];
             /** @description Reportes históricos del periodo por tipo de incidente, de mayor a menor. */
             categorias: components["schemas"]["conteo_categoria"][];

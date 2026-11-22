@@ -93,7 +93,7 @@ func newTestClient(t *testing.T) *testClient {
 			MaxDuracion: 6 * time.Second,
 		})),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(testPool(t)))),
-		Riesgo:  riesgo.NewHandler(riesgo.NewService(sqlc.New(testPool(t)))),
+		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)))),
 	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga))
 
 	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer}

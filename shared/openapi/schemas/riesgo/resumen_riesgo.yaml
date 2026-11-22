@@ -23,7 +23,9 @@ properties:
       $ref: '../../openapi.yaml#/components/schemas/ZonaRiesgo'
   colonias:
     type: array
-    description: Colonias con más reportes históricos en el periodo, de mayor a menor.
+    description: >-
+      Colonias con más riesgo en el periodo, ordenadas por la suma del peso de sus reportes históricos, de
+      mayor a menor (no por el número de reportes).
     items:
       $ref: '../../openapi.yaml#/components/schemas/ColoniaRiesgo'
   categorias:

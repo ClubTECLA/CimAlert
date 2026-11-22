@@ -33,6 +33,11 @@ FROM (
     AND ST_X(h.geom::geometry) >= sqlc.arg(min_lng)::float8
     AND (ST_X(h.geom::geometry) < sqlc.arg(max_lng)::float8
          OR (sqlc.arg(max_inclusivo)::bool AND ST_X(h.geom::geometry) = sqlc.arg(max_lng)::float8))
+    -- Los bordes norte y sur de la caja en geography son arcos de círculo
+    -- máximo, que en el hemisferio norte se curvan hacia el polo: && deja
+    -- pasar reportes un poco al norte de max_lat. La latitud exacta es
+    -- [min, max].
+    AND ST_Y(h.geom::geometry) BETWEEN sqlc.arg(min_lat)::float8 AND sqlc.arg(max_lat)::float8
     AND (sqlc.narg(incidente_ids)::int[] IS NULL OR h.incidente_id = ANY(sqlc.narg(incidente_ids)::int[]))
     AND (sqlc.narg(desde)::timestamptz IS NULL OR h.created_at >= sqlc.narg(desde)::timestamptz)
     AND (sqlc.narg(hasta)::timestamptz IS NULL OR h.created_at <= sqlc.narg(hasta)::timestamptz)

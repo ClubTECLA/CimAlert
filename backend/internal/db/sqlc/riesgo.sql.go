@@ -18,7 +18,7 @@ SELECT ST_Y(c.centro)::float8 AS latitude,
        count(*)::int AS reportes
 FROM (
     SELECT ST_Transform(
-            ST_SnapToGrid(ST_Transform(h.geom::geometry, 32611),
+            ST_SnapToGrid(a_metros(h.geom::geometry),
                             $1::float8 / 2,
                             $1::float8 / 2,
                             $1::float8,
@@ -35,6 +35,11 @@ FROM (
     AND ST_X(h.geom::geometry) >= $2::float8
     AND (ST_X(h.geom::geometry) < $4::float8
          OR ($6::bool AND ST_X(h.geom::geometry) = $4::float8))
+    -- Los bordes norte y sur de la caja en geography son arcos de círculo
+    -- máximo, que en el hemisferio norte se curvan hacia el polo: && deja
+    -- pasar reportes un poco al norte de max_lat. La latitud exacta es
+    -- [min, max].
+    AND ST_Y(h.geom::geometry) BETWEEN $3::float8 AND $5::float8
     AND ($7::int[] IS NULL OR h.incidente_id = ANY($7::int[]))
     AND ($8::timestamptz IS NULL OR h.created_at >= $8::timestamptz)
     AND ($9::timestamptz IS NULL OR h.created_at <= $9::timestamptz)
@@ -67,7 +72,7 @@ type ListCeldasCalorRow struct {
 // sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 // cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
 // incidente y de periodo son opcionales: NULL = sin filtro.
-// Agrupa en metros reales: geom pasa a UTM 11N (EPSG:32611, la zona de
+// Agrupa en metros reales: geom pasa a UTM 11N (proyección métrica de a_metros, la zona de
 // Tijuana) y ST_SnapToGrid lleva cada punto al nodo más cercano de la
 // cuadrícula, que queda como el centro de su celda. && sobre geography usa el
 // índice GiST de puntos_origen.geom.
@@ -205,7 +210,7 @@ func (q *Queries) ListConteoCategorias(ctx context.Context, arg ListConteoCatego
 
 const listZonasRiesgo = `-- name: ListZonasRiesgo :many
 WITH puntos AS (
-    SELECT h.colonia, h.peso, ST_Transform(h.geom::geometry, 32611) AS g
+    SELECT h.colonia, h.peso, a_metros(h.geom::geometry) AS g
     FROM reporte_historico_peso h
     WHERE ($2::int[] IS NULL OR h.incidente_id = ANY($2::int[]))
     AND ($3::timestamptz IS NULL OR h.created_at >= $3::timestamptz)
@@ -262,7 +267,7 @@ type ListZonasRiesgoRow struct {
 // forma zona si tiene al menos min_puntos reportes a menos de eps_m metros
 // (contándose a sí mismo); los demás quedan como ruido (zona NULL) y no se
 // devuelven. ST_ClusterDBSCAN solo acepta geometry: se trabaja en UTM 11N
-// (EPSG:32611) para que eps_m y radio_m sean metros reales. Los argumentos van
+// (proyección métrica de a_metros) para que eps_m y radio_m sean metros reales. Los argumentos van
 // por posición porque sqlc no entiende la notación eps := ...
 func (q *Queries) ListZonasRiesgo(ctx context.Context, arg ListZonasRiesgoParams) ([]ListZonasRiesgoRow, error) {
 	rows, err := q.db.Query(ctx, listZonasRiesgo,

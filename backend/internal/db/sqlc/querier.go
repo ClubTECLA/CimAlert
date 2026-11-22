@@ -75,7 +75,7 @@ type Querier interface {
 	// sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 	// cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
 	// incidente y de periodo son opcionales: NULL = sin filtro.
-	// Agrupa en metros reales: geom pasa a UTM 11N (EPSG:32611, la zona de
+	// Agrupa en metros reales: geom pasa a UTM 11N (proyección métrica de a_metros, la zona de
 	// Tijuana) y ST_SnapToGrid lleva cada punto al nodo más cercano de la
 	// cuadrícula, que queda como el centro de su celda. && sobre geography usa el
 	// índice GiST de puntos_origen.geom.
@@ -116,7 +116,7 @@ type Querier interface {
 	// forma zona si tiene al menos min_puntos reportes a menos de eps_m metros
 	// (contándose a sí mismo); los demás quedan como ruido (zona NULL) y no se
 	// devuelven. ST_ClusterDBSCAN solo acepta geometry: se trabaja en UTM 11N
-	// (EPSG:32611) para que eps_m y radio_m sean metros reales. Los argumentos van
+	// (proyección métrica de a_metros) para que eps_m y radio_m sean metros reales. Los argumentos van
 	// por posición porque sqlc no entiende la notación eps := ...
 	ListZonasRiesgo(ctx context.Context, arg ListZonasRiesgoParams) ([]ListZonasRiesgoRow, error)
 	// Serializa los reemplazos de tags de un mismo usuario en un mismo reporte:

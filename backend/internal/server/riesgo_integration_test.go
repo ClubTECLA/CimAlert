@@ -176,6 +176,34 @@ func TestRiesgo(t *testing.T) {
 		}
 	})
 
+	// El borde norte de la caja en geography es un arco de círculo máximo: entre
+	// -177 y -117 a 35° llega hasta ~39° en -147. Un reporte en 36° queda dentro
+	// de la caja, pero fuera del área pedida.
+	t.Run("reporte al norte de max_lat", func(t *testing.T) {
+		tc := *admin
+		tc.t = t
+		norte := tc.crearIncidente(map[string]any{"nombre": nombreIncidente(), "color": "#AA3366", "esta_activo": true})
+		r := decode[httpapi.Reporte](t, tc.expect(http.StatusCreated, http.MethodPost, "/v1/reportes", map[string]any{
+			"incidente_id": norte.Id, "latitude": 36.0, "longitude": -147.0,
+		}))
+		tc.expect(http.StatusOK, http.MethodPut, "/v1/reportes/"+r.Id.String()+"/historico", nil)
+
+		for _, c := range []struct {
+			lat  string
+			want int
+		}{{"min_lat=30&max_lat=35", 0}, {"min_lat=30&max_lat=36", 1}} {
+			mapa := decode[httpapi.MapaCalor](t, tc.expect(http.StatusOK, http.MethodGet,
+				fmt.Sprintf("/v1/riesgo/mapa-calor?%s&min_lng=-177&max_lng=-117&zoom=3&incidente_id=%d", c.lat, norte.Id), nil))
+			total := 0
+			for _, celda := range mapa.Celdas {
+				total += celda.Reportes
+			}
+			if total != c.want {
+				t.Errorf("%s: reportes en las celdas = %d, quería %d", c.lat, total, c.want)
+			}
+		}
+	})
+
 	t.Run("validaciones", func(t *testing.T) {
 		tc := *admin
 		tc.t = t

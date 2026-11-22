@@ -84,11 +84,15 @@ peso = credibilidad(estado) × (1 + ln(1 + avistamientos))
 `ListCeldasCalor` agrupa los reportes del área visible en una cuadrícula y devuelve,
 por celda, la suma de los pesos y cuántos reportes cayeron en ella.
 
-- La cuadrícula es en metros reales: `geom` se proyecta a UTM zona 11N (EPSG:32611,
-  la de Tijuana) y `ST_SnapToGrid` lleva cada punto al nodo más cercano, que queda
-  como el centro de la celda.
+- La cuadrícula es en metros reales: `geom` se proyecta con `a_metros` (migración
+  002) a UTM zona 11N (EPSG:32611, la de Tijuana) y `ST_SnapToGrid` lleva cada punto
+  al nodo más cercano, que queda como el centro de la celda. Las zonas usan la misma
+  función. Para otra ciudad basta cambiar la proyección dentro de `a_metros` (en una
+  migración nueva).
 - El filtro por área (`&&` sobre `geography`) usa el índice GiST de
-  `puntos_origen.geom`.
+  `puntos_origen.geom`. Como los bordes norte y sur de esa caja son arcos de círculo
+  máximo (en el hemisferio norte se curvan hacia el polo), la consulta filtra además
+  la latitud exacta `[min_lat, max_lat]`.
 - **Áreas anchas:** en `geography` los bordes del rectángulo son arcos de círculo
   máximo. Con 180° o más de longitud se interpreta al revés (0 filas), y con
   exactamente 180° PostGIS falla ("Antipodal edge"). Pasa con el mapa muy alejado.
@@ -119,6 +123,11 @@ espacios sobrantes): dos escrituras distintas de la misma colonia cuentan por se
 `ListConteoCategorias` cuenta los reportes por tipo de incidente; la suma es el total
 de históricos del periodo. El nombre y el color de cada tipo los pone el cliente desde
 el catálogo (`GET /incidentes`).
+
+Las tres consultas del resumen (zonas, colonias y categorías) corren en una
+transacción de solo lectura `REPEATABLE READ` (`Store.LeerMismaFoto`): todas ven los
+mismos datos, así que un reporte que pasa a histórico a mitad de la petición no deja
+una zona con más reportes que `total_historicos`.
 
 ## Zonas de riesgo
 

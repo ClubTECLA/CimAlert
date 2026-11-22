@@ -55,6 +55,6 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 			MaxDuracion: time.Duration(cfg.MaxVideoSegundos) * time.Second,
 		})),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(pool))),
-		Riesgo:  riesgo.NewHandler(riesgo.NewService(sqlc.New(pool))),
+		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(pool))),
 	}, cfg.JWTSecret, usuarios.GetPasswordChangedAtByUserID, WithMaxMultimediaBytes(cfg.MaxMultimediaBytes)), nil
 }

@@ -25,6 +25,29 @@ type fakeStore struct {
 	argZonas       *sqlc.ListZonasRiesgoParams
 	argColonias    *sqlc.ListColoniasHistoricoParams
 	argCategorias  *sqlc.ListConteoCategoriasParams
+
+	// LeerMismaFoto: cuántas veces se abrió, si hay una abierta, cuántas
+	// consultas del resumen corrieron fuera de ella y el error al abrirla.
+	fotos       int
+	enFoto      bool
+	fueraDeFoto int
+	errFoto     error
+}
+
+func (f *fakeStore) LeerMismaFoto(ctx context.Context, fn func(consultas) error) error {
+	if f.errFoto != nil {
+		return f.errFoto
+	}
+	f.fotos++
+	f.enFoto = true
+	defer func() { f.enFoto = false }()
+	return fn(f)
+}
+
+func (f *fakeStore) contarFoto() {
+	if !f.enFoto {
+		f.fueraDeFoto++
+	}
 }
 
 func (f *fakeStore) ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalorParams) ([]sqlc.ListCeldasCalorRow, error) {
@@ -35,16 +58,19 @@ func (f *fakeStore) ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalo
 
 func (f *fakeStore) ListZonasRiesgo(ctx context.Context, arg sqlc.ListZonasRiesgoParams) ([]sqlc.ListZonasRiesgoRow, error) {
 	f.argZonas = &arg
+	f.contarFoto()
 	return f.zonas, f.err
 }
 
 func (f *fakeStore) ListColoniasHistorico(ctx context.Context, arg sqlc.ListColoniasHistoricoParams) ([]sqlc.ListColoniasHistoricoRow, error) {
 	f.argColonias = &arg
+	f.contarFoto()
 	return f.colonias, f.err
 }
 
 func (f *fakeStore) ListConteoCategorias(ctx context.Context, arg sqlc.ListConteoCategoriasParams) ([]sqlc.ListConteoCategoriasRow, error) {
 	f.argCategorias = &arg
+	f.contarFoto()
 	return f.categorias, f.err
 }
 
@@ -308,6 +334,10 @@ func TestService_ObtenerResumen(t *testing.T) {
 		t.Errorf("Categorias = %+v", r.Categorias)
 	}
 
+	if f.fotos != 1 || f.fueraDeFoto != 0 {
+		t.Errorf("fotos = %d, consultas fuera de la foto = %d, want 1 y 0 (las tres en la misma)", f.fotos, f.fueraDeFoto)
+	}
+
 	// Parámetros del modelo y filtros, tal cual.
 	if a := f.argZonas; a.EpsM != EpsM || a.MinPuntos != MinPuntos || a.Limite != LimiteZonas ||
 		!reflect.DeepEqual(a.IncidenteIds, []int{1}) || a.Desde != filtro.Desde || a.Hasta != nil {
@@ -342,5 +372,9 @@ func TestService_ErrorDelStore(t *testing.T) {
 	}
 	if _, err := svc.ObtenerResumen(t.Context(), Filtro{}); !errors.Is(err, boom) {
 		t.Errorf("ObtenerResumen() = %v, want el error del store", err)
+	}
+	// Si no se puede abrir la transacción, el error llega igual.
+	if _, err := NewService(&fakeStore{errFoto: boom}).ObtenerResumen(t.Context(), Filtro{}); !errors.Is(err, boom) {
+		t.Errorf("ObtenerResumen() = %v, want el error al abrir la foto", err)
 	}
 }

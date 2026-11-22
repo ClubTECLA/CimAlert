@@ -7,13 +7,20 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
 )
 
-// store declara solo las consultas que usa el servicio, con las firmas
+// consultas declara solo las consultas que usa el servicio, con las firmas
 // exactas de sqlc; *sqlc.Queries la cumple sin adaptadores.
-type store interface {
+type consultas interface {
 	ListCeldasCalor(ctx context.Context, arg sqlc.ListCeldasCalorParams) ([]sqlc.ListCeldasCalorRow, error)
 	ListZonasRiesgo(ctx context.Context, arg sqlc.ListZonasRiesgoParams) ([]sqlc.ListZonasRiesgoRow, error)
 	ListColoniasHistorico(ctx context.Context, arg sqlc.ListColoniasHistoricoParams) ([]sqlc.ListColoniasHistoricoRow, error)
 	ListConteoCategorias(ctx context.Context, arg sqlc.ListConteoCategoriasParams) ([]sqlc.ListConteoCategoriasRow, error)
+}
+
+// store agrega a las consultas la lectura en una sola foto de la base (ver
+// Store.LeerMismaFoto).
+type store interface {
+	consultas
+	LeerMismaFoto(ctx context.Context, fn func(consultas) error) error
 }
 
 type Service struct {
@@ -90,30 +97,40 @@ func (s *Service) ObtenerResumen(ctx context.Context, filtro Filtro) (Resumen, e
 	}
 	ids := idsONil(filtro.IncidenteIDs)
 
-	filasZonas, err := s.store.ListZonasRiesgo(ctx, sqlc.ListZonasRiesgoParams{
-		Limite:       LimiteZonas,
-		IncidenteIds: ids,
-		Desde:        filtro.Desde,
-		Hasta:        filtro.Hasta,
-		EpsM:         EpsM,
-		MinPuntos:    MinPuntos,
-	})
-	if err != nil {
-		return Resumen{}, err
-	}
-	filasColonias, err := s.store.ListColoniasHistorico(ctx, sqlc.ListColoniasHistoricoParams{
-		IncidenteIds: ids,
-		Desde:        filtro.Desde,
-		Hasta:        filtro.Hasta,
-		Limite:       LimiteColonias,
-	})
-	if err != nil {
-		return Resumen{}, err
-	}
-	filasCategorias, err := s.store.ListConteoCategorias(ctx, sqlc.ListConteoCategoriasParams{
-		IncidenteIds: ids,
-		Desde:        filtro.Desde,
-		Hasta:        filtro.Hasta,
+	// Las tres consultas leen la misma foto de la base: si no, un reporte que
+	// pasa a histórico entre una y otra dejaría, por ejemplo, una zona de 4
+	// reportes junto a total_historicos = 3.
+	var (
+		filasZonas      []sqlc.ListZonasRiesgoRow
+		filasColonias   []sqlc.ListColoniasHistoricoRow
+		filasCategorias []sqlc.ListConteoCategoriasRow
+	)
+	err := s.store.LeerMismaFoto(ctx, func(q consultas) error {
+		var err error
+		if filasZonas, err = q.ListZonasRiesgo(ctx, sqlc.ListZonasRiesgoParams{
+			Limite:       LimiteZonas,
+			IncidenteIds: ids,
+			Desde:        filtro.Desde,
+			Hasta:        filtro.Hasta,
+			EpsM:         EpsM,
+			MinPuntos:    MinPuntos,
+		}); err != nil {
+			return err
+		}
+		if filasColonias, err = q.ListColoniasHistorico(ctx, sqlc.ListColoniasHistoricoParams{
+			IncidenteIds: ids,
+			Desde:        filtro.Desde,
+			Hasta:        filtro.Hasta,
+			Limite:       LimiteColonias,
+		}); err != nil {
+			return err
+		}
+		filasCategorias, err = q.ListConteoCategorias(ctx, sqlc.ListConteoCategoriasParams{
+			IncidenteIds: ids,
+			Desde:        filtro.Desde,
+			Hasta:        filtro.Hasta,
+		})
+		return err
 	})
 	if err != nil {
 		return Resumen{}, err
