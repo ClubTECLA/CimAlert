@@ -71,6 +71,9 @@ func TestParsePoligono(t *testing.T) {
 		"0,0;0,2;2,2;0,1;2,0", // un vértice cae sobre un lado no contiguo
 		"0,0;1,1;2,2",         // triángulo colineal: sin área
 		"0,0;0,0;1,1",         // punto repetido: sin área
+		// Colineales en decimal, pero en float64 el cordón deja un residuo.
+		"0.1,0.1;0.2,0.2;0.3,0.3",
+		"32.1,-117.1;32.2,-117.2;32.3,-117.3",
 	} {
 		if _, err := ParsePoligono(raw); err == nil {
 			t.Errorf("ParsePoligono(%q) error = nil, want error", raw)

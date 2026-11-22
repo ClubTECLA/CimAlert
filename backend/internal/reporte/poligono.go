@@ -2,6 +2,7 @@ package reporte
 
 import (
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -46,6 +47,7 @@ func (p Poligono) Contiene(lat, lon float64) bool {
 // ParsePoligono lee "lat,lon;lat,lon;..." con al menos 3 puntos.
 func ParsePoligono(s string) (Poligono, error) {
 	var p Poligono
+	var exactos [][2]*big.Rat
 	for _, par := range strings.Split(s, ";") {
 		lat, lon, ok := strings.Cut(par, ",")
 		if !ok {
@@ -64,14 +66,16 @@ func ParsePoligono(s string) (Poligono, error) {
 			return nil, fmt.Errorf("punto %q fuera de rango", par)
 		}
 		p = append(p, Punto{la, lo})
+		exactos = append(exactos, [2]*big.Rat{ratExacto(lat, la), ratExacto(lon, lo)})
 	}
 	if len(p) < 3 {
 		return nil, fmt.Errorf("se necesitan al menos 3 puntos, hay %d", len(p))
 	}
 	// Con 3 puntos no hay lados no contiguos que revisar en cruce, así que un
 	// triángulo plano (colineal o con un punto repetido) pasaría y rechazaría
-	// todo reporte.
-	if p.area() == 0 {
+	// todo reporte. El área se calcula exacta sobre el decimal escrito: en
+	// float64 puntos colineales como 0.1;0.2;0.3 dejan un residuo distinto de 0.
+	if areaExacta(exactos).Sign() == 0 {
 		return nil, fmt.Errorf("el polígono no tiene área: hay puntos repetidos o en línea")
 	}
 	if i, j, ok := p.cruce(); ok {
@@ -80,11 +84,24 @@ func ParsePoligono(s string) (Poligono, error) {
 	return p, nil
 }
 
-// area es el doble del área con signo (fórmula del cordón); solo importa si es 0.
-func (p Poligono) area() float64 {
-	var a float64
-	for i, j := 0, len(p)-1; i < len(p); j, i = i, i+1 {
-		a += (p[j].Lon - p[i].Lon) * (p[j].Lat + p[i].Lat)
+// ratExacto lee el texto decimal tal cual; si big.Rat no acepta el formato
+// (p. ej. hexadecimal de ParseFloat) usa el valor binario de f.
+func ratExacto(s string, f float64) *big.Rat {
+	if r, ok := new(big.Rat).SetString(strings.TrimSpace(s)); ok {
+		return r
+	}
+	return new(big.Rat).SetFloat64(f)
+}
+
+// areaExacta es el doble del área con signo (fórmula del cordón) sin redondeo;
+// cada punto es {lat, lon}. Solo importa si es 0.
+func areaExacta(pts [][2]*big.Rat) *big.Rat {
+	a := new(big.Rat)
+	dLon, sLat := new(big.Rat), new(big.Rat)
+	for i, j := 0, len(pts)-1; i < len(pts); j, i = i, i+1 {
+		dLon.Sub(pts[j][1], pts[i][1])
+		sLat.Add(pts[j][0], pts[i][0])
+		a.Add(a, dLon.Mul(dLon, sLat))
 	}
 	return a
 }
