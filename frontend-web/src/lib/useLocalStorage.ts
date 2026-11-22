@@ -11,10 +11,10 @@ import type { localStorageKeys, localStorageValues } from '@/types/localStorage-
 import { localStorageBaseRegistry } from '@/lib/LocalStorageRegistry';
 
 /** Nombre del evento interno que notifica cambios de preferencias en esta pestaña. */
-const localStorageChangeEvent = 'cimAlert:local-storage-change';
+export const LOCAL_STORAGE_CHANGE_EVENT = 'cimAlert:local-storage-change';
 
 /** Datos compartidos al sincronizar una clave entre instancias del hook en la misma pestaña. */
-type LocalStorageChangeDetail = {
+export type LocalStorageChangeDetail = {
     /** Clave del registro de preferencias que cambió. */
     key: string;
     /** Valor serializado nuevo, o `null` si la clave se eliminó. */
@@ -42,8 +42,11 @@ function parseValue<K extends localStorageKeys>(key: K, item: string | null): lo
     }
 }
 
-/** Lee una clave del almacenamiento y usa su valor predeterminado si no se puede leer. */
-function readValue<K extends localStorageKeys>(key: K): localStorageValues<K> {
+/**
+ * Lee una clave del almacenamiento y usa su valor predeterminado si no se puede leer.
+ * También lo usan los providers de reportes y centros: no son componentes y no pueden llamar al hook.
+ */
+export function readStoredValue<K extends localStorageKeys>(key: K): localStorageValues<K> {
     try {
       return parseValue(key, localStorage.getItem(key));
     } catch (error) {
@@ -81,13 +84,13 @@ export function useLocalStorage<K extends localStorageKeys>(key: K) {
     const sourceId = useId();
     const [valueForKey, setValueForKey] = useState(() => ({
       key,
-      value: readValue(key),
+      value: readStoredValue(key),
       shouldPersist: false,
     }));
 
     // Si cambia la clave, lee el valor correspondiente sin reutilizar el estado de la anterior.
     const storedValue = useMemo(
-      () => (valueForKey.key === key ? valueForKey.value : readValue(key)),
+      () => (valueForKey.key === key ? valueForKey.value : readStoredValue(key)),
       [key, valueForKey],
     );
 
@@ -98,7 +101,7 @@ export function useLocalStorage<K extends localStorageKeys>(key: K) {
         const serializedValue = JSON.stringify(storedValue);
         localStorage.setItem(key, serializedValue);
         // El evento nativo `storage` no se dispara en la pestaña que hizo el cambio.
-        window.dispatchEvent(new CustomEvent<LocalStorageChangeDetail>(localStorageChangeEvent, {
+        window.dispatchEvent(new CustomEvent<LocalStorageChangeDetail>(LOCAL_STORAGE_CHANGE_EVENT, {
           detail: { key, value: serializedValue, sourceId },
         }));
       } catch (error) {
@@ -123,10 +126,10 @@ export function useLocalStorage<K extends localStorageKeys>(key: K) {
         if (event.key === key) updateValue(event.newValue);
       };
 
-      window.addEventListener(localStorageChangeEvent, handleLocalStorageChange);
+      window.addEventListener(LOCAL_STORAGE_CHANGE_EVENT, handleLocalStorageChange);
       window.addEventListener('storage', handleStorage);
       return () => {
-        window.removeEventListener(localStorageChangeEvent, handleLocalStorageChange);
+        window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, handleLocalStorageChange);
         window.removeEventListener('storage', handleStorage);
       };
     }, [key, sourceId]);
@@ -137,7 +140,7 @@ export function useLocalStorage<K extends localStorageKeys>(key: K) {
           key,
           shouldPersist: true,
           value: isStateUpdater(action)
-            ? action(current.key === key ? current.value : readValue(key))
+            ? action(current.key === key ? current.value : readStoredValue(key))
             : action,
         }));
       },
@@ -153,7 +156,7 @@ export function useLocalStorage<K extends localStorageKeys>(key: K) {
         return;
       }
 
-      window.dispatchEvent(new CustomEvent<LocalStorageChangeDetail>(localStorageChangeEvent, {
+      window.dispatchEvent(new CustomEvent<LocalStorageChangeDetail>(LOCAL_STORAGE_CHANGE_EVENT, {
         detail: { key, value: null, sourceId },
       }));
       setValueForKey({

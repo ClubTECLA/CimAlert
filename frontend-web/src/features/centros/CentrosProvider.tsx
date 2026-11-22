@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Polygon } from "geojson";
 import { useAuth } from "@/features/sesion/useAuth";
+import { areaFilterStore } from "@/features/areas/areaFilterStore";
+import { LOCAL_STORAGE_CHANGE_EVENT, type LocalStorageChangeDetail } from "@/lib/useLocalStorage";
+import { AREA_FILTER_STORAGE_KEY } from "@/types/localStorage-types";
 import { buscarArea } from "@/features/areas/areas.services";
 import type { ApiCentro, ApiCrearCentroRequest, ApiTipoCentro } from "@/types/api-types";
 import { crearCentro, listarCentros, listarTiposCentro } from "./centros.services";
@@ -33,8 +36,11 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         const session = sessionRef.current;
         const request = ++requestRef.current;
         const polygon = polygonRef.current;
+        // Misma decisión que ReportesProvider, leída del store compartido; buscarArea deduplica la petición
+        // cuando ambos providers la piden a la vez.
+        const enBackend = polygon !== null && areaFilterStore.resolveMode() === "backend";
         const [centroResult, tipoResult] = await Promise.allSettled([
-            polygon ? buscarArea(polygon).then((respuesta) => respuesta.centros) : listarCentros(),
+            enBackend && polygon ? buscarArea(polygon).then((respuesta) => respuesta.centros) : listarCentros(),
             listarTiposCentro(),
         ]);
         if (session !== sessionRef.current || request !== requestRef.current) return;
@@ -88,6 +94,15 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         polygonRef.current = polygon;
         if (isAuthenticated) void refresh();
     }, [filters.polygon, isAuthenticated, refresh]);
+
+    useEffect(() => {
+        const onChange = (event: Event) => {
+            const detail = (event as CustomEvent<LocalStorageChangeDetail>).detail;
+            if (detail?.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
+        };
+        window.addEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+        return () => window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+    }, [isAuthenticated, refresh]);
 
     const filteredCentros = useMemo(() => filterCentros(centros ?? [], filters), [centros, filters]);
 

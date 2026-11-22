@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Polygon } from "geojson";
 import { useAuth } from "@/features/sesion/useAuth";
+import { readAreaPreferences, resolveAreaMode } from "@/features/areas/areaPreferences";
+import { areaFilterStore } from "@/features/areas/areaFilterStore";
+import { LOCAL_STORAGE_CHANGE_EVENT, type LocalStorageChangeDetail } from "@/lib/useLocalStorage";
+import { AREA_FILTER_STORAGE_KEY } from "@/types/localStorage-types";
 import { buscarArea } from "@/features/areas/areas.services";
 import { listarIncidentes } from "@/features/categorias/incidentes.services";
 import { listarReportes } from "./reportes.services";
@@ -48,9 +52,23 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         const request = ++requestRef.current;
         const isCurrent = () => session === sessionRef.current && request === requestRef.current;
         const polygon = polygonRef.current;
+        const preferences = readAreaPreferences();
+        const knownTotal = areaFilterStore.getTotalReportes();
+        const enBackend = polygon !== null && resolveAreaMode(preferences, knownTotal ?? 0) === "backend";
+
+        // Una sola petición de reportes por carga. Sin área hace falta la lista completa (y con ella se mide el
+        // total); con área dibujada se decide con el total ya memorizado. En 'auto', si aún no se conoce, la
+        // primera carga baja la completa para medir y filtra en el navegador; las siguientes ya usan PostGIS
+        // cuando corresponde. Los modos forzados no necesitan conocer el total.
+        let cargaReportes: Promise<{ lista: ApiReporteResumen[], total?: number }>;
+        if (enBackend && polygon) {
+            cargaReportes = buscarArea(polygon).then((area) => ({ lista: area.reportes }));
+        } else {
+            cargaReportes = listarReportes().then((todos) => ({ lista: todos, total: todos.length }));
+        }
+
         const [reportResult, categoryResult] = await Promise.allSettled([
-            // Con área dibujada, PostGIS devuelve solo los reportes dentro de ella; sin ella, la lista completa.
-            polygon ? buscarArea(polygon).then((respuesta) => respuesta.reportes) : listarReportes(),
+            cargaReportes,
             // También las inactivas: puede haber reportes de una categoría que ya se desactivó.
             listarIncidentes({ incluir_inactivos: true }),
         ]);
@@ -59,11 +77,12 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         // Cada lista se aplica por separado: si fallan los reportes, las categorías siguen llegando (Nuevo incidente
         // solo necesita esas), y al revés. Lo que falla conserva lo último que se cargó bien.
         if (reportResult.status === "fulfilled") {
+            if (reportResult.value.total !== undefined) areaFilterStore.setTotalReportes(reportResult.value.total);
             setLastSync(Date.now());
-            const signature = JSON.stringify(reportResult.value);
+            const signature = JSON.stringify(reportResult.value.lista);
             if (signature !== reportesSignatureRef.current) {
                 reportesSignatureRef.current = signature;
-                setReportes(reportResult.value);
+                setReportes(reportResult.value.lista);
             }
         }
         if (categoryResult.status === "fulfilled") {
@@ -122,7 +141,8 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
             clearTimeout(initialLoadId);
             clearInterval(intervalId);
             document.removeEventListener("visibilitychange", handleVisibility);
-            // Al cerrar sesión no deben quedar datos del usuario anterior.
+            // Al cerrar sesión no deben quedar datos del usuario anterior, ni su total de reportes.
+            areaFilterStore.setTotalReportes(null);
             reportesSignatureRef.current = "";
             categoriesSignatureRef.current = "";
             setReportes(null);
@@ -140,6 +160,17 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         polygonRef.current = polygon;
         if (isAuthenticated) void refresh();
     }, [filters.polygon, isAuthenticated, refresh]);
+
+    // Cambiar la preferencia en "Mi perfil" se aplica enseguida: el hook de localStorage avisa con su evento y
+    // los centros no sondean, así que esperar al siguiente sondeo dejaría el mapa con el modo anterior.
+    useEffect(() => {
+        const onChange = (event: Event) => {
+            const detail = (event as CustomEvent<LocalStorageChangeDetail>).detail;
+            if (detail?.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
+        };
+        window.addEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+        return () => window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+    }, [isAuthenticated, refresh]);
 
     useEffect(() => {
         if (!createdId) return;
