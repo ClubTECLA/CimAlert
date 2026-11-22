@@ -760,6 +760,8 @@ export interface components {
         };
         /** @description Un usuario del sistema. */
         usuario_resumen: {
+            /** Format: uuid */
+            id: string;
             username: string;
             /** Format: email */
             email: string | null;
@@ -976,7 +978,7 @@ export interface operations {
                     "application/json": components["schemas"]["reporte"];
                 };
             };
-            /** @description Datos inválidos */
+            /** @description Datos inválidos, o coordenada fuera de la zona permitida (REPORTE_POLIGONO) */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -68,7 +68,7 @@ func TestRiesgo(t *testing.T) {
 	// 5 reportes a menos de 100 m entre sí (una zona) y 1 lejos (ruido).
 	puntos := [][2]float64{
 		{32.4500, -116.9000}, {32.4503, -116.9002}, {32.4498, -116.8997},
-		{32.4502, -116.9004}, {32.4499, -116.9003}, {32.6000, -117.1000},
+		{32.4502, -116.9004}, {32.4499, -116.9003}, {32.5300, -117.0300},
 	}
 	for i, p := range puntos {
 		r := decode[httpapi.Reporte](t, admin.expect(http.StatusCreated, http.MethodPost, "/v1/reportes", map[string]any{
@@ -176,24 +176,25 @@ func TestRiesgo(t *testing.T) {
 		}
 	})
 
-	// El borde norte de la caja en geography es un arco de círculo máximo: entre
-	// -177 y -117 a 35° llega hasta ~39° en -147. Un reporte en 36° queda dentro
-	// de la caja, pero fuera del área pedida.
+	// El borde norte de la caja en geography es un arco de círculo máximo: con
+	// 90° de ancho a 32.5° llega hasta ~42° en el centro. Un reporte en Mexicali
+	// (32.6°, el centro de la caja) queda dentro de la caja, pero fuera del área
+	// pedida. Los reportes deben caer dentro de Baja California.
 	t.Run("reporte al norte de max_lat", func(t *testing.T) {
 		tc := *admin
 		tc.t = t
 		norte := tc.crearIncidente(map[string]any{"nombre": nombreIncidente(), "color": "#AA3366", "esta_activo": true})
 		r := decode[httpapi.Reporte](t, tc.expect(http.StatusCreated, http.MethodPost, "/v1/reportes", map[string]any{
-			"incidente_id": norte.Id, "latitude": 36.0, "longitude": -147.0,
+			"incidente_id": norte.Id, "latitude": 32.6, "longitude": -115.5,
 		}))
 		tc.expect(http.StatusOK, http.MethodPut, "/v1/reportes/"+r.Id.String()+"/historico", nil)
 
 		for _, c := range []struct {
 			lat  string
 			want int
-		}{{"min_lat=30&max_lat=35", 0}, {"min_lat=30&max_lat=36", 1}} {
+		}{{"min_lat=25&max_lat=32.5", 0}, {"min_lat=25&max_lat=32.7", 1}} {
 			mapa := decode[httpapi.MapaCalor](t, tc.expect(http.StatusOK, http.MethodGet,
-				fmt.Sprintf("/v1/riesgo/mapa-calor?%s&min_lng=-177&max_lng=-117&zoom=3&incidente_id=%d", c.lat, norte.Id), nil))
+				fmt.Sprintf("/v1/riesgo/mapa-calor?%s&min_lng=-160.5&max_lng=-70.5&zoom=3&incidente_id=%d", c.lat, norte.Id), nil))
 			total := 0
 			for _, celda := range mapa.Celdas {
 				total += celda.Reportes

@@ -46,12 +46,13 @@ const tiempoLimpieza = 10 * time.Second
 type Service struct {
 	store    store
 	archivos Archivos
+	zona     Poligono
 }
 
-// NewService crea un servicio de reportes con la store y el cliente de
-// archivos dados.
-func NewService(store store, archivos Archivos) *Service {
-	return &Service{store: store, archivos: archivos}
+// NewService crea un servicio de reportes con la store, el cliente de
+// archivos y la zona donde se permite crear reportes.
+func NewService(store store, archivos Archivos, zona Poligono) *Service {
+	return &Service{store: store, archivos: archivos, zona: zona}
 }
 
 // Crear crea un reporte del incidente dado, con la ubicación inicial del
@@ -62,6 +63,9 @@ func NewService(store store, archivos Archivos) *Service {
 func (s *Service) Crear(ctx context.Context, nuevo Nuevo) (Detalle, error) {
 	if nuevo.EsOficial && !PuedeGestionar(nuevo.Rol) {
 		return Detalle{}, ErrOficialNoPermitido
+	}
+	if !s.zona.Contiene(nuevo.Latitude, nuevo.Longitude) {
+		return Detalle{}, ErrCoordenadaInvalida
 	}
 
 	// Una dirección vacía o solo con espacios se guarda como NULL, para que el
