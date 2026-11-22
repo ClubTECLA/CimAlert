@@ -9,6 +9,7 @@ import { useCommonPanel } from "@/panels/useCommonPanel";
 import { useCentros } from "./useCentros";
 import { isCentroPanel, isIncidentPanel } from "./centrosPanels";
 import CentroPin from "./components/CentroPin";
+import { useRiesgo } from '@/features/riesgo/useRiesgo';
 
 // Sin centros que pintar: lista estable para no recrear los marcadores en cada render.
 const NO_CENTROS: ApiCentro[] = [];
@@ -107,8 +108,9 @@ export default function CentrosLayer() {
     const { currentPanel, openPanel } = useCommonPanel();
     const { centros, tipos, filteredCentros } = useCentros();
     const focusedRef = useRef<string | null>(null);
+    const { activo: riesgo} = useRiesgo();
 
-    const hidden = isIncidentPanel(currentPanel?.view);
+    const hidden = riesgo || isIncidentPanel(currentPanel?.view);
     const filtered = isCentroPanel(currentPanel?.view);
     const activeId = currentPanel?.view === "Detalle Centro" ? currentPanel.props.centroId : null;
 
