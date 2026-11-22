@@ -25,6 +25,7 @@ export default function CentrosView() {
     const { openPanel } = useCommonPanel();
     const { centros, tipos, error, filteredCentros: filtered, filters, setFilters } = useCentros();
     // La primera tanda son las filas que caben enteras en el panel (fitCount); "Cargar más" suma tandas (extra).
+    // fitCount 0: ni la primera cabe (panel muy bajo), así que se muestra igual y la lista pasa a tener scroll.
     const [fitCount, setFitCount] = useState(PAGE_SIZE);
     const [extra, setExtra] = useState(0);
     const listRef = useRef<HTMLDivElement>(null);
@@ -35,10 +36,11 @@ export default function CentrosView() {
         const tipo = tipos.get(centro.tipo_centro);
         return esRefugio(tipo) && !estaOcupado(centro, tipo);
     }).length;
-    const shown = filtered.slice(0, fitCount + extra);
+    const shown = filtered.slice(0, Math.max(fitCount, 1) + extra);
     const remaining = filtered.length - shown.length;
+    const scrolls = extra > 0 || fitCount === 0;
     // Mientras no se carga más, la siguiente fila se pinta invisible para medir si cabe entera.
-    const probe = extra === 0 ? filtered[shown.length] : undefined;
+    const probe = scrolls ? undefined : filtered[shown.length];
 
     // Ajusta la primera tanda al alto del panel antes de pintar: si la sonda cabe, se muestra (y se mide la siguiente);
     // si la última fila ya no cabe (el panel se encogió), se quita. Las filas no miden todas lo mismo (los refugios
@@ -47,9 +49,13 @@ export default function CentrosView() {
         const list = listRef.current;
         if (!list || extra > 0) return;
         const bottom = list.getBoundingClientRect().bottom;
-        const fits = (element: Element | null | undefined) => !!element && element.getBoundingClientRect().bottom <= bottom;
+        // Con scrollTop, para medir igual aunque la fila única se haya desplazado.
+        const fits = (element: Element | null | undefined) =>
+            !!element && element.getBoundingClientRect().bottom + list.scrollTop <= bottom;
         const rows = list.querySelectorAll(":scope > button");
-        if (rows.length > 1 && !fits(rows[rows.length - 1])) setFitCount(rows.length - 1);
+        if (rows.length === 0) return;
+        if (!fits(rows[rows.length - 1])) setFitCount(rows.length - 1);
+        else if (fitCount === 0) setFitCount(1);
         else if (fits(list.querySelector(":scope > [data-probe]"))) setFitCount(rows.length + 1);
     }, [extra, fitCount, filtered, listHeight]);
 
@@ -114,10 +120,11 @@ export default function CentrosView() {
 
                 {/* El scroll se extiende sobre el relleno del panel para quedar pegado a su borde derecho. Por eso
                     ColSection va con overflow-visible: con scroll propio, ese sobrante le daría una barra horizontal.
-                    Sin scroll hasta "Cargar más": las filas visibles caben enteras y la sonda que sobresale se recorta. */}
+                    Sin scroll hasta "Cargar más" (o si ni una fila cabe): las filas visibles caben enteras y la sonda que
+                    sobresale se recorta. */}
                 <div
                     ref={listRef}
-                    className={`-mr-3 flex min-h-0 flex-1 flex-col gap-2 p-0.5 pr-3.5 sm:-mr-4 sm:pr-4.5 ${extra > 0 ? "overflow-y-auto" : "overflow-hidden"}`}
+                    className={`-mr-3 flex min-h-0 flex-1 flex-col gap-2 p-0.5 pr-3.5 sm:-mr-4 sm:pr-4.5 ${scrolls ? "overflow-y-auto" : "overflow-hidden"}`}
                 >
                     {error && <span className={noteStyle}>{error}</span>}
                     {!error && !centros && <span className={noteStyle}>Cargando centros…</span>}
