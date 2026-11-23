@@ -13,11 +13,12 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
 	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+	"github.com/ClubTECLA/cimalert/backend/internal/riesgo"
 	"github.com/ClubTECLA/cimalert/backend/internal/usuario"
 )
 
 // tabla es la que arma el servidor: las reglas de dominio y las de transporte.
-var tabla = httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP)
+var tabla = httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP)
 
 func TestResolver(t *testing.T) {
 	tests := []struct {
@@ -128,6 +129,11 @@ func TestResolver_TodosLosErroresDeDominio(t *testing.T) {
 		centro.ErrCentroInvalido,
 		centro.ErrCentroNotFound,
 		centro.ErrTipoCentroInexistente,
+		riesgo.ErrAreaInvalida,
+		riesgo.ErrPeriodoInvalido,
+		riesgo.ErrFormatoInvalido,
+		riesgo.ErrDatasetDuplicado,
+		riesgo.ErrDatasetNoEncontrado,
 	}
 
 	for _, err := range errs {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Estado string
@@ -137,6 +138,16 @@ type Comentario struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+type DatasetHistorico struct {
+	ID         uuid.UUID  `json:"id"`
+	Nombre     string     `json:"nombre"`
+	Archivo    string     `json:"archivo"`
+	Sha256     string     `json:"sha256"`
+	Filas      int        `json:"filas"`
+	CargadoPor *uuid.UUID `json:"cargado_por"`
+	CreatedAt  time.Time  `json:"created_at"`
+}
+
 type Historial struct {
 	ID        int64      `json:"id"`
 	ActorID   *uuid.UUID `json:"actor_id"`
@@ -155,6 +166,20 @@ type Incidente struct {
 	Radio        *float64 `json:"radio"`
 	EstaActivo   bool     `json:"esta_activo"`
 	Color        string   `json:"color"`
+}
+
+type IncidenteHistorico struct {
+	ID                int64       `json:"id"`
+	DatasetID         uuid.UUID   `json:"dataset_id"`
+	Fila              int         `json:"fila"`
+	IncidenteID       int         `json:"incidente_id"`
+	Colonia           *string     `json:"colonia"`
+	Fecha             pgtype.Date `json:"fecha"`
+	Latitude          float64     `json:"latitude"`
+	Longitude         float64     `json:"longitude"`
+	PersonasAfectadas *int        `json:"personas_afectadas"`
+	Fallecidos        *int        `json:"fallecidos"`
+	Geom              interface{} `json:"geom"`
 }
 
 type IncidenteTag struct {
@@ -251,15 +276,6 @@ type Reporte struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-type ReporteHistoricoPeso struct {
-	ReporteID   uuid.UUID   `json:"reporte_id"`
-	IncidenteID int         `json:"incidente_id"`
-	CreatedAt   time.Time   `json:"created_at"`
-	Geom        interface{} `json:"geom"`
-	Colonia     string      `json:"colonia"`
-	Peso        float64     `json:"peso"`
-}
-
 type ReporteTagCount struct {
 	ReporteID uuid.UUID `json:"reporte_id"`
 	TagID     int       `json:"tag_id"`
@@ -269,6 +285,19 @@ type ReporteTagCount struct {
 type ReportesScore struct {
 	ReporteID  uuid.UUID `json:"reporte_id"`
 	TotalScore int       `json:"total_score"`
+}
+
+type RiesgoHistorico struct {
+	Origen            string      `json:"origen"`
+	ReporteID         uuid.UUID   `json:"reporte_id"`
+	DatasetID         *uuid.UUID  `json:"dataset_id"`
+	IncidenteID       int         `json:"incidente_id"`
+	CreatedAt         time.Time   `json:"created_at"`
+	Geom              interface{} `json:"geom"`
+	Colonia           string      `json:"colonia"`
+	PersonasAfectadas *int        `json:"personas_afectadas"`
+	Fallecidos        *int        `json:"fallecidos"`
+	Peso              float64     `json:"peso"`
 }
 
 type Role struct {

@@ -25,8 +25,10 @@ type Querier interface {
 	CountTagsByIncidenteId(ctx context.Context, arg CountTagsByIncidenteIdParams) (int, error)
 	CreateCentro(ctx context.Context, arg CreateCentroParams) (CreateCentroRow, error)
 	CreateComentario(ctx context.Context, arg CreateComentarioParams) (CreateComentarioRow, error)
+	CreateDatasetHistorico(ctx context.Context, arg CreateDatasetHistoricoParams) (DatasetHistorico, error)
 	CreateHistorialEvento(ctx context.Context, arg CreateHistorialEventoParams) error
 	CreateIncidente(ctx context.Context, arg CreateIncidenteParams) (Incidente, error)
+	CreateIncidentesHistoricos(ctx context.Context, arg []CreateIncidentesHistoricosParams) (int64, error)
 	// Se inserta junto con el usuario dentro de la misma transacción, para que
 	// nunca quede un usuario sin forma de autenticarse ni un auth_provider
 	// sin padre.
@@ -43,6 +45,8 @@ type Querier interface {
 	CreateTipoCentro(ctx context.Context, nombre string) (TiposCentro, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateUserReporte(ctx context.Context, arg CreateUserReporteParams) (UsersReport, error)
+	// Sus filas se borran con él (ON DELETE CASCADE).
+	DeleteDatasetHistorico(ctx context.Context, id uuid.UUID) (DatasetHistorico, error)
 	DeleteMultimediaPorPaths(ctx context.Context, paths []string) (int64, error)
 	// Elimina el reporte; ON DELETE CASCADE borra comentarios, multimedia, tags,
 	// ubicaciones, puntos_origen, conteos, score y users_reports. Los archivos
@@ -74,8 +78,11 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserWithRolByID(ctx context.Context, id uuid.UUID) (GetUserWithRolByIDRow, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
-	// Todas las consultas leen la vista reporte_historico_peso (migración 002):
-	// solo reportes históricos válidos, con su peso. Ver backend/GUIA_RIESGO.md.
+	// Catálogo para reconocer la categoría de cada fila al importar un dataset.
+	ListCategoriasCatalogo(ctx context.Context) ([]ListCategoriasCatalogoRow, error)
+	// Las consultas del riesgo leen la vista riesgo_historico (migración 003): los
+	// reportes históricos válidos y las filas de los datasets importados, con su
+	// peso. Ver backend/GUIA_RIESGO.md.
 	//
 	// sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 	// cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
@@ -95,6 +102,10 @@ type Querier interface {
 	ListComentariosByReporteId(ctx context.Context, reporteID uuid.UUID) ([]ListComentariosByReporteIdRow, error)
 	// Barras de "Incidentes por categoría". La suma de total es total_historicos.
 	ListConteoCategorias(ctx context.Context, arg ListConteoCategoriasParams) ([]ListConteoCategoriasRow, error)
+	ListDatasetsHistoricos(ctx context.Context) ([]DatasetHistorico, error)
+	// Lo que se exporta: las dos fuentes, con las columnas del formato de
+	// importación más el origen. Mismo filtro que el resumen.
+	ListExportarHistorico(ctx context.Context, arg ListExportarHistoricoParams) ([]ListExportarHistoricoRow, error)
 	ListHistorialPorEntidad(ctx context.Context, arg ListHistorialPorEntidadParams) ([]Historial, error)
 	// Los inactivos solo se incluyen si se piden (p. ej. para una pantalla de
 	// administración).

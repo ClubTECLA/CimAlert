@@ -1,0 +1,28 @@
+type: object
+description: >-
+  Archivo de incidentes históricos importado (.xlsx o .csv). Sus filas cuentan para el riesgo junto con los reportes
+  marcados como históricos.
+required: [id, nombre, archivo, filas, cargado_por, created_at]
+properties:
+  id:
+    type: string
+    format: uuid
+  nombre:
+    type: string
+    description: Nombre que se le dio al importar; si no se dio, el del archivo.
+    example: Lluvias Rosarito 1980-2026
+  archivo:
+    type: string
+    description: Nombre original del archivo subido.
+    example: Tijuana_Reporta_categorias_con_municipios.xlsx
+  filas:
+    type: integer
+    description: Incidentes importados.
+  cargado_por:
+    type: string
+    format: uuid
+    nullable: true
+    description: Usuario que lo importó; null si ese usuario ya no existe.
+  created_at:
+    type: string
+    format: date-time

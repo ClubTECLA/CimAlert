@@ -1,6 +1,7 @@
 package riesgo
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"math"
@@ -9,6 +10,9 @@ import (
 	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // fakeStore devuelve filas fijas y guarda los parámetros recibidos para
@@ -25,6 +29,15 @@ type fakeStore struct {
 	argZonas       *sqlc.ListZonasRiesgoParams
 	argColonias    *sqlc.ListColoniasHistoricoParams
 	argCategorias  *sqlc.ListConteoCategoriasParams
+
+	catalogo    []sqlc.ListCategoriasCatalogoRow
+	datasets    []sqlc.DatasetHistorico
+	exportar    []sqlc.ListExportarHistoricoRow
+	errImportar error
+	errEliminar error
+	argImportar *ImportarTxParams
+	argExportar *sqlc.ListExportarHistoricoParams
+	eliminado   uuid.UUID
 
 	// LeerMismaFoto: cuántas veces se abrió, si hay una abierta, cuántas
 	// consultas del resumen corrieron fuera de ella y el error al abrirla.
@@ -74,6 +87,37 @@ func (f *fakeStore) ListConteoCategorias(ctx context.Context, arg sqlc.ListConte
 	return f.categorias, f.err
 }
 
+func (f *fakeStore) ListCategoriasCatalogo(ctx context.Context) ([]sqlc.ListCategoriasCatalogoRow, error) {
+	return f.catalogo, f.err
+}
+
+func (f *fakeStore) ListDatasetsHistoricos(ctx context.Context) ([]sqlc.DatasetHistorico, error) {
+	return f.datasets, f.err
+}
+
+func (f *fakeStore) ListExportarHistorico(ctx context.Context, arg sqlc.ListExportarHistoricoParams) ([]sqlc.ListExportarHistoricoRow, error) {
+	f.argExportar = &arg
+	return f.exportar, f.err
+}
+
+// ImportarDataset devuelve errImportar si está puesto (como Postgres: un
+// *pgconn.PgError 23505 para un sha256 repetido).
+func (f *fakeStore) ImportarDataset(ctx context.Context, arg ImportarTxParams) (sqlc.DatasetHistorico, error) {
+	f.argImportar = &arg
+	if f.errImportar != nil {
+		return sqlc.DatasetHistorico{}, f.errImportar
+	}
+	actor := arg.ActorID
+	return sqlc.DatasetHistorico{ID: uuid.New(), Nombre: arg.Nombre, Archivo: arg.Archivo, Sha256: arg.Sha256, Filas: len(arg.Filas), CargadoPor: &actor}, nil
+}
+
+// EliminarDataset devuelve pgx.ErrNoRows si errEliminar lo pide, como DeleteDatasetHistorico.
+func (f *fakeStore) EliminarDataset(ctx context.Context, id, actorID uuid.UUID) error {
+	f.eliminado = id
+	return f.errEliminar
+}
+
+var errUnique = &pgconn.PgError{Code: "23505"}
 var areaTijuana = Area{MinLat: 32.4, MaxLat: 32.6, MinLng: -117.2, MaxLng: -116.8}
 
 func fecha(s string) *time.Time {
@@ -132,7 +176,7 @@ func TestService_ObtenerMapaCalor(t *testing.T) {
 		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3, CeldaX: 500000, CeldaY: 3600000},
 		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7, CeldaX: 505000, CeldaY: 3600000},
 	}}
-	svc := NewService(f)
+	svc := NewService(f, zonaPrueba)
 	filtro := Filtro{IncidenteIDs: []int{1, 6}, Desde: fecha("2025-01-01T00:00:00Z"), Hasta: fecha("2026-01-01T00:00:00Z")}
 
 	mapa, err := svc.ObtenerMapaCalor(t.Context(), areaTijuana, 13, filtro)
@@ -197,7 +241,7 @@ func TestService_ObtenerMapaCalor_AreaAncha(t *testing.T) {
 		{Latitude: 32.5, Longitude: -117, Peso: 2.5, Reportes: 3, CeldaX: 500000, CeldaY: 3600000},
 		{Latitude: 32.51, Longitude: -117.01, Peso: 7, Reportes: 7, CeldaX: 505000, CeldaY: 3600000},
 	}}
-	mapa, err := NewService(f).ObtenerMapaCalor(t.Context(), Area{MinLat: -85, MaxLat: 85, MinLng: -180, MaxLng: 180}, 0, Filtro{})
+	mapa, err := NewService(f, zonaPrueba).ObtenerMapaCalor(t.Context(), Area{MinLat: -85, MaxLat: 85, MinLng: -180, MaxLng: 180}, 0, Filtro{})
 	if err != nil {
 		t.Fatalf("ObtenerMapaCalor() error = %v", err)
 	}
@@ -225,7 +269,7 @@ func TestService_ObtenerMapaCalor_CeldaEntreTramos(t *testing.T) {
 		{{Latitude: 32.0, Longitude: -117.10, Peso: 1, Reportes: 1, CeldaX: 1, CeldaY: 2}},
 		{{Latitude: 32.3, Longitude: -116.80, Peso: 3, Reportes: 3, CeldaX: 1, CeldaY: 2}},
 	}}
-	mapa, err := NewService(f).ObtenerMapaCalor(t.Context(), Area{MinLat: 0, MaxLat: 60, MinLng: -180, MaxLng: 0}, 0, Filtro{})
+	mapa, err := NewService(f, zonaPrueba).ObtenerMapaCalor(t.Context(), Area{MinLat: 0, MaxLat: 60, MinLng: -180, MaxLng: 0}, 0, Filtro{})
 	if err != nil {
 		t.Fatalf("ObtenerMapaCalor() error = %v", err)
 	}
@@ -255,7 +299,7 @@ func (f *fakeStoreTramos) ListCeldasCalor(ctx context.Context, arg sqlc.ListCeld
 }
 
 func TestService_ObtenerMapaCalor_SinCeldas(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := NewService(&fakeStore{}, zonaPrueba)
 	mapa, err := svc.ObtenerMapaCalor(t.Context(), areaTijuana, 12, Filtro{IncidenteIDs: []int{}})
 	if err != nil {
 		t.Fatalf("ObtenerMapaCalor() error = %v", err)
@@ -267,7 +311,7 @@ func TestService_ObtenerMapaCalor_SinCeldas(t *testing.T) {
 
 func TestService_IncidentesVaciosEsSinFiltro(t *testing.T) {
 	f := &fakeStore{}
-	svc := NewService(f)
+	svc := NewService(f, zonaPrueba)
 	if _, err := svc.ObtenerMapaCalor(t.Context(), areaTijuana, 12, Filtro{IncidenteIDs: []int{}}); err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +325,7 @@ func TestService_IncidentesVaciosEsSinFiltro(t *testing.T) {
 }
 
 func TestService_Validaciones(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := NewService(&fakeStore{}, zonaPrueba)
 	ctx := t.Context()
 
 	invertida := Area{MinLat: 32.6, MaxLat: 32.4, MinLng: -117.2, MaxLng: -116.8}
@@ -305,10 +349,10 @@ func TestService_Validaciones(t *testing.T) {
 	for _, id := range []int{math.MaxInt32 + 1, math.MinInt32 - 1} {
 		f := &fakeStore{}
 		fuera := Filtro{IncidenteIDs: []int{1, id}}
-		if _, err := NewService(f).ObtenerMapaCalor(ctx, areaTijuana, 12, fuera); !errors.Is(err, ErrIncidenteInvalido) {
+		if _, err := NewService(f, zonaPrueba).ObtenerMapaCalor(ctx, areaTijuana, 12, fuera); !errors.Is(err, ErrIncidenteInvalido) {
 			t.Errorf("ObtenerMapaCalor(incidente %d) = %v, want ErrIncidenteInvalido", id, err)
 		}
-		if _, err := NewService(f).ObtenerResumen(ctx, fuera); !errors.Is(err, ErrIncidenteInvalido) {
+		if _, err := NewService(f, zonaPrueba).ObtenerResumen(ctx, fuera); !errors.Is(err, ErrIncidenteInvalido) {
 			t.Errorf("ObtenerResumen(incidente %d) = %v, want ErrIncidenteInvalido", id, err)
 		}
 		if f.argCeldas != nil || f.fotos != 0 {
@@ -341,7 +385,7 @@ func TestService_ObtenerResumen(t *testing.T) {
 			{IncidenteID: 2, Total: 27},
 		},
 	}
-	svc := NewService(f)
+	svc := NewService(f, zonaPrueba)
 	ahora := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
 	svc.ahora = func() time.Time { return ahora }
 
@@ -406,7 +450,7 @@ func TestService_ObtenerResumen(t *testing.T) {
 }
 
 func TestService_ObtenerResumen_Vacio(t *testing.T) {
-	r, err := NewService(&fakeStore{}).ObtenerResumen(t.Context(), Filtro{})
+	r, err := NewService(&fakeStore{}, zonaPrueba).ObtenerResumen(t.Context(), Filtro{})
 	if err != nil {
 		t.Fatalf("ObtenerResumen() error = %v", err)
 	}
@@ -420,7 +464,7 @@ func TestService_ObtenerResumen_Vacio(t *testing.T) {
 
 func TestService_ErrorDelStore(t *testing.T) {
 	boom := errors.New("conexión perdida")
-	svc := NewService(&fakeStore{err: boom})
+	svc := NewService(&fakeStore{err: boom}, zonaPrueba)
 	if _, err := svc.ObtenerMapaCalor(t.Context(), areaTijuana, 12, Filtro{}); !errors.Is(err, boom) {
 		t.Errorf("ObtenerMapaCalor() = %v, want el error del store", err)
 	}
@@ -428,7 +472,96 @@ func TestService_ErrorDelStore(t *testing.T) {
 		t.Errorf("ObtenerResumen() = %v, want el error del store", err)
 	}
 	// Si no se puede abrir la transacción, el error llega igual.
-	if _, err := NewService(&fakeStore{errFoto: boom}).ObtenerResumen(t.Context(), Filtro{}); !errors.Is(err, boom) {
+	if _, err := NewService(&fakeStore{errFoto: boom}, zonaPrueba).ObtenerResumen(t.Context(), Filtro{}); !errors.Is(err, boom) {
 		t.Errorf("ObtenerResumen() = %v, want el error al abrir la foto", err)
+	}
+}
+
+var catalogoSQL = []sqlc.ListCategoriasCatalogoRow{{ID: 5, Nombre: "deslave", Etiqueta: "Deslave"}, {ID: 6, Nombre: "inundacion", Etiqueta: "Inundación"}}
+
+const csvValido = "Colonia,Latitud,Longitud,Mes/año del Incidente,Categoria\nPopotla,32.29,-117.04,2023-08,Inundación\n"
+
+func TestService_ImportarDataset(t *testing.T) {
+	f := &fakeStore{catalogo: catalogoSQL}
+	s := NewService(f, zonaPrueba)
+	actor := uuid.New()
+
+	d, err := s.ImportarDataset(context.Background(), actor, "", "lluvias.csv", []byte(csvValido))
+	if err != nil {
+		t.Fatalf("ImportarDataset: %v", err)
+	}
+	if d.Nombre != "lluvias.csv" || d.Archivo != "lluvias.csv" || d.Filas != 1 || d.CargadoPor == nil || *d.CargadoPor != actor {
+		t.Errorf("dataset = %+v", d)
+	}
+	arg := f.argImportar
+	if arg.ActorID != actor || len(arg.Sha256) != 64 || len(arg.Filas) != 1 || arg.Filas[0].IncidenteID != 6 {
+		t.Errorf("parámetros = %+v", arg)
+	}
+}
+
+func TestService_ImportarDataset_Errores(t *testing.T) {
+	ctx := context.Background()
+
+	dup := NewService(&fakeStore{catalogo: catalogoSQL, errImportar: errUnique}, zonaPrueba)
+	if _, err := dup.ImportarDataset(ctx, uuid.New(), "", "a.csv", []byte(csvValido)); !errors.Is(err, ErrDatasetDuplicado) {
+		t.Errorf("sha256 repetido: err = %v, quería ErrDatasetDuplicado", err)
+	}
+
+	f := &fakeStore{catalogo: catalogoSQL}
+	_, err := NewService(f, zonaPrueba).ImportarDataset(ctx, uuid.New(), "", "a.csv", []byte("Latitud,Longitud,Fecha,Categoria\n32,-117,2023-01,Otro\n"))
+	var inv *FilasInvalidasError
+	if !errors.As(err, &inv) || inv.Total != 1 {
+		t.Errorf("fila inválida: err = %v, quería *FilasInvalidasError", err)
+	}
+	if f.argImportar != nil {
+		t.Error("con filas inválidas no debe guardar nada")
+	}
+
+	if _, err := NewService(&fakeStore{catalogo: catalogoSQL}, zonaPrueba).ImportarDataset(ctx, uuid.New(), "", "a.csv", []byte("hola")); !errors.Is(err, ErrFormatoInvalido) {
+		t.Errorf("sin encabezados: err = %v, quería ErrFormatoInvalido", err)
+	}
+}
+
+func TestService_EliminarDataset(t *testing.T) {
+	ctx := context.Background()
+	id := uuid.New()
+	f := &fakeStore{}
+	if err := NewService(f, zonaPrueba).EliminarDataset(ctx, id, uuid.New()); err != nil || f.eliminado != id {
+		t.Errorf("err = %v, eliminado = %v", err, f.eliminado)
+	}
+	if err := NewService(&fakeStore{errEliminar: pgx.ErrNoRows}, zonaPrueba).EliminarDataset(ctx, id, uuid.New()); !errors.Is(err, ErrDatasetNoEncontrado) {
+		t.Errorf("err = %v, quería ErrDatasetNoEncontrado", err)
+	}
+}
+
+func TestService_Exportar(t *testing.T) {
+	f := &fakeStore{exportar: []sqlc.ListExportarHistoricoRow{{
+		Origen: "dataset", Dataset: "Lluvias", Colonia: "Popotla", Latitude: 32.29, Longitude: -117.04,
+		CreatedAt: time.Date(2023, 8, 1, 19, 0, 0, 0, time.UTC), Categoria: "Inundación", PersonasAfectadas: ptr(21),
+	}}}
+	s := NewService(f, zonaPrueba)
+	s.ahora = func() time.Time { return time.Date(2026, 11, 19, 18, 0, 0, 0, time.UTC) }
+	filtro := Filtro{IncidenteIDs: []int{6}, Desde: fecha("2020-01-01T00:00:00Z")}
+
+	a, err := s.Exportar(context.Background(), filtro, FormatoCSV)
+	if err != nil {
+		t.Fatalf("Exportar: %v", err)
+	}
+	want := "\xEF\xBB\xBFColonia,Latitud,Longitud,Mes/año del Incidente,Categoria,Personas afectadas (total),Fallecidos,Origen,Dataset\n" +
+		"Popotla,32.29,-117.04,2023-08-01,Inundación,21,,dataset,Lluvias\n"
+	if a.Nombre != "riesgo-historico-2026-11-19.csv" || a.ContentType != "text/csv" || string(a.Contenido) != want {
+		t.Errorf("archivo = %s %s\n%q", a.Nombre, a.ContentType, a.Contenido)
+	}
+	if !reflect.DeepEqual(f.argExportar.IncidenteIds, []int{6}) || f.argExportar.Desde != filtro.Desde || f.argExportar.Hasta != nil {
+		t.Errorf("filtro = %+v", f.argExportar)
+	}
+
+	x, err := s.Exportar(context.Background(), Filtro{}, FormatoXLSX)
+	if err != nil || x.Nombre != "riesgo-historico-2026-11-19.xlsx" || !bytes.HasPrefix(x.Contenido, []byte("PK")) {
+		t.Errorf("xlsx: err = %v, nombre = %s", err, x.Nombre)
+	}
+
+	if _, err := s.Exportar(context.Background(), Filtro{Desde: fecha("2026-02-01T00:00:00Z"), Hasta: fecha("2026-01-01T00:00:00Z")}, FormatoCSV); !errors.Is(err, ErrPeriodoInvalido) {
+		t.Errorf("periodo invertido: err = %v", err)
 	}
 }

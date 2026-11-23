@@ -1,0 +1,17 @@
+type: object
+description: >-
+  Archivo .xlsx o .csv con el formato de importación: una fila de encabezados y un incidente por fila. Columnas
+  obligatorias: Latitud, Longitud, Mes/año del Incidente y Categoria. Opcionales: Colonia, Personas afectadas
+  (total) y Fallecidos (pueden faltar o ir vacías). No importan el orden, las mayúsculas ni los acentos, y las
+  columnas de más se ignoran. En un .xlsx se lee la primera hoja que tenga esos encabezados; en un .csv el separador
+  puede ser coma, punto y coma o tabulador. La fecha va como fecha de Excel, AAAA-MM, AAAA-MM-DD, MM/AAAA o
+  DD/MM/AAAA; solo se guardan el mes y el año.
+required: [file]
+properties:
+  file:
+    type: string
+    format: binary
+  nombre:
+    type: string
+    maxLength: 200
+    description: Nombre del dataset; si no se manda, se usa el del archivo.
