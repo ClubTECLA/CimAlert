@@ -3,10 +3,8 @@ import type { SubmitEvent } from 'react'
 import { FiInfo } from 'react-icons/fi'
 import { LuCircleCheckBig } from 'react-icons/lu'
 import { getPasswordByteLength, getPasswordRequirements, isPasswordValid, PASSWORD_MAX_BYTES } from '@/features/sesion/passwordPolicy'
+import { PasswordInput } from './PasswordInput'
 import {
-    formsInputsDivsStyle,
-    inputsLabelsStyle,
-    inputsStyle,
     submitButtonStyle,
     subtitleStyle,
     titleStyle,
@@ -41,29 +39,27 @@ export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordF
         >
             <h1 className={titleStyle}>Crea una nueva contraseña</h1>
             <span className={subtitleStyle}>El código ya fue validado. Elige una contraseña nueva y guárdala antes de que venza el permiso (15 minutos).</span>
-            <div className={`${formsInputsDivsStyle} mt-4`}>
-                <label htmlFor="recovery-new-password" className={inputsLabelsStyle}>Nueva contraseña</label>
-                <input
-                    id="recovery-new-password"
-                    type="password"
-                    autoComplete="new-password"
-                    autoFocus
-                    aria-describedby={passwordTooLong
-                        ? 'recovery-password-requirements recovery-password-bytes-error'
-                        : 'recovery-password-requirements'}
-                    aria-invalid={passwordTooLong}
-                    className={inputsStyle}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    disabled={submitting}
-                    required
-                />
+            <PasswordInput
+                id="recovery-new-password"
+                label="Nueva contraseña"
+                containerClassName="mt-4"
+                autoComplete="new-password"
+                autoFocus
+                aria-describedby={passwordTooLong
+                    ? 'recovery-password-requirements recovery-password-bytes-error'
+                    : 'recovery-password-requirements'}
+                aria-invalid={passwordTooLong}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={submitting}
+                required
+            >
                 {passwordTooLong && (
                     <span id="recovery-password-bytes-error" className="text-sm text-red-600" role="alert">
                         La contraseña tiene {passwordBytes} bytes; el límite es de {PASSWORD_MAX_BYTES} bytes.
                     </span>
                 )}
-            </div>
+            </PasswordInput>
             <ul
                 id="recovery-password-requirements"
                 className="mt-2 flex flex-col gap-1 text-sm"
@@ -79,32 +75,29 @@ export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordF
                     </li>
                 ))}
             </ul>
-            <div className={`${formsInputsDivsStyle} mt-4`}>
-                <label htmlFor="recovery-confirm-password" className={inputsLabelsStyle}>Confirmar contraseña</label>
-                <input
-                    id="recovery-confirm-password"
-                    type="password"
-                    autoComplete="new-password"
-                    className={`${inputsStyle} ${
-                        confirmPassword.length === 0
-                            ? ''
-                            : passwordsMatch
-                                ? 'border-emerald-500'
-                                : 'border-red-500'
-                    }`}
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                    disabled={submitting}
-                    aria-describedby={passwordsDiffer ? PASSWORD_MISMATCH_ERROR_ID : undefined}
-                    aria-invalid={passwordsDiffer}
-                    required
-                />
+            <PasswordInput
+                id="recovery-confirm-password"
+                label="Confirmar contraseña"
+                containerClassName="mt-4"
+                autoComplete="new-password"
+                className={confirmPassword.length === 0
+                    ? ''
+                    : passwordsMatch
+                        ? 'border-emerald-500'
+                        : 'border-red-500'}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                disabled={submitting}
+                aria-describedby={passwordsDiffer ? PASSWORD_MISMATCH_ERROR_ID : undefined}
+                aria-invalid={passwordsDiffer}
+                required
+            >
                 {passwordsDiffer && (
                     <span id={PASSWORD_MISMATCH_ERROR_ID} className="text-sm text-red-600" role="alert">
                         Las contraseñas no coinciden.
                     </span>
                 )}
-            </div>
+            </PasswordInput>
             <button
                 className={`${submitButtonStyle} mt-5`}
                 type="submit"

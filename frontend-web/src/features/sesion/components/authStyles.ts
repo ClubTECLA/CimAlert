@@ -14,6 +14,13 @@ export const inputsStyle = `
     focus:border-brand
 `
 
+/** Como inputsStyle, con sitio reservado a la derecha para el botón de mostrar/ocultar contraseña. */
+export const passwordInputsStyle = `
+    h-11 w-full rounded-[31px] border border-line bg-white pl-4 pr-11
+    text-sm text-ink outline-none transition-colors duration-200
+    focus:border-brand
+`
+
 export const submitButtonStyle = `
     h-15 w-full rounded-full bg-brand px-7 text-lg font-bold text-white
     drop-shadow-button-brand transition duration-200

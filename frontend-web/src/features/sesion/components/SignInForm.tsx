@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { LuShield } from 'react-icons/lu'
 import { SysMessage, useSysMessage } from '@/components/ui/SysMessageContext'
 import { useAuth } from '@/features/sesion/useAuth'
+import { PasswordInput } from './PasswordInput'
 import {
     formsInputsDivsStyle,
     formsStyle,
@@ -128,20 +129,16 @@ export function SignInForm({ onForgotPassword }: SignInFormProps) {
                     required
                 />
             </div>
-            <div className={formsInputsDivsStyle}>
-                <label htmlFor="auth-password" className={inputsLabelsStyle}>Contraseña</label>
-                <input
-                    id="auth-password"
-                    type="password"
-                    autoComplete="current-password"
-                    className={inputsStyle}
-                    value={form.password}
-                    onChange={handleChangeInput}
-                    name="password"
-                    disabled={submitting}
-                    required
-                />
-            </div>
+            <PasswordInput
+                id="auth-password"
+                label="Contraseña"
+                autoComplete="current-password"
+                value={form.password}
+                onChange={handleChangeInput}
+                name="password"
+                disabled={submitting}
+                required
+            />
             <div className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-secondary">
                 {/* shortcut: la sesión siempre se guarda en localStorage; habilitar cuando "recordar" decida dónde guardar el token. */}
                 <label className="flex flex-1 cursor-not-allowed items-center gap-2 whitespace-nowrap opacity-60" title="Próximamente">
