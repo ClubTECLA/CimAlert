@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { IoIosArrowBack } from 'react-icons/io'
 import { LuMapPin } from 'react-icons/lu'
@@ -14,12 +14,10 @@ export default function AuthPage() {
     const {closeModal} = useModals();
     const {search} = useLocation();
     const navigate = useNavigate();
-    const [form, setForm] = useState(() =>
-        new URLSearchParams(search).get("tab") === "recovery" ? "recovery" : "login"
-    );
+    // El tab vive en la URL: así Back/Forward del navegador cambia el formulario visible.
+    const form = new URLSearchParams(search).get("tab") === "recovery" ? "recovery" : "login";
 
     const showForm = (nextForm: "login" | "recovery", replace = false) => {
-        setForm(nextForm);
         navigate(`?tab=${nextForm}`, { replace });
     };
 
