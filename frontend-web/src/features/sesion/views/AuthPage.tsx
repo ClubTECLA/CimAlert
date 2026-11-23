@@ -68,7 +68,7 @@ export default function AuthPage() {
                             <div className="flex size-12 shrink-0 items-center justify-center rounded-[14px] bg-brand lg:size-16 lg:rounded-[18px]">
                                 <LuMapPin className="size-6.5 text-white lg:size-8.5"/>
                             </div>
-                            <h1 className="text-[32px] font-bold text-white lg:text-[40px]">ClimAlert</h1>
+                            <h1 className="text-[32px] font-bold text-white lg:text-[40px]">CimAlert</h1>
                         </div>
                         <h2 className="text-title font-semibold leading-7.5 text-white lg:text-[30px] lg:leading-9.5">Panel de operación para Protección Civil y personal autorizado</h2>
                         <h2 className="text-body leading-6 text-blue-100 lg:text-[17px] lg:leading-6.5">Revisa reportes ciudadanos, verifica incidentes y avisa a la comunidad en tiempo real durante la temporada de El Niño.</h2>
