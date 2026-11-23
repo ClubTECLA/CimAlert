@@ -4,7 +4,7 @@ import { useAuth } from "@/features/sesion/useAuth";
 import { areaFilterStore } from "@/features/areas/areaFilterStore";
 import { LOCAL_STORAGE_CHANGE_EVENT, type LocalStorageChangeDetail } from "@/lib/useLocalStorage";
 import { AREA_FILTER_STORAGE_KEY } from "@/types/localStorage-types";
-import { buscarArea } from "@/features/areas/areas.services";
+import { buscarArea, invalidarBuscarArea } from "@/features/areas/areas.services";
 import type { ApiCentro, ApiCrearCentroRequest, ApiTipoCentro } from "@/types/api-types";
 import { crearCentro, listarCentros, listarTiposCentro } from "./centros.services";
 import { DEFAULT_CENTRO_FILTERS, filterCentros, type CentroFilters } from "./centroFormat";
@@ -68,6 +68,9 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         // Sin filtros, para que la lista y el mapa muestren el centro nuevo, salvo el área dibujada: crear un centro
         // no debe quitar el filtro que el usuario eligió (se quita con "Limpiar selección" o restableciendo filtros).
         setFilters((prev) => ({ ...DEFAULT_CENTRO_FILTERS, polygon: prev.polygon }));
+        // La recarga del alta necesita datos posteriores al POST: si había una búsqueda por área en vuelo, reutilizarla
+        // dejaría fuera el centro recién creado. Solo se invalida aquí; las lecturas normales siguen compartiendo resultados.
+        invalidarBuscarArea();
         await refresh();
         return centro;
     }, [refresh]);
@@ -101,8 +104,16 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
             const detail = (event as CustomEvent<LocalStorageChangeDetail>).detail;
             if (detail?.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
         };
+        // El evento propio cubre esta pestaña; el nativo `storage` cubre los cambios de preferencias en otras pestañas.
+        const onStorage = (event: StorageEvent) => {
+            if (event.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
+        };
         window.addEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
-        return () => window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+        window.addEventListener("storage", onStorage);
+        return () => {
+            window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+            window.removeEventListener("storage", onStorage);
+        };
     }, [isAuthenticated, refresh]);
 
     // Sin el catálogo no se sabe qué centros son refugios (ni si están ocupados): hasta que llega, los centros siguen

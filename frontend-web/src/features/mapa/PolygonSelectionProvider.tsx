@@ -15,7 +15,7 @@ import { polygonDrawingStore } from "./polygonDrawingStore";
 export function PolygonSelectionProvider({ children }: { children: ReactNode }) {
     const { filters, setFilters } = useReportes();
     const { setFilters: setCentroFilters } = useCentros();
-    const { currentPanelView, closePanel, openPanel } = useCommonPanel();
+    const { currentPanelView, closePanel, openPanel, requestLeave } = useCommonPanel();
 
     const [draft, setDraft] = useState<Position[]>([]);
     const [isDrawing, setDrawing] = useState(false);
@@ -42,13 +42,16 @@ export function PolygonSelectionProvider({ children }: { children: ReactNode }) 
     }, []);
 
     const start = useCallback(() => {
-        // Cerrar el panel desmonta LocationPickerProvider's handler global de clic.
-        closePanel();
-        draftRef.current = [];
-        setDraft([]);
-        setDrawing(true);
-        polygonDrawingStore.set(true);
-    }, [closePanel]);
+        // Cerrar el panel desmonta el handler global de clic del selector de ubicación. Si hay un borrador pendiente,
+        // requestLeave espera a que el usuario acepte descartarlo antes de cerrar el panel y empezar a dibujar.
+        requestLeave(() => {
+            closePanel();
+            draftRef.current = [];
+            setDraft([]);
+            setDrawing(true);
+            polygonDrawingStore.set(true);
+        });
+    }, [closePanel, requestLeave]);
 
     const addPoint = useCallback((point: Position) => {
         const points = draftRef.current;

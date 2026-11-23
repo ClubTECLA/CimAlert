@@ -3,8 +3,50 @@ import type { Polygon, Position } from "geojson";
 // Geometría pura para filtrar por área. Sin DOM ni dependencias del mapa: se prueba con vitest y la usan tanto
 // reportes como centros. Las coordenadas GeoJSON van siempre [longitud, latitud].
 
-// Tolerancia para considerar que un punto cae sobre un segmento (grados; ~1e-12 es del orden de micrómetros).
+// Tolerancia para considerar que un punto cae sobre un segmento. Tras la proyección tangente las unidades son
+// radianes, así que 1e-12 sigue siendo del orden de micrómetros.
 const EPSILON = 1e-12;
+const RADIANES = Math.PI / 180;
+type Vector3 = [number, number, number];
+
+function vector(point: Position): Vector3 {
+    const [lng, lat] = point;
+    const longitud = lng * RADIANES;
+    const latitud = lat * RADIANES;
+    const cosLatitud = Math.cos(latitud);
+    return [cosLatitud * Math.cos(longitud), cosLatitud * Math.sin(longitud), Math.sin(latitud)];
+}
+
+function productoEscalar(a: Vector3, b: Vector3): number {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+/**
+ * Proyección gnomónica centrada en el punto consultado: los círculos máximos se vuelven rectas, así que el mismo
+ * ray-casting de abajo respeta los bordes geodésicos que usa PostGIS sobre `geography`. El punto consultado queda
+ * en (0, 0). Devuelve null para vértices a más de 90° (la proyección no está definida).
+ */
+function proyectar(vertice: Position, centro: Position): Position | null {
+    const v = vector(vertice);
+    const p = vector(centro);
+    const longitud = centro[0] * RADIANES;
+    const latitud = centro[1] * RADIANES;
+    const este: Vector3 = [-Math.sin(longitud), Math.cos(longitud), 0];
+    const norte: Vector3 = [-Math.sin(latitud) * Math.cos(longitud), -Math.sin(latitud) * Math.sin(longitud), Math.cos(latitud)];
+    const z = productoEscalar(v, p);
+    if (z <= 0) return null;
+    return [productoEscalar(v, este) / z, productoEscalar(v, norte) / z];
+}
+
+function anilloProyectado(anillo: Position[], centro: Position): Position[] | null {
+    const proyectados: Position[] = [];
+    for (const vertice of anillo) {
+        const punto = proyectar(vertice, centro);
+        if (!punto) return null;
+        proyectados.push(punto);
+    }
+    return proyectados;
+}
 
 function isOnSegment(point: Position, a: Position, b: Position): boolean {
     const [x, y] = point;
@@ -42,8 +84,14 @@ function inRing(point: Position, ring: Position[]): boolean {
  */
 export function pointInPolygon(point: Position, polygon: Polygon): boolean {
     const [outer, ...holes] = polygon.coordinates;
-    if (!outer || !inRing(point, outer)) return false;
-    return !holes.some((hole) => inRing(point, hole));
+    if (!outer) return false;
+    const exterior = anilloProyectado(outer, point);
+    if (!exterior || !inRing([0, 0], exterior)) return false;
+    for (const hole of holes) {
+        const proyectado = anilloProyectado(hole, point);
+        if (!proyectado || inRing([0, 0], proyectado)) return false;
+    }
+    return true;
 }
 
 /**
@@ -62,5 +110,13 @@ export function polygonFromPoints(points: Position[]): Polygon | null {
         if (first[0] === last[0] && first[1] === last[1]) unique.pop();
     }
     if (unique.length < 3) return null;
+    // Shoelace sin partir por dos, igual que el backend: tres vértices alineados no encierran nada.
+    let area = 0;
+    for (let i = 0; i < unique.length; i++) {
+        const [x1, y1] = unique[i];
+        const [x2, y2] = unique[(i + 1) % unique.length];
+        area += x1 * y2 - x2 * y1;
+    }
+    if (Math.abs(area) < 1e-12) return null;
     return { type: "Polygon", coordinates: [[...unique, unique[0]]] };
 }

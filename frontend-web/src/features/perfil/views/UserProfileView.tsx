@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { FiHelpCircle, FiMoon } from "react-icons/fi";
 import ColSection from "@/components/layout/ColSection";
 import Input from "@/components/ui/Input";
@@ -45,14 +45,15 @@ function ProfilePanel({ user }: ProfileViewProps) {
     const [generalPreferences, setGeneralPreferences] = useLocalStorage('Preferencias generales');
     const [securityPreferences, setSecurityPreferences] = useLocalStorage('Preferencias de seguridad');
     const [areaPreferences, setAreaPreferences] = useLocalStorage(AREA_FILTER_STORAGE_KEY);
-    const { openPanel, backView, closePanel } = useCommonPanel();
+    const { openPanel, backView, closePanel, registerLeaveGuard } = useCommonPanel();
     const { openModal } = useModals();
     const { showMessage } = useSysMessage();
 
-    const [savedForm, setSavedForm] = useState<ProfileForm>(() => ({
+    // La sesión es la única fuente de nombre y correo: no hay contrato para persistir cambios en esos campos.
+    const savedForm: ProfileForm = {
         username: user.username,
         email: user.email ?? "",
-    }));
+    };
     const [draft, setDraft] = useState<ProfileDraft>(() => buildProfileDraft({
         user,
         general: generalPreferences,
@@ -97,15 +98,17 @@ function ProfilePanel({ user }: ProfileViewProps) {
     const handleSave = () => {
         const savedDraft = { ...draft, area: normalizeAreaPreferences(draft.area) };
         setDraft(savedDraft);
-        setSavedForm(savedDraft.form);
+        // No hay endpoint de perfil: solo se conservan las preferencias. Nombre y correo siguen siendo un borrador
+        // comparado con la sesión, para no anunciar como guardados valores que se perderían al reabrir el panel.
         setGeneralPreferences(savedDraft.general);
         setSecurityPreferences(savedDraft.security);
         setAreaPreferences(savedDraft.area);
-        showMessage("Cambios guardados correctamente.", { type: "float", color: "green", title: "Mi perfil" });
+        showMessage("Preferencias guardadas. Nombre y correo no se pueden guardar todavía.", { type: "float", color: "green", title: "Mi perfil" });
     };
 
     /** Sale del panel solo si no hay cambios; si los hay, ofrece descartarlos desde el modal. */
-    const requestLeave = (action: () => void) => {
+    const guardRef = useRef<(action: () => void) => void>(() => {});
+    guardRef.current = (action: () => void) => {
         if (!dirty) {
             action();
             return;
@@ -118,6 +121,12 @@ function ProfilePanel({ user }: ProfileViewProps) {
             },
         }, { fullFocus: true });
     };
+    // El ref mantiene el guard actualizado sin volver a registrarlo en cada render. Cualquier navegación (también
+    // cerrar sesión o empezar a dibujar) pasa por aquí antes de sustituir o descartar el panel del perfil.
+    useEffect(() => {
+        registerLeaveGuard((action) => guardRef.current(action));
+        return () => registerLeaveGuard(null);
+    }, [registerLeaveGuard]);
 
     return (
         <ColSection
@@ -125,8 +134,8 @@ function ProfilePanel({ user }: ProfileViewProps) {
             title="Mi perfil"
             subtitle="Cuenta institucional - Proteccion Civil"
             className="pb-10 overflow-y-auto px-2"
-            onClose={() => requestLeave(closePanel)}
-            onBack={() => requestLeave(backView)}
+            onClose={closePanel}
+            onBack={backView}
         >
             <UserCard
                 format="col"
@@ -196,7 +205,7 @@ function ProfilePanel({ user }: ProfileViewProps) {
                 <ListTile
                     tileName="Ayudas y guias"
                     tileDescription="Respuestas rapidas para el equipo"
-                    onClick={() => requestLeave(() => openPanel('Ayudas y guias'))}
+                    onClick={() => openPanel('Ayudas y guias')}
                     icon={<FiHelpCircle />}
                 />
             </OptionList>

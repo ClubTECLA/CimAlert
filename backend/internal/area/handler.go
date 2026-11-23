@@ -44,6 +44,9 @@ func validarPoligono(poligono httpapi.Poligono) error {
 	if primero[0] != ultimo[0] || primero[1] != ultimo[1] {
 		return errors.New("El anillo debe cerrar repitiendo el primer vértice.")
 	}
+	if anilloSeCruza(anillo) {
+		return errors.New("El anillo se cruza a sí mismo; los vértices deben ir en orden alrededor del borde.")
+	}
 
 	// Shoelace: un anillo sin área no filtraría nada y probablemente es un
 	// doble clic del usuario, no un área dibujada.
@@ -55,6 +58,49 @@ func validarPoligono(poligono httpapi.Poligono) error {
 		return errors.New("El polígono no tiene área.")
 	}
 	return nil
+}
+
+// anilloSeCruza busca dos lados no contiguos que se toquen o se crucen. El último vértice
+// repite al primero, así que se descarta para recorrer los lados en ciclo.
+func anilloSeCruza(anillo [][]float64) bool {
+	n := len(anillo) - 1
+	for i := 0; i < n; i++ {
+		for j := i + 2; j < n; j++ {
+			if i == 0 && j == n-1 {
+				continue // contiguos a través del vértice de cierre
+			}
+			if segmentosSeTocan(anillo[i], anillo[(i+1)%n], anillo[j], anillo[(j+1)%n]) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func segmentosSeTocan(a, b, c, d []float64) bool {
+	o1, o2 := orientacion(a, b, c), orientacion(a, b, d)
+	o3, o4 := orientacion(c, d, a), orientacion(c, d, b)
+	if o1 != o2 && o3 != o4 {
+		return true
+	}
+	return o1 == 0 && enRango(a, b, c) || o2 == 0 && enRango(a, b, d) ||
+		o3 == 0 && enRango(c, d, a) || o4 == 0 && enRango(c, d, b)
+}
+
+func orientacion(a, b, c []float64) int {
+	v := (b[0]-a[0])*(c[1]-a[1]) - (b[1]-a[1])*(c[0]-a[0])
+	switch {
+	case v > 0:
+		return 1
+	case v < 0:
+		return -1
+	}
+	return 0
+}
+
+func enRango(a, b, c []float64) bool {
+	return min(a[0], b[0]) <= c[0] && c[0] <= max(a[0], b[0]) &&
+		min(a[1], b[1]) <= c[1] && c[1] <= max(a[1], b[1])
 }
 
 func (h *Handler) BuscarArea(ctx context.Context, request httpapi.BuscarAreaRequestObject) (httpapi.BuscarAreaResponseObject, error) {

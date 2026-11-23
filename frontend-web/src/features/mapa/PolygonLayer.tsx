@@ -189,10 +189,14 @@ export default function PolygonLayer() {
     }, [map, paint]);
 
     useEffect(() => {
-        if (!map || !isDrawing) return;
+        if (!map) return;
+        const container = map.getContainer();
+        container.classList.toggle("dibujando-area", isDrawing);
+        if (!isDrawing) return;
         map.doubleClickZoom.disable();
         map.getCanvas().style.cursor = "crosshair";
         return () => {
+            container.classList.remove("dibujando-area");
             map.doubleClickZoom.enable();
             map.getCanvas().style.cursor = "";
         };

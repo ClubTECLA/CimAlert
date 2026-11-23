@@ -69,6 +69,12 @@ func TestValidarPoligono(t *testing.T) {
 			poligono:  poligono(t, [][][]float64{{{-117, 32}, {-116, 32}, {-115, 32}, {-117, 32}}}),
 			quiereErr: "no tiene área",
 		},
+		{
+			// Área firmada no nula (3): no la detiene el shoelace, solo la comprobación de lados.
+			name:      "anillo que se cruza, lóbulos desiguales",
+			poligono:  poligono(t, [][][]float64{{{-117, 32}, {-115, 34}, {-117, 35}, {-116, 32}, {-117, 32}}}),
+			quiereErr: "se cruza",
+		},
 	}
 
 	for _, tt := range tests {

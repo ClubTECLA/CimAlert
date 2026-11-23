@@ -12,7 +12,7 @@ import UserCard from "@/features/perfil/components/UserCard";
 
 export default function UserMenu() {
     const { user, logout } = useAuth();
-    const { openPanel, closePanel } = useCommonPanel();
+    const { openPanel, closePanel, requestLeave } = useCommonPanel();
     const { closeModal } = useModals();
 
     return (
@@ -45,11 +45,11 @@ export default function UserMenu() {
                 />
                 <ListTile
                     tileName="Cerrar Sesion"
-                    onClick={() => {
+                    onClick={() => requestLeave(() => {
                         logout();
                         closeModal();
                         closePanel();
-                    }}
+                    })}
                     icon={<MdLogout />}
                     color='red'
                 />

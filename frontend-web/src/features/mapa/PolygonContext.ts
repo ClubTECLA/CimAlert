@@ -10,7 +10,7 @@ export interface PolygonSelectionContextValue {
     isDrawing: boolean
     /** Vértices ya colocados, en coordenadas GeoJSON [longitud, latitud]. */
     draft: Position[]
-    /** Empieza un dibujo nuevo, cerrando el panel activo para liberar el mapa. */
+    /** Empieza un dibujo nuevo: cierra el panel activo, previa confirmación si hay un borrador pendiente. */
     start: () => void
     /** Añade el vértice donde se hizo clic. */
     addPoint: (point: Position) => void

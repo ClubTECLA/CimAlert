@@ -9,6 +9,7 @@ properties:
     type: array
     description: Un solo anillo exterior; los huecos se incorporarían como anillos adicionales.
     minItems: 1
+    maxItems: 1
     items:
       type: array
       minItems: 4

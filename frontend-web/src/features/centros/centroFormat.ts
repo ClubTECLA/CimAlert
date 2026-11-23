@@ -21,11 +21,12 @@ export interface CentroFilters {
 export const DEFAULT_CENTRO_FILTERS: CentroFilters = { tab: "activos", hiddenTipos: [] };
 
 /** Nombres de lo que difiere de DEFAULT_CENTRO_FILTERS; vacío si no hay filtro. */
-export function activeCentroFilterLabels({ tab, hiddenTipos }: CentroFilters): string[] {
+export function activeCentroFilterLabels({ tab, hiddenTipos, polygon }: CentroFilters): string[] {
     const hidden = hiddenTipos.length;
     return [
         ...(tab !== DEFAULT_CENTRO_FILTERS.tab ? [tab === "ocupados" ? "Centros ocupados" : "Todos los centros"] : []),
         ...(hidden ? [`${hidden} ${hidden === 1 ? "tipo de centro oculto" : "tipos de centro ocultos"}`] : []),
+        ...(polygon ? ["Área seleccionada"] : []),
     ];
 }
 

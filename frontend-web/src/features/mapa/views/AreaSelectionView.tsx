@@ -21,7 +21,7 @@ const noteStyle = "py-4 text-center text-sm text-ink-muted";
 export default function AreaSelectionView() {
     const { openPanel } = useCommonPanel();
     const { reportes, categories, filteredReportes } = useReportes();
-    const { centros, tipos, filteredCentros } = useCentros();
+    const { centros, tipos, filteredCentros, error: centrosError, refresh: refreshCentros } = useCentros();
     const { polygon, start, clear } = usePolygon();
 
     const incidentes = masRecientes(filteredReportes, MAX_ROWS);
@@ -65,8 +65,20 @@ export default function AreaSelectionView() {
                             }
 
                             <span className={sectionTitleStyle}>CENTROS · {filteredCentros.length}</span>
-                            {!centros && <span className={noteStyle}>Cargando centros…</span>}
-                            {centros && filteredCentros.length === 0 && <span className={noteStyle}>Ningún centro en esta área.</span>}
+                            {centrosError && (
+                                <div className={`${noteStyle} flex flex-col items-center gap-2`}>
+                                    <span>{centrosError}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => void refreshCentros()}
+                                        className="rounded-full border border-line-strong px-4 py-1.5 text-sm font-semibold text-ink transition-colors hover:bg-line-soft"
+                                    >
+                                        Reintentar
+                                    </button>
+                                </div>
+                            )}
+                            {!centrosError && !centros && <span className={noteStyle}>Cargando centros…</span>}
+                            {!centrosError && centros && filteredCentros.length === 0 && <span className={noteStyle}>Ningún centro en esta área.</span>}
                             {centrosVisibles.map((centro) =>
                                 <CentroRow
                                     key={centro.id}

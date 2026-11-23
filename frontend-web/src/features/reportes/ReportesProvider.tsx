@@ -161,15 +161,22 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         if (isAuthenticated) void refresh();
     }, [filters.polygon, isAuthenticated, refresh]);
 
-    // Cambiar la preferencia en "Mi perfil" se aplica enseguida: el hook de localStorage avisa con su evento y
-    // los centros no sondean, así que esperar al siguiente sondeo dejaría el mapa con el modo anterior.
+    // Cambiar la preferencia en "Mi perfil" se aplica enseguida: el hook de localStorage avisa con su evento en esta
+    // pestaña y el nativo `storage` avisa cuando el cambio viene de otra; esperar al sondeo dejaría el modo anterior.
     useEffect(() => {
         const onChange = (event: Event) => {
             const detail = (event as CustomEvent<LocalStorageChangeDetail>).detail;
             if (detail?.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
         };
+        const onStorage = (event: StorageEvent) => {
+            if (event.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
+        };
         window.addEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
-        return () => window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+        window.addEventListener("storage", onStorage);
+        return () => {
+            window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+            window.removeEventListener("storage", onStorage);
+        };
     }, [isAuthenticated, refresh]);
 
     useEffect(() => {

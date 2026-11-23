@@ -1,6 +1,6 @@
 import type { Polygon } from "geojson";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CENTRO_FILTERS, estaOcupado, filterCentros, lugaresDisponibles, lugaresTexto } from "./centroFormat";
+import { activeCentroFilterLabels, DEFAULT_CENTRO_FILTERS, estaOcupado, filterCentros, lugaresDisponibles, lugaresTexto } from "./centroFormat";
 import type { ApiCentro, ApiTipoCentro } from "@/types/api-types";
 
 const centro = (id: string, tipo_centro: number, capacidad: number | null, cantidad: number | null, latitude = 5, longitude = 5) =>
@@ -40,6 +40,14 @@ describe("estaOcupado", () => {
     it("los demás tipos nunca están ocupados, aunque tengan los lugares llenos", () => {
         expect(estaOcupado({ capacidad: 10, cantidad: 12 }, salud)).toBe(false);
         expect(estaOcupado({ capacidad: 10, cantidad: 12 })).toBe(false);
+    });
+});
+
+describe("activeCentroFilterLabels", () => {
+    it("anuncia el área seleccionada para que los paneles de centros la indiquen", () => {
+        const area: Polygon = { type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] };
+        expect(activeCentroFilterLabels(DEFAULT_CENTRO_FILTERS)).toEqual([]);
+        expect(activeCentroFilterLabels({ ...DEFAULT_CENTRO_FILTERS, polygon: area })).toEqual(["Área seleccionada"]);
     });
 });
 

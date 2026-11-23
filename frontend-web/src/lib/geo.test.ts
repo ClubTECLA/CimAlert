@@ -19,7 +19,16 @@ describe("pointInPolygon", () => {
     it("el borde y los vértices cuentan como dentro", () => {
         expect(pointInPolygon([-117.1, 32.55], area)).toBe(true);
         expect(pointInPolygon([-117.0, 32.6], area)).toBe(true);
-        expect(pointInPolygon([-117.05, 32.5], area)).toBe(true);
+        expect(pointInPolygon([-117.1, 32.5], area)).toBe(true);
+    });
+
+    it("los bordes horizontales siguen el arco geodésico, igual que ST_Covers sobre geography", () => {
+        // El borde sur se eleva ~9.9e-6° en el punto medio: un punto a 32.5 (o justo encima) queda fuera aunque
+        // con arcos rectos de latitud/longitud pareciera estar dentro. El borde norte se eleva igual: el punto
+        // justo por encima de 32.6 sí cae dentro del área en el servidor.
+        expect(pointInPolygon([-117.05, 32.5], area)).toBe(false);
+        expect(pointInPolygon([-117.05, 32.500005], area)).toBe(false);
+        expect(pointInPolygon([-117.05, 32.600005], area)).toBe(true);
     });
 
     it("respeta cóncavos: el hueco de una L queda fuera", () => {
@@ -58,5 +67,9 @@ describe("polygonFromPoints", () => {
     it("con menos de tres vértices no hay área", () => {
         expect(polygonFromPoints([])).toBeNull();
         expect(polygonFromPoints([[0, 0], [1, 1]])).toBeNull();
+    });
+
+    it("tres vértices alineados no encierran área", () => {
+        expect(polygonFromPoints([[0, 0], [1, 1], [2, 2]])).toBeNull();
     });
 });
