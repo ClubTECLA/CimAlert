@@ -6,7 +6,7 @@ import { SysMessage, useSysMessage } from '@/components/ui/SysMessageContext'
 import { emptyCode } from '@/features/sesion/codeInput'
 import { restablecerContrasena, solicitarRecuperacion, verificarRecuperacion } from '@/features/sesion/recovery.service'
 import { formsStyle } from './authStyles'
-import { RecoveryCodeForm } from './RecoveryCodeForm'
+import { RecoveryCodeForm, RECOVERY_CODE_ERROR_ID } from './RecoveryCodeForm'
 import { RecoveryEmailForm } from './RecoveryEmailForm'
 import { RecoveryPasswordForm } from './RecoveryPasswordForm'
 
@@ -257,7 +257,9 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
                     <LuCircleCheckBig />
                 </div>
             )}
-            <SysMessage />
+            {step === 'code'
+                ? <SysMessage id={RECOVERY_CODE_ERROR_ID} />
+                : <SysMessage />}
             {step === 'email' && (
                 <RecoveryEmailForm
                     email={email}

@@ -17,6 +17,8 @@ interface RecoveryPasswordFormProps {
     submitting: boolean
 }
 
+const PASSWORD_MISMATCH_ERROR_ID = 'recovery-password-mismatch-error'
+
 export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordFormProps) {
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
@@ -25,6 +27,7 @@ export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordF
     const passwordBytes = getPasswordByteLength(password)
     const passwordTooLong = passwordBytes > PASSWORD_MAX_BYTES
     const passwordsMatch = password.length > 0 && password === confirmPassword
+    const passwordsDiffer = confirmPassword.length > 0 && !passwordsMatch
 
     const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault()
@@ -92,11 +95,14 @@ export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordF
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     disabled={submitting}
-                    aria-invalid={confirmPassword.length > 0 && !passwordsMatch}
+                    aria-describedby={passwordsDiffer ? PASSWORD_MISMATCH_ERROR_ID : undefined}
+                    aria-invalid={passwordsDiffer}
                     required
                 />
-                {confirmPassword.length > 0 && !passwordsMatch && (
-                    <span className="text-sm text-red-600" role="alert">Las contraseñas no coinciden.</span>
+                {passwordsDiffer && (
+                    <span id={PASSWORD_MISMATCH_ERROR_ID} className="text-sm text-red-600" role="alert">
+                        Las contraseñas no coinciden.
+                    </span>
                 )}
             </div>
             <button

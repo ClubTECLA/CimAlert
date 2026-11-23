@@ -83,6 +83,7 @@ const config: Record<MessageColor, { icon: React.ReactNode; barClass: string; wr
 };
 
 type MessageBoxProps = {
+    id?: string;
     message: string;
     title: string;
     color: MessageColor;
@@ -101,7 +102,7 @@ type MessageState = Omit<MessageBoxProps, "onClose">;
  * Inline messages remain in the normal document flow. Float messages use fixed
  * positioning and are animated from the top of the viewport.
  */
-function MessageBox({ message, title, color,justify, type,isVisible, animate, onClose }: MessageBoxProps) {
+function MessageBox({ id, message, title, color,justify, type,isVisible, animate, onClose }: MessageBoxProps) {
     if (!isVisible || !message) return null;
 
     const currentStyle = config[color];
@@ -116,6 +117,7 @@ function MessageBox({ message, title, color,justify, type,isVisible, animate, on
     if (type === "inline") {
         return (
             <div
+                id={id}
                 role={color === "red" ? "alert" : "status"}
                 className={`
                 flex flex-row items-center gap-3 px-3.5 py-3 w-full
@@ -142,6 +144,7 @@ function MessageBox({ message, title, color,justify, type,isVisible, animate, on
 
     return (
         <div
+            id={id}
             role={color === "red" ? "alert" : "status"}
             className={`
             fixed ${justifyM[justify]} z-[100]
@@ -362,8 +365,8 @@ export function useSysMessage() {
  *     showTime: 4000,
  * });
  */
-export function SysMessage() {
+export function SysMessage({ id }: { id?: string }) {
     const { messageState, cleanMessage } = useSysMessage();
     if (messageState.type !== "inline") return null;
-    return <MessageBox {...messageState} onClose={cleanMessage} />;
+    return <MessageBox {...messageState} id={id} onClose={cleanMessage} />;
 }

@@ -13,6 +13,8 @@ import { submitButtonStyle, subtitleStyle, titleStyle } from './authStyles'
 
 const RESEND_SECONDS = 45
 const CODE_INDEXES = Array.from({ length: CODE_LENGTH }, (_, index) => index)
+/** Id compartido con RecoveryFlow, donde se muestra el mensaje de error del PIN. */
+export const RECOVERY_CODE_ERROR_ID = 'recovery-code-error'
 
 interface RecoveryCodeFormProps {
     digits: string[]
@@ -155,6 +157,7 @@ export function RecoveryCodeForm({
                         key={index}
                         ref={(element) => { inputRefs.current[index] = element; }}
                         aria-label={`Dígito ${index + 1} del código`}
+                        aria-describedby={invalid ? RECOVERY_CODE_ERROR_ID : undefined}
                         aria-invalid={invalid || undefined}
                         autoComplete={index === 0 ? 'one-time-code' : 'off'}
                         autoFocus={index === 0}
