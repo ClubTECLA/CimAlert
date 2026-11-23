@@ -289,9 +289,11 @@ esas dos columnas se ignoran al importar.
   texto que empieza con `=`, `+`, `-` o `@` sale con `'` adelante, para que Excel no
   lo tome como fórmula (la colonia sale de la dirección que escribe el ciudadano). Un
   texto que ya empieza con `'` también lleva otro adelante (`'-Norte` sale como
-  `''-Norte`). Al importar un CSV se quita ese primer `'`, así que el texto vuelve
-  igual; un `'Texto` escrito a mano no se toca. En el `.xlsx` no se agrega ni se quita
-  nada.
+  `''-Norte`). Al importar un CSV se quita el primer `'` cuando lo sigue otro `'`, `=`,
+  `+`, `-` o `@`, así que el texto exportado vuelve igual. Esto también aplica a un CSV
+  escrito a mano: `'-Norte` se importa como `-Norte`, y para conservar el apóstrofo se
+  escribe doble (`''-Norte`). Con cualquier otro carácter después, como en `'Texto`, no
+  se toca. En el `.xlsx` no se agrega ni se quita nada.
 - **XLSX:** hoja "Formato para importación", fecha como fecha de Excel (`mm/aaaa`).
   Excel guarda 15 dígitos significativos, así que las coordenadas pierden menos de un
   micrómetro.
@@ -303,10 +305,10 @@ esas dos columnas se ignoran al importar.
 **Volver a importar lo exportado:**
 
 - Sigue los mismos límites que cualquier importación: 50,000 filas y 1 MiB por
-  archivo. Una exportación más grande se parte por periodo o por categoría. Si aun así
-  más de 50,000 filas comparten mes y categoría, ningún filtro las separa: se parte el
-  archivo por renglones, y cada parte conserva la fila de encabezado y queda dentro de
-  los límites.
+  archivo. Una exportación más grande se parte por periodo o por categoría. Si con esos
+  filtros no se cumple alguno de los dos límites (por ejemplo, las filas de un mismo mes
+  y categoría pasan de 50,000 o pesan más de 1 MiB), se parte el archivo por renglones:
+  cada parte conserva la fila de encabezado y queda dentro de ambos límites.
 - La categoría sale con su etiqueta. Si dos categorías del catálogo comparten etiqueta
   (o el nombre de una es la etiqueta de otra), la importación rechaza esas filas por
   ambiguas. Antes de reimportar, se corrige el catálogo o se cambia la columna
@@ -314,10 +316,16 @@ esas dos columnas se ignoran al importar.
   con otra etiqueta).
 - Se **suma** a lo que ya hay: si los datasets originales siguen cargados, sus filas
   quedan duplicadas. El sha256 compara archivos, no incidentes, y Origen y Dataset no
-  identifican a un incidente ni reemplazan nada. Para reemplazar, primero se importa
-  el archivo nuevo y se comprueba que funcionó (responde `201` y el dataset aparece en
-  la lista con las filas esperadas); después se borra el dataset original. Así, si la
-  importación falla, el original sigue cargado.
+  identifican a un incidente ni reemplazan nada.
+- Para reemplazar un dataset:
+  1. La exportación trae todas las fuentes (reportes y todos los datasets) y no se
+     puede filtrar por dataset: en la hoja de cálculo se dejan solo las filas cuya
+     columna Dataset es la del dataset que se reemplaza. Si no, los reportes y los
+     demás datasets quedan duplicados.
+  2. Se importa ese archivo y se comprueba que funcionó (responde `201` y el dataset
+     aparece en la lista con las filas esperadas).
+  3. Después se borra el dataset original. Así, si la importación falla, el original
+     sigue cargado.
 
 ## Quién lo ve
 
