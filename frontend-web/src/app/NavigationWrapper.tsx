@@ -12,6 +12,8 @@ import { useEffect, useRef, useState } from "react";
 import { addRecentSearch } from '@/lib/utils';
 
 const SEARCH_DEBOUNCE_MS = 400;
+// Formularios con su propio campo de ubicación: la barra no repite la dirección del marcador.
+const FORM_PANELS = ["Nuevo Incidente", "Nuevo Centro"];
 
 export default function NavigationWrapper() {
     const [ generalPreferences ] = useLocalStorage('Preferencias generales');
@@ -23,7 +25,7 @@ export default function NavigationWrapper() {
     const { showMessage } = useSysMessage();
     // La preferencia muestra la dirección fuera de la búsqueda; al abrir Busqueda se muestra siempre.
     const shouldShowLocation =
-        currentPanelView !== "Nuevo Incidente" &&
+        !FORM_PANELS.includes(currentPanelView ?? "") &&
         (generalPreferences.show_location_in_searchBar || currentPanelView === "Busqueda");
     // Consulta escrita o elegida mientras se edita, y texto alternativo cuando no se muestra la dirección.
     const [ searchQuery, setSearchQuery ] = useState("");
@@ -37,7 +39,7 @@ export default function NavigationWrapper() {
         focusedAtLocationFlightVersion === locationFlightVersion;
     const shouldShowMapAddress =
         shouldShowLocation ||
-        (currentPanelView !== "Nuevo Incidente" && locationFlightVersion > 0);
+        (!FORM_PANELS.includes(currentPanelView ?? "") && locationFlightVersion > 0);
 
     if (previousPanelView !== currentPanelView) {
         setPreviousPanelView(currentPanelView);
@@ -142,8 +144,10 @@ export default function NavigationWrapper() {
 
     return (
         <section className="pointer-events-none fixed inset-0 z-50">
-            {/* En teléfono el perfil queda al lado del buscador, mientras la campana pasa a los controles del mapa. */}
-            <div className="pointer-events-auto fixed inset-x-2 top-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:inset-x-4 lg:flex lg:justify-end">
+            {/* En teléfono el perfil queda al lado del buscador, mientras la campana pasa a los controles del mapa.
+                data-app-header: el mapa mide su borde inferior para no encuadrar nada debajo de la cabecera
+                (freeMapPadding). */}
+            <div data-app-header className="pointer-events-auto fixed inset-x-2 top-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:inset-x-4 lg:flex lg:justify-end">
                 <div className="col-start-1 row-start-1 flex min-w-0 items-center gap-2 max-sm:col-span-2 max-sm:pr-16 lg:flex-5/6">
                     <div className="min-w-0 flex-1 lg:flex-1/3">
                         <SearchBar

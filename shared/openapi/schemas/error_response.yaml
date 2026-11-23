@@ -1,4 +1,6 @@
 type: object
+description: >-
+  Error devuelto por la API. El detalle del error se incluye en `message`.
 required: [message]
 properties:
   message:

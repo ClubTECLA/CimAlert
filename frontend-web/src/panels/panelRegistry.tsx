@@ -9,8 +9,12 @@ import IncidentsView from "@/features/reportes/views/IncidentsView";
 import IncidentDetailView from "@/features/reportes/views/IncidentDetailView";
 import SummaryView from "@/features/resumen/views/SummaryView";
 import UsersView from "@/features/usuarios/views/UsersView";
+import RiesgoView from "@/features/riesgo/views/RiesgoView";
 import type { PanelViewKey, PanelViewPropsMap } from "./panelTypes";
 import SearchView from "@/features/busqueda/views/SearchView";
+import CentrosView from "@/features/centros/views/CentrosView";
+import CentroDetailView from "@/features/centros/views/CentroDetailView";
+import NewCentroView from "@/features/centros/views/NewCentroView";
 
 // Punto de composición visual: los tipos y el router no importan este registro.
 type PanelRegistry = {
@@ -29,4 +33,8 @@ export const panelRegistry = {
     "Usuarios": UsersView,
     "Capas y filtros": MapFiltersView,
     "Busqueda": SearchView,
+    "Riesgo": RiesgoView,
+    "Centros": CentrosView,
+    "Detalle Centro": CentroDetailView,
+    "Nuevo Centro": NewCentroView,
 } satisfies PanelRegistry;

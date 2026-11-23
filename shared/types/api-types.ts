@@ -159,6 +159,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reportes/{reporteId}/historico": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** @description Marca el reporte como histórico: deja de aparecer en Incidentes (reportes activos) y pasa a contar para el riesgo. Solo pueden hacerlo los roles distintos de ciudadano. Es idempotente y queda en el historial. */
+        put: operations["marcarReporteHistorico"];
+        post?: never;
+        /** @description Quita la marca de histórico: el reporte vuelve a Incidentes y deja de contar para el riesgo. Solo pueden hacerlo los roles distintos de ciudadano. Es idempotente y queda en el historial. */
+        delete: operations["desmarcarReporteHistorico"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -257,10 +275,30 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Verificación de recuperación de contraseña
-         * @description Verifica el código de recuperación y permite al usuario establecer una nueva contraseña.
+         * Verificación del código de recuperación
+         * @description Verifica el código de recuperación y devuelve un token de un solo uso para establecer la nueva contraseña.
          */
         post: operations["verificarRecuperacion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/recovery/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Establecer la nueva contraseña
+         * @description Cambia la contraseña con el token que devuelve la verificación del código. Invalida las sesiones anteriores.
+         */
+        post: operations["restablecerContrasena"];
         delete?: never;
         options?: never;
         head?: never;
@@ -424,6 +462,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/riesgo/mapa-calor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Peso de los reportes históricos agrupado en una cuadrícula sobre el área visible; el tamaño de celda depende del zoom. Solo lectura: no registra nada en el historial. */
+        get: operations["obtenerMapaCalor"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/riesgo/resumen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Zonas de mayor riesgo, colonias con más riesgo (por la suma del peso de sus reportes) y conteo por tipo de incidente de toda la ciudad, a partir de los reportes históricos. Solo lectura: no registra nada en el historial. */
+        get: operations["obtenerResumenRiesgo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -452,6 +524,8 @@ export interface components {
         UsuarioMeResponse: components["schemas"]["usuario_me_response"];
         RecoveryRequest: components["schemas"]["recovery_request"];
         VerifyRecoveryRequest: components["schemas"]["verify_recovery_request"];
+        VerifyRecoveryResponse: components["schemas"]["verify_recovery_response"];
+        ResetPasswordRequest: components["schemas"]["reset_password_request"];
         Incidente: components["schemas"]["incidente"];
         CrearIncidenteRequest: components["schemas"]["crear_incidente_request"];
         ActualizarIncidenteRequest: components["schemas"]["actualizar_incidente_request"];
@@ -461,6 +535,13 @@ export interface components {
         CrearTipoCentroRequest: components["schemas"]["crear_tipo_centro_request"];
         Centro: components["schemas"]["centro"];
         CrearCentroRequest: components["schemas"]["crear_centro_request"];
+        NivelRiesgo: components["schemas"]["nivel_riesgo"];
+        CeldaCalor: components["schemas"]["celda_calor"];
+        MapaCalor: components["schemas"]["mapa_calor"];
+        ZonaRiesgo: components["schemas"]["zona_riesgo"];
+        ColoniaRiesgo: components["schemas"]["colonia_riesgo"];
+        ConteoCategoria: components["schemas"]["conteo_categoria"];
+        ResumenRiesgo: components["schemas"]["resumen_riesgo"];
         /**
          * @description Derivado, no almacenado: etiqueta del incidente + " en " + direccion (p. ej. "Socavón en Calle Flores Magón 8267 · Zona Centro"). Sin dirección, solo la etiqueta.
          * @example Socavón en Calle Flores Magón 8267 · Zona Centro
@@ -492,6 +573,7 @@ export interface components {
              */
             longitude: number;
         };
+        /** @description Error devuelto por la API. El detalle del error se incluye en `message`. */
         error_response: {
             message: string;
         };
@@ -638,12 +720,22 @@ export interface components {
             /** Format: email */
             email: string;
         };
-        /** @description Solicitud para verificar y recuperar la contraseña de un usuario. */
+        /** @description Solicitud para verificar el código de recuperación de contraseña. */
         verify_recovery_request: {
             /** Format: email */
             email: string;
             /** @description Código de verificación enviado al correo del usuario. */
             pin: string;
+        };
+        /** @description Token de un solo uso que permite establecer la nueva contraseña. */
+        verify_recovery_response: {
+            /** @description Token opaco; vence a los 15 minutos y se invalida al usarse o al pedir un PIN nuevo. */
+            reset_token: string;
+        };
+        /** @description Solicitud para establecer la nueva contraseña con el token de recuperación. */
+        reset_password_request: {
+            /** @description Token devuelto por la verificación del código. */
+            reset_token: string;
             new_password: components["schemas"]["password"];
         };
         /** @description Tag del catálogo de un tipo de incidente (tabla tags), sin conteos por reporte. */
@@ -701,6 +793,8 @@ export interface components {
         };
         /** @description Un usuario del sistema. */
         usuario_resumen: {
+            /** Format: uuid */
+            id: string;
             username: string;
             /** Format: email */
             email: string | null;
@@ -749,6 +843,99 @@ export interface components {
             cantidad?: number;
             /** @default true */
             activo?: boolean;
+        };
+        /** @description Celda de la cuadrícula del mapa de calor. Su punto es el promedio de la posición de sus reportes (no el centro de la celda), así que no se mueve al cambiar el zoom: un reporte solo queda siempre en su lugar. */
+        celda_calor: {
+            /** Format: double */
+            latitude: number;
+            /** Format: double */
+            longitude: number;
+            /**
+             * Format: double
+             * @description Suma del peso de los reportes históricos de la celda (ver backend/GUIA_RIESGO.md).
+             */
+            peso: number;
+            /** @description Cuántos reportes cayeron en la celda. */
+            reportes: number;
+        };
+        /** @description Peso de los reportes históricos del área visible, agrupado en una cuadrícula cuyo tamaño depende del zoom. */
+        mapa_calor: {
+            /**
+             * Format: double
+             * @description Lado de cada celda, en metros.
+             */
+            tamano_celda_m: number;
+            /**
+             * Format: double
+             * @description Mayor peso entre las celdas devueltas (0 si no hay celdas); sirve para normalizar la intensidad.
+             */
+            peso_maximo: number;
+            celdas: components["schemas"]["celda_calor"][];
+        };
+        /**
+         * @description Nivel de riesgo derivado del score (los umbrales están en backend/GUIA_RIESGO.md).
+         * @enum {string}
+         */
+        nivel_riesgo: "Alto" | "Medio" | "Bajo";
+        /** @description Zona de riesgo estimada por el sistema: un grupo de reportes históricos cercanos entre sí (DBSCAN). No lleva id porque los grupos se recalculan en cada consulta. */
+        zona_riesgo: {
+            /**
+             * @description Colonia de la zona, tomada de la dirección de sus reportes.
+             * @example Cañón del Sáinz
+             */
+            nombre: string;
+            /**
+             * Format: double
+             * @description Centro de la zona.
+             */
+            latitude: number;
+            /**
+             * Format: double
+             * @description Centro de la zona.
+             */
+            longitude: number;
+            /**
+             * Format: double
+             * @description Radio del círculo de la zona, en metros: el percentil 90 de las distancias de sus reportes al centro, no la máxima. Algunos reportes de la zona pueden quedar fuera del círculo.
+             */
+            radio_m: number;
+            /** Format: double */
+            score: number;
+            nivel: components["schemas"]["nivel_riesgo"];
+            reportes: number;
+        };
+        /** @description Colonia con su conteo de reportes históricos en el periodo (pestaña Histórico). */
+        colonia_riesgo: {
+            /** @example Col. Obrera */
+            nombre: string;
+            reportes: number;
+            /** Format: double */
+            score: number;
+            nivel: components["schemas"]["nivel_riesgo"];
+        };
+        /** @description Cuántos reportes históricos hay de un tipo de incidente; el nombre y el color salen del catálogo (GET /incidentes). */
+        conteo_categoria: {
+            incidente_id: number;
+            total: number;
+        };
+        /** @description Resumen de riesgo de toda la ciudad para el panel "Riesgo e histórico". Todo sale de los reportes históricos (es_historico); los reportes activos son de Incidentes. */
+        resumen_riesgo: {
+            /**
+             * Format: date-time
+             * @description Momento en que se calculó el resumen.
+             */
+            generado_en: string;
+            /** @description Versión de la fórmula de riesgo; cambia cuando cambian sus pesos o umbrales. */
+            version_modelo: number;
+            /** @description Reportes históricos del periodo que cuentan para el riesgo (sin los descartados). */
+            total_historicos: number;
+            zonas_alto_riesgo: number;
+            /** @description Zonas de mayor riesgo (grupos de reportes históricos cercanos entre sí), de mayor a menor score. */
+            zonas: components["schemas"]["zona_riesgo"][];
+            /** @description Colonias con más riesgo en el periodo, ordenadas por la suma del peso de sus reportes históricos, de mayor a menor (no por el número de reportes). */
+            colonias: components["schemas"]["colonia_riesgo"][];
+            /** @description Reportes históricos del periodo por tipo de incidente, de mayor a menor. */
+            categorias: components["schemas"]["conteo_categoria"][];
         };
     };
     responses: never;
@@ -800,6 +987,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     crearReporte: {
@@ -824,7 +1020,7 @@ export interface operations {
                     "application/json": components["schemas"]["reporte"];
                 };
             };
-            /** @description Datos inválidos */
+            /** @description Datos inválidos, incidente inexistente o coordenada fuera de la zona permitida (REPORTE_POLIGONO) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -844,6 +1040,15 @@ export interface operations {
             };
             /** @description Un ciudadano no puede crear reportes oficiales */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -897,6 +1102,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     listarMisReportes: {
@@ -937,6 +1151,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     obtenerReporte: {
@@ -959,6 +1182,15 @@ export interface operations {
                     "application/json": components["schemas"]["reporte"];
                 };
             };
+            /** @description ID de reporte inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -970,6 +1202,15 @@ export interface operations {
             };
             /** @description Reporte no encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1033,6 +1274,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     agregarAvistamiento: {
@@ -1082,6 +1332,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     crearComentario: {
@@ -1119,6 +1378,24 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Reporte no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1206,6 +1483,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description El servicio de almacenamiento no está disponible; se puede reintentar */
             503: {
                 headers: {
@@ -1286,7 +1572,7 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
-            /** @description Usuario no encontrado */
+            /** @description Error interno del servidor */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1348,6 +1634,113 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    marcarReporteHistorico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reporteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte marcado como histórico */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["reporte"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El usuario es ciudadano */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Reporte no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    desmarcarReporteHistorico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reporteId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reporte de vuelta como activo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["reporte"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El usuario es ciudadano */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Reporte no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     register: {
@@ -1383,6 +1776,15 @@ export interface operations {
             };
             /** @description El email ya está registrado */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1432,6 +1834,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     me: {
@@ -1454,6 +1865,15 @@ export interface operations {
             };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1519,6 +1939,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     verificarRecuperacion: {
@@ -1534,12 +1963,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Contraseña cambiada exitosamente. Sin contenido. */
-            204: {
+            /** @description Código correcto. */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["verify_recovery_response"];
+                };
             };
             /** @description Solicitud inválida o código de verificación incorrecto. */
             400: {
@@ -1552,6 +1983,64 @@ export interface operations {
             };
             /** @description Demasiadas solicitudes. */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    restablecerContrasena: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["reset_password_request"];
+            };
+        };
+        responses: {
+            /** @description Contraseña cambiada exitosamente. Sin contenido. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Solicitud inválida o token inválido o expirado. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Demasiadas solicitudes. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1581,8 +2070,26 @@ export interface operations {
                     "application/json": components["schemas"]["incidente"][];
                 };
             };
+            /** @description Parámetros de consulta inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1650,7 +2157,7 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
-            /** @description Usuario no encontrado */
+            /** @description Error interno del servidor */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1681,6 +2188,15 @@ export interface operations {
                     "application/json": components["schemas"]["incidente"];
                 };
             };
+            /** @description ID de incidente inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -1692,6 +2208,15 @@ export interface operations {
             };
             /** @description Incidente no encontrado */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1770,6 +2295,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     agregarTags: {
@@ -1841,7 +2375,7 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
-            /** @description Usuario no encontrado */
+            /** @description Error interno del servidor */
             500: {
                 headers: {
                     [name: string]: unknown;
@@ -1888,6 +2422,15 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
         };
     };
     listarRoles: {
@@ -1919,6 +2462,15 @@ export interface operations {
             };
             /** @description El usuario no tiene rol de administrador */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2055,6 +2607,15 @@ export interface operations {
                     "application/json": components["schemas"]["tipos_centro"];
                 };
             };
+            /** @description ID de tipo de centro inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -2102,6 +2663,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["centro"][];
+                };
+            };
+            /** @description Parámetros de consulta inválidos */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
                 };
             };
             /** @description No autenticado */
@@ -2204,6 +2774,15 @@ export interface operations {
                     "application/json": components["schemas"]["centro"];
                 };
             };
+            /** @description ID de centro inválido */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description No autenticado */
             401: {
                 headers: {
@@ -2224,6 +2803,113 @@ export interface operations {
             };
             /** @description Error interno del servidor */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    obtenerMapaCalor: {
+        parameters: {
+            query: {
+                min_lat: number;
+                max_lat: number;
+                min_lng: number;
+                max_lng: number;
+                zoom: number;
+                incidente_id?: number[];
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Celdas del mapa de calor */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["mapa_calor"];
+                };
+            };
+            /** @description Datos inválidos (área invertida, desde posterior a hasta o incidente_id fuera de rango) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El rol del usuario no tiene acceso a riesgo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    obtenerResumenRiesgo: {
+        parameters: {
+            query?: {
+                incidente_id?: number[];
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumen de riesgo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["resumen_riesgo"];
+                };
+            };
+            /** @description Datos inválidos (desde posterior a hasta o incidente_id fuera de rango) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El rol del usuario no tiene acceso a riesgo */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

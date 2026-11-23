@@ -64,6 +64,7 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-}
       RECOVERY_SECRET: ${RECOVERY_SECRET}
       MAIL_DRIVER: ${MAIL_DRIVER:-}
+      REPORTE_POLIGONO: ${REPORTE_POLIGONO:-}
     logging:
       driver: json-file
       options:

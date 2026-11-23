@@ -15,7 +15,9 @@ import { useCommonPanel } from '@/panels/useCommonPanel';
 import useModals from '@/panels/useModals';
 import BellButton from '@/features/notificaciones/components/BellButton';
 import IncidentsLayer from './IncidentsLayer';
+import CentrosLayer from '@/features/centros/CentrosLayer';
 import LayersPill from './LayersPill';
+import RiesgoLayer from './RiesgoLayer';
 
 setWorkerUrl(workerUrl);
 
@@ -141,6 +143,8 @@ export default function MapContainer() {
       <ActiveFiltersBadge />
       <LayersPill />
       <IncidentsLayer />
+      <RiesgoLayer />
+      <CentrosLayer />
     </div>
   );
 }

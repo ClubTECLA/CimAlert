@@ -49,6 +49,8 @@ paths:
     $ref: './paths/reportes.yaml#/estadoReporte'
   /reportes/{reporteId}/tags:
     $ref: './paths/reportes.yaml#/tagsReporte'
+  /reportes/{reporteId}/historico:
+    $ref: './paths/reportes.yaml#/historicoReporte'
   /auth/register:
     $ref: './paths/auth.yaml#/register'
   /auth/login:
@@ -61,6 +63,8 @@ paths:
     $ref: './paths/auth.yaml#/recovery'
   /auth/recovery/verify:
     $ref: './paths/auth.yaml#/verifyRecovery'
+  /auth/recovery/reset:
+    $ref: './paths/auth.yaml#/resetPassword'
   /incidentes:
     $ref: './paths/incidentes.yaml#/coleccionIncidentes'
   /incidentes/{incidenteId}:
@@ -79,6 +83,10 @@ paths:
     $ref: './paths/centros.yaml#/coleccionCentros'
   /centro/{centroId}:
     $ref: './paths/centros.yaml#/centrosPorId'
+  /riesgo/mapa-calor:
+    $ref: './paths/riesgo.yaml#/obtenerMapaCalor'
+  /riesgo/resumen:
+    $ref: './paths/riesgo.yaml#/obtenerResumenRiesgo'
 
 components:
   schemas:
@@ -130,6 +138,10 @@ components:
       $ref: './schemas/auth/recovery_request.yaml'
     VerifyRecoveryRequest:
       $ref: './schemas/auth/verify_recovery_request.yaml'
+    VerifyRecoveryResponse:
+      $ref: './schemas/auth/verify_recovery_response.yaml'
+    ResetPasswordRequest:
+      $ref: './schemas/auth/reset_password_request.yaml'
     Incidente:
       $ref: './schemas/incidentes/incidente.yaml'
     CrearIncidenteRequest:
@@ -148,6 +160,20 @@ components:
       $ref: './schemas/centros/centro.yaml'
     CrearCentroRequest:
       $ref: './schemas/centros/crear_centro_request.yaml'
+    NivelRiesgo:
+      $ref: './schemas/riesgo/nivel_riesgo.yaml'
+    CeldaCalor:
+      $ref: './schemas/riesgo/celda_calor.yaml'
+    MapaCalor:
+      $ref: './schemas/riesgo/mapa_calor.yaml'
+    ZonaRiesgo:
+      $ref: './schemas/riesgo/zona_riesgo.yaml'
+    ColoniaRiesgo:
+      $ref: './schemas/riesgo/colonia_riesgo.yaml'
+    ConteoCategoria:
+      $ref: './schemas/riesgo/conteo_categoria.yaml'
+    ResumenRiesgo:
+      $ref: './schemas/riesgo/resumen_riesgo.yaml'
   securitySchemes:
     bearerAuth:
       type: http

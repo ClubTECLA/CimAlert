@@ -15,10 +15,11 @@ type CreatePinTxParams struct {
 	MaxPorHora int64
 }
 
-// ResetPasswordTxParams son los datos para cambiar la contraseña y marcar
-// el PIN como usado en una sola transacción.
+// ResetPasswordTxParams son los datos para cambiar la contraseña y cerrar
+// el token de reset en una sola transacción.
 type ResetPasswordTxParams struct {
-	UserID       uuid.UUID
+	UserID uuid.UUID
+	// PinID es la fila de recovery_pins que guarda el token de reset.
 	PinID        uuid.UUID
 	PasswordHash string
 }
