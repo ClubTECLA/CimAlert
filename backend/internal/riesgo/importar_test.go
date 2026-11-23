@@ -234,6 +234,11 @@ func TestExportarSeVuelveAImportar(t *testing.T) {
 		// zona fija de UTC-8 saldría el 31 de mayo.
 		{Colonia: `=HYPERLINK("http://x","clic")`, Latitude: 32.5149, Longitude: -117.0382,
 			Fecha: time.Date(2026, 6, 1, 7, 30, 0, 0, time.UTC), Categoria: "Inundación", Origen: "dataset", Dataset: "-Lluvias"},
+		// Textos que ya empiezan con ' o con un carácter de fórmula: el CSV
+		// los distingue de la protección y el .xlsx no los toca.
+		{Colonia: "-Norte", Latitude: 32.5149, Longitude: -117.0382, Fecha: tijuana(2020, 1), Categoria: "Socavón", Origen: "reporte"},
+		{Colonia: "'-Norte", Latitude: 32.5149, Longitude: -117.0382, Fecha: tijuana(2020, 1), Categoria: "Socavón", Origen: "reporte"},
+		{Colonia: "'Apóstrofo", Latitude: 32.5149, Longitude: -117.0382, Fecha: tijuana(2020, 1), Categoria: "Socavón", Origen: "reporte"},
 	}
 	want := []FilaDataset{
 		{Fila: 2, IncidenteID: 6, Colonia: ptr("Centro, Playas"), Fecha: time.Date(1998, 2, 1, 0, 0, 0, 0, time.UTC),
@@ -241,6 +246,9 @@ func TestExportarSeVuelveAImportar(t *testing.T) {
 		{Fila: 3, IncidenteID: 2, Fecha: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Latitude: 32.5149, Longitude: -117.0382},
 		{Fila: 4, IncidenteID: 6, Colonia: ptr(`=HYPERLINK("http://x","clic")`), Fecha: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 			Latitude: 32.5149, Longitude: -117.0382},
+		{Fila: 5, IncidenteID: 2, Colonia: ptr("-Norte"), Fecha: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), Latitude: 32.5149, Longitude: -117.0382},
+		{Fila: 6, IncidenteID: 2, Colonia: ptr("'-Norte"), Fecha: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), Latitude: 32.5149, Longitude: -117.0382},
+		{Fila: 7, IncidenteID: 2, Colonia: ptr("'Apóstrofo"), Fecha: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), Latitude: 32.5149, Longitude: -117.0382},
 	}
 
 	for nombre, escribir := range map[string]func([]FilaExportada) ([]byte, error){"csv": EscribirCSV, "xlsx": EscribirXLSX} {
@@ -290,17 +298,18 @@ func TestNombreDataset(t *testing.T) {
 }
 
 func TestEscribirCSV_TextoQueSeriaFormula(t *testing.T) {
-	contenido, err := EscribirCSV([]FilaExportada{{Colonia: "=1+1", Categoria: "@SUMA", Dataset: "+x", Latitude: 32.5, Longitude: -117.05,
+	contenido, err := EscribirCSV([]FilaExportada{{Colonia: "=1+1", Categoria: "@SUMA", Dataset: "'-x", Latitude: 32.5, Longitude: -117.05,
 		Fecha: time.Date(2023, 1, 1, 20, 0, 0, 0, time.UTC), Origen: "dataset"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Las coordenadas negativas no se tocan: son números, no texto.
-	if got := strings.Split(string(contenido), "\n")[1]; got != "'=1+1,32.5,-117.05,2023-01-01,'@SUMA,,,dataset,'+x" {
+	if got := strings.Split(string(contenido), "\n")[1]; got != "'=1+1,32.5,-117.05,2023-01-01,'@SUMA,,,dataset,''-x" {
 		t.Errorf("fila = %q", got)
 	}
 	for _, c := range []struct{ entra, sale string }{
 		{"Centro", "Centro"}, {"'=1+1", "=1+1"}, {"'-Norte", "-Norte"}, {"'Apóstrofo", "'Apóstrofo"}, {"'", "'"},
+		{"''-Norte", "'-Norte"}, {"''", "'"},
 	} {
 		if got := sinProteccion(c.entra); got != c.sale {
 			t.Errorf("sinProteccion(%q) = %q, quería %q", c.entra, got, c.sale)

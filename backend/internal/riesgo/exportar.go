@@ -155,19 +155,22 @@ const inicioDeFormula = "=+-@\t\r"
 
 // textoSeguro antepone ' a un texto que una hoja de cálculo tomaría como
 // fórmula: la colonia sale de la dirección que escribe el ciudadano, y
-// "=HYPERLINK(...)" se ejecutaría al abrir el CSV. Al importar, sinProteccion
-// lo quita. En el .xlsx no hace falta: los textos se guardan como texto.
+// "=HYPERLINK(...)" se ejecutaría al abrir el CSV. También a uno que ya empieza
+// con ', para que al importar se distinga de la protección: -Norte sale como
+// '-Norte, y '-Norte sale con dos apóstrofos. Al importar, sinProteccion quita
+// el primero. En el .xlsx no hace falta: los textos se guardan como texto.
 func textoSeguro(s string) string {
-	if s != "" && strings.ContainsRune(inicioDeFormula, rune(s[0])) {
+	if s != "" && (s[0] == '\'' || strings.ContainsRune(inicioDeFormula, rune(s[0]))) {
 		return "'" + s
 	}
 	return s
 }
 
-// sinProteccion deshace textoSeguro, para que exportar y volver a importar no
-// cambie el texto.
+// sinProteccion deshace textoSeguro, para que exportar y volver a importar un
+// CSV no cambie el texto. Solo quita el ' si le sigue un carácter que
+// textoSeguro protege: un 'Apóstrofo escrito a mano se queda igual.
 func sinProteccion(s string) string {
-	if len(s) >= 2 && s[0] == '\'' && strings.ContainsRune(inicioDeFormula, rune(s[1])) {
+	if len(s) >= 2 && s[0] == '\'' && (s[1] == '\'' || strings.ContainsRune(inicioDeFormula, rune(s[1]))) {
 		return s[1:]
 	}
 	return s

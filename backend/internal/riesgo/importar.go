@@ -177,6 +177,13 @@ func LeerDataset(contenido []byte, catalogo []Categoria, zona Zona, ahora time.T
 			}
 			return strings.TrimSpace(fc.celdas[i])
 		}
+		// Un texto del CSV puede traer el ' de textoSeguro; el .xlsx no lo lleva.
+		texto := func(col string) string {
+			if t.esXLSX {
+				return celda(col)
+			}
+			return sinProteccion(celda(col))
+		}
 		if filaVacia(t, fc) {
 			continue
 		}
@@ -187,7 +194,7 @@ func LeerDataset(contenido []byte, catalogo []Categoria, zona Zona, ahora time.T
 		f := FilaDataset{Fila: fc.num}
 		antes := total
 
-		if v := sinProteccion(celda(ColColonia)); v != "" {
+		if v := texto(ColColonia); v != "" {
 			if utf8.RuneCountInString(v) > maxColoniaRunas {
 				agregar(ErrorFila{fc.num, ColColonia, fmt.Sprintf("la colonia tiene más de %d caracteres", maxColoniaRunas)})
 			} else {
@@ -220,7 +227,7 @@ func LeerDataset(contenido []byte, catalogo []Categoria, zona Zona, ahora time.T
 			f.Fecha = fecha
 		}
 
-		switch v := sinProteccion(celda(ColCategoria)); {
+		switch v := texto(ColCategoria); {
 		case v == "":
 			agregar(ErrorFila{fc.num, ColCategoria, "falta la categoría"})
 		default:
