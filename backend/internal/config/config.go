@@ -74,6 +74,9 @@ type Config struct {
 	LogLevel  string
 	LogFormat string
 
+	// DocsEnabled publica /v1/docs y /v1/openapi.json. Apagado por defecto.
+	DocsEnabled bool
+
 	RecoverySecret string
 	MailDriver     string
 
@@ -122,6 +125,13 @@ func Load() (Config, error) {
 	}
 	if err := validarRecuperacion(cfg.RecoverySecret, cfg.MailDriver); err != nil {
 		return Config{}, err
+	}
+
+	if raw := os.Getenv("DOCS_ENABLED"); raw != "" {
+		cfg.DocsEnabled, err = strconv.ParseBool(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DOCS_ENABLED: %w", err)
+		}
 	}
 
 	cfg.JWTTTL = defaultJWTTTL

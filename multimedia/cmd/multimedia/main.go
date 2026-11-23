@@ -6,6 +6,7 @@ import (
 	"github.com/ClubTECLA/cimalert/multimedia/internal/almacenamiento"
 	"github.com/ClubTECLA/cimalert/multimedia/internal/api"
 	"github.com/ClubTECLA/cimalert/multimedia/internal/config"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -19,6 +20,8 @@ func main() {
 		log.Fatalf("Failed to open uploads directory: %v", err)
 	}
 	defer almacen.Cerrar()
+
+	gin.SetMode(gin.ReleaseMode) // sin el modo debug de gin
 
 	r := api.NewRouter(api.Opciones{
 		MaxArchivoBytes: cfg.MaxArchivoBytes,

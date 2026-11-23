@@ -307,7 +307,7 @@ Las rutas del backend se registran **sin** el prefijo `/api` (por ejemplo `/v1/r
 
 ## Documentación de la API
 
-El backend sirve la documentación interactiva (Swagger UI) de todas las rutas en `/v1/docs`, generada a partir de `shared/openapi`:
+El backend sirve la documentación interactiva (Swagger UI) de todas las rutas en `/v1/docs`, generada a partir de `shared/openapi`. Solo se publica con `DOCS_ENABLED=true` en el `.env` (el `.env.example` ya lo trae); con el valor por defecto (`false`) ni `/v1/docs` ni `/v1/openapi.json` existen, y es lo que debe quedar en producción:
 
 - Con Docker: [http://localhost/api/v1/docs](http://localhost/api/v1/docs)
 - Backend directo: `http://localhost:<puerto>/v1/docs`

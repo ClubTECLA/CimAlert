@@ -65,6 +65,18 @@ services:
       RECOVERY_SECRET: ${RECOVERY_SECRET}
       MAIL_DRIVER: ${MAIL_DRIVER:-}
       REPORTE_POLIGONO: ${REPORTE_POLIGONO:-}
+      # /v1/docs y /v1/openapi.json solo se publican si es "true" (en local).
+      DOCS_ENABLED: ${DOCS_ENABLED:-false}
+    # Tope de memoria: si se pasa, Docker reinicia el contenedor en vez de
+    # dejar que afecte al resto del servidor. Cada subida pasa por memoria varias
+    # veces (unos 50 MB), y en temporada de lluvias habrá muchas a la vez: no lo
+    # bajes sin medir con `docker stats`, porque un reinicio pierde las subidas en curso.
+    mem_limit: ${BACKEND_MEM_LIMIT:-8g}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${API_PORT:-8080}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     logging:
       driver: json-file
       options:
@@ -90,6 +102,12 @@ services:
       # Aquí se aparta lo que no cumple las reglas. nginx no lo monta, así que
       # nada de esto se sirve al público.
       - cuarentena:/data/cuarentena
+    mem_limit: ${MULTIMEDIA_MEM_LIMIT:-4g}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${MULTIMEDIA_PORT:-8081}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     expose: ["8081"]
 
   frontend-web:
