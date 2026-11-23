@@ -9,7 +9,7 @@ import { PrimaryButton } from '@/components/auth/PrimaryButton';
 import { GoogleButton } from '@/components/auth/GoogleButton';
 import { TermsCheckbox } from '@/components/auth/TermsCheckbox';
 import { useGoogleSignIn } from '@/hooks/useGoogleSignIn';
-import { iniciarSesionYEntrar } from '@/features/sesion/entrar';
+import { iniciarSesionYEntrar, nuevoIntentoDeSesion } from '@/features/sesion/entrar';
 import { mensajeErrorAuth, sesionApi } from '@/features/sesion/api';
 import { esCorreoValido, PASSWORD_MIN } from '@/lib/correo';
 import { puedeSimularSesion } from '@/lib/session';
@@ -59,12 +59,13 @@ export default function AuthScreen() {
   /** Pide el token al backend y entra al mapa; si falla, avisa y deja el formulario como estaba. */
   const autenticar = async (accion: 'login' | 'registro') => {
     setEnviando(true);
+    const intento = nuevoIntentoDeSesion();
     try {
       const { access_token } =
         accion === 'login'
           ? await sesionApi.login(email.trim(), password)
           : await sesionApi.register(email.trim(), username.trim(), password);
-      iniciarSesionYEntrar(access_token);
+      iniciarSesionYEntrar(access_token, intento);
     } catch (error) {
       Alert.alert(
         accion === 'login' ? 'No se pudo iniciar sesión' : 'No se pudo crear la cuenta',

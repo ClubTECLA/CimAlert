@@ -59,8 +59,15 @@ describe('aplicarTexto', () => {
     expect(aplicarTexto(lleno, 0, '4482234', 1).digitos).toEqual(['4', '8', '2', '2', '3', '4']);
   });
 
+  it('la secuencia real de iOS: cursor movido al inicio de una casilla llena y luego pegar el código', () => {
+    // CodeRabbit (PR #122): la casilla tiene "4", el usuario pone el cursor al inicio (la casilla reporta 0)
+    // y pega "482234". Como ya no se fuerza el cursor, el 0 reportado es el real y llega "4822344".
+    // Antes, React Native lo devolvía a 1 sin avisar y se perdía el último dígito ("448223").
+    expect(aplicarTexto(['4', '', '', '', '', ''], 0, '4822344', 0).digitos).toEqual(['4', '8', '2', '2', '3', '4']);
+  });
+
   it('el código pegado puede empezar con el mismo dígito que ya estaba', () => {
-    // Casilla con "4" y se pega "482234" (cursor después, como lo fija OtpInput) -> "4482234".
+    // Casilla con "4" y se pega "482234" (cursor después del dígito, la posición más común) -> "4482234".
     const lleno = ['4', '', '', '', '', ''];
     expect(aplicarTexto(lleno, 0, '4482234').digitos).toEqual(['4', '8', '2', '2', '3', '4']);
   });

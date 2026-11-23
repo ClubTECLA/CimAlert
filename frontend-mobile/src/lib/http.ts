@@ -51,9 +51,17 @@ export async function fetchConRed(
 export async function http<T>(
   path: string,
   init: RequestInit = {},
-  { tiempoLimiteMs }: { tiempoLimiteMs?: number } = {},
+  {
+    tiempoLimiteMs,
+    auth = true,
+  }: {
+    tiempoLimiteMs?: number;
+    /** `false` en las rutas públicas (login, registro, recuperación): no se manda el token de la sesión,
+     * así que su 401 (p. ej. contraseña incorrecta) nunca se confunde con una sesión vencida. */
+    auth?: boolean;
+  } = {},
 ): Promise<T> {
-  const token = useSessionStore.getState().token;
+  const token = auth ? useSessionStore.getState().token : null;
   // Con un formulario (subir una foto) `fetch` fija el Content-Type con su boundary; forzar JSON lo rompería.
   const esFormulario = init.body instanceof FormData;
 
@@ -77,7 +85,8 @@ export async function http<T>(
     // Con sesión, un 401 significa que el token ya no sirve (venció a las 24 h o se cambió la
     // contraseña): se cierra la sesión en el teléfono en vez de seguir fallando en cada pantalla.
     // Solo si el rechazado fue el token de la sesión: expirarSesion además ignora uno que ya no es el actual.
-    if (response.status === 401 && tokenEnviado) useSessionStore.getState().expirarSesion(tokenEnviado);
+    // Nunca en una ruta pública (`auth: false`): ahí un 401 es de credenciales, no de la sesión.
+    if (response.status === 401 && auth && tokenEnviado) useSessionStore.getState().expirarSesion(tokenEnviado);
     const body = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new ApiError(response.status, body?.message ?? `HTTP ${response.status}`);
   }

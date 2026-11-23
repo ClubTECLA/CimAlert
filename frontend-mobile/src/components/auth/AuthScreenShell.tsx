@@ -40,6 +40,8 @@ export function AuthScreenShell({ title, children, showBackButton = true }: Prop
   const [alturaTeclado, setAlturaTeclado] = useState(0);
 
   const mostrarCampoEnfocado = useCallback(() => {
+    // En web el navegador ya lleva el campo a la vista, y react-native-web no tiene currentlyFocusedInput().
+    if (Platform.OS === 'web') return;
     // Espera un momento: el teclado puede seguir abriéndose y el espacio de abajo, acomodándose.
     setTimeout(() => {
       const campo = TextInput.State.currentlyFocusedInput();

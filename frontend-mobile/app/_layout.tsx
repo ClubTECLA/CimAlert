@@ -49,12 +49,13 @@ export default function RootLayout() {
     () =>
       useSessionStore.subscribe((estado, anterior) => {
         if (estado.token === anterior.token) return;
-        if (estado.token === null) {
-          // Sin esto, el siguiente usuario vería un instante el perfil y los reportes del anterior.
-          queryClient.removeQueries({ queryKey: perfilKeys.me });
-          queryClient.removeQueries({ queryKey: perfilKeys.misReportes });
-        }
-        void queryClient.invalidateQueries();
+        // Los datos de la cuenta (perfil, mis reportes) se borran en cualquier cambio de token: al cerrar
+        // sesión y también al pasar de una cuenta a otra, para que la nueva no vea los del anterior.
+        queryClient.removeQueries({ queryKey: perfilKeys.me });
+        queryClient.removeQueries({ queryKey: perfilKeys.misReportes });
+        // Una petición que seguía en curso salió con el token anterior (o sin token, como invitado), y
+        // `invalidateQueries` no cancela la primera carga de una consulta: se cancela antes de volver a pedir.
+        void queryClient.cancelQueries().then(() => queryClient.invalidateQueries());
       }),
     [],
   );

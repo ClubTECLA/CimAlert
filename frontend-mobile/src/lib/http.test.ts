@@ -88,6 +88,24 @@ describe('http', () => {
       expect(expirarSesion).not.toHaveBeenCalledWith('tok-123');
     });
 
+    it('una ruta pública (auth: false) no manda el token y su 401 no cierra la sesión', async () => {
+      // Alguien con sesión abierta se equivoca de contraseña en el login: 401 por credenciales.
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'credenciales invalidas' }, 401));
+
+      await expect(http('/auth/login', { method: 'POST' }, { auth: false })).rejects.toMatchObject({ status: 401 });
+      expect(cabecerasDe(fetchMock).Authorization).toBeUndefined();
+      expect(expirarSesion).not.toHaveBeenCalled();
+    });
+
+    it('en una ruta pública, ni un Authorization puesto a mano hace que el 401 cierre la sesión', async () => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'credenciales invalidas' }, 401));
+
+      await expect(
+        http('/auth/login', { method: 'POST', headers: { Authorization: 'Bearer tok-123' } }, { auth: false }),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(expirarSesion).not.toHaveBeenCalled();
+    });
+
     it('otros errores (403, 500) no tocan la sesión', async () => {
       fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'prohibido' }, 403));
       await expect(http('/reportes')).rejects.toMatchObject({ status: 403 });

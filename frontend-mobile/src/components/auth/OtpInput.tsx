@@ -17,7 +17,9 @@ type Props = {
 
 export function OtpInput({ value, onChange }: Props) {
   const inputs = useRef<Array<TextInput | null>>([]);
-  // Dónde está el cursor en cada casilla: aplicarTexto lo usa para saber qué dígito es el anterior.
+  // Dónde está el cursor en cada casilla, según la propia casilla: aplicarTexto lo usa para saber de qué
+  // lado quedó el dígito anterior. No se fija el cursor con `selection`: en iOS, cuando React Native lo
+  // corrige a la fuerza no avisa, y la posición guardada quedaría distinta a la real.
   const cursores = useRef<number[]>([]);
   const alEnfocar = useAlEnfocar();
   const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '');
@@ -53,9 +55,6 @@ export function OtpInput({ value, onChange }: Props) {
           keyboardType="number-pad"
           // Sin maxLength: una casilla llena tiene que aceptar el dígito nuevo para reemplazarlo, y
           // pegar el código completo tiene que llegar entero (lo resuelve aplicarTexto).
-          // Cursor siempre después del dígito: así lo nuevo llega detrás del dígito anterior y
-          // aplicarTexto sabe cuál quitar, también al pegar el código en una casilla llena.
-          selection={{ start: digit.length, end: digit.length }}
           textContentType="oneTimeCode"
           autoComplete="sms-otp"
           textAlign="center"

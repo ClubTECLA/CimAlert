@@ -8,25 +8,31 @@ export interface AuthResponseApi {
   user: { id: string; email: string; username: string };
 }
 
+// Todas son rutas públicas (security: [] en el contrato): van sin el token de la sesión (`auth: false`).
+// Así, si alguien con sesión abierta se equivoca de contraseña, el 401 no le cierra la sesión.
+const publica = { auth: false } as const;
+
 export const sesionApi = {
   login: (email: string, password: string) =>
-    http<AuthResponseApi>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    http<AuthResponseApi>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }, publica),
   register: (email: string, username: string, password: string) =>
-    http<AuthResponseApi>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify({ email, username, password }),
-    }),
-  // El backend no guarda el token (security: [] en el contrato): solo responde 204.
-  logout: () => http<void>('/auth/logout', { method: 'POST' }),
+    http<AuthResponseApi>(
+      '/auth/register',
+      { method: 'POST', body: JSON.stringify({ email, username, password }) },
+      publica,
+    ),
+  // El backend no guarda el token: solo responde 204.
+  logout: () => http<void>('/auth/logout', { method: 'POST' }, publica),
   /** Manda un PIN de 6 dígitos al correo. Responde 202 exista o no la cuenta, para no revelar cuáles existen. */
   solicitarRecuperacion: (email: string) =>
-    http<void>('/auth/recovery', { method: 'POST', body: JSON.stringify({ email }) }),
+    http<void>('/auth/recovery', { method: 'POST', body: JSON.stringify({ email }) }, publica),
   /** Valida el PIN y cambia la contraseña en una sola llamada (204). No devuelve token: hay que iniciar sesión. */
   verificarRecuperacion: (email: string, pin: string, newPassword: string) =>
-    http<void>('/auth/recovery/verify', {
-      method: 'POST',
-      body: JSON.stringify({ email, pin, new_password: newPassword }),
-    }),
+    http<void>(
+      '/auth/recovery/verify',
+      { method: 'POST', body: JSON.stringify({ email, pin, new_password: newPassword }) },
+      publica,
+    ),
 };
 
 /** Lo que vence y cuánto se puede intentar (backend/internal/usuario/recovery.go). */

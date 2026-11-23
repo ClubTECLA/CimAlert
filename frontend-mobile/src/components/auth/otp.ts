@@ -3,9 +3,9 @@ export const OTP_LENGTH = 6;
 
 /**
  * Lo que se escribió o pegó en la casilla, sin el dígito que ya tenía. `cursor` es dónde estaba el
- * cursor antes de escribir: después del dígito (lo normal, OtpInput lo fija ahí) llega "dígito
- * anterior + lo nuevo" ("04", "0482234"); antes del dígito (0) llega al revés ("40", "4822340").
- * Usar la posición evita adivinar cuando el código pegado empieza y termina con ese mismo dígito.
+ * cursor antes de escribir, según la casilla: después del dígito llega "dígito anterior + lo nuevo"
+ * ("04", "0482234"); antes del dígito (0) llega al revés ("40", "4822340"). Usar la posición evita
+ * adivinar cuando el código pegado empieza y termina con ese mismo dígito.
  */
 function sinDigitoAnterior(limpio: string, anterior: string, cursor: number): string {
   if (!anterior || limpio.length <= anterior.length) return limpio;
