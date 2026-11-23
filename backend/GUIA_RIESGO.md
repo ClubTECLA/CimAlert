@@ -269,7 +269,9 @@ ninguna. Si un archivo trae una categoría nueva (como "Otro"), esa fila se rech
 se quiere usar, un admin la crea con `POST /incidentes` y el importador la reconoce sola.
 
 **Límites:** el body es de 1 MiB (el límite general de la API: ningún cambio en nginx ni
-en el router), hasta 50 000 filas, y un `.xlsx` puede ocupar hasta 64 MiB descomprimido.
+en el router). Es la petición completa, no solo el archivo: el multipart suma sus
+encabezados y separadores, así que un archivo de casi 1 MiB recibe `413` y conviene dejar
+unos KB de margen. Además, hasta 50 000 filas, y un `.xlsx` puede ocupar hasta 64 MiB descomprimido.
 El archivo real de 72 filas pesa 53 KB.
 
 Importar y borrar quedan en el `historial` (`riesgo.importar_dataset`,
@@ -305,10 +307,11 @@ esas dos columnas se ignoran al importar.
 **Volver a importar lo exportado:**
 
 - Sigue los mismos límites que cualquier importación: 50,000 filas y 1 MiB por
-  archivo. Una exportación más grande se parte por periodo o por categoría. Si con esos
-  filtros no se cumple alguno de los dos límites (por ejemplo, las filas de un mismo mes
-  y categoría pasan de 50,000 o pesan más de 1 MiB), se parte el archivo por renglones:
-  cada parte conserva la fila de encabezado y queda dentro de ambos límites.
+  petición (el archivo, con unos KB de margen para el multipart). Una exportación más
+  grande se parte por periodo o por categoría. Si con esos filtros no se cumple alguno
+  de los dos límites (por ejemplo, las filas de un mismo mes y categoría pasan de
+  50,000 o se acercan a 1 MiB), se parte el archivo por renglones: cada parte conserva
+  la fila de encabezado y queda dentro de ambos límites, con el mismo margen.
 - La categoría sale con su etiqueta. Si dos categorías del catálogo comparten etiqueta
   (o el nombre de una es la etiqueta de otra), la importación rechaza esas filas por
   ambiguas. Antes de reimportar, se corrige el catálogo o se cambia la columna
@@ -321,7 +324,9 @@ esas dos columnas se ignoran al importar.
   1. La exportación trae todas las fuentes (reportes y todos los datasets) y no se
      puede filtrar por dataset: en la hoja de cálculo se dejan solo las filas cuya
      columna Dataset es la del dataset que se reemplaza. Si no, los reportes y los
-     demás datasets quedan duplicados.
+     demás datasets quedan duplicados. El nombre de un dataset no es único: si otro
+     dataset tiene el mismo nombre, la columna Dataset no los distingue y este
+     procedimiento no sirve, porque las filas del otro también quedarían duplicadas.
   2. Se importa ese archivo y se comprueba que funcionó (responde `201` y el dataset
      aparece en la lista con las filas esperadas).
   3. Después se borra el dataset original. Así, si la importación falla, el original
