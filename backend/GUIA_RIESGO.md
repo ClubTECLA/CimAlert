@@ -250,9 +250,9 @@ conteo con fórmulas a un lado se importa igual).
 |---|---|---|
 | Latitud, Longitud | Sí | Número (punto o coma decimal), -90 a 90 y -180 a 180. El punto debe caer dentro de la zona permitida, la misma que para crear reportes (`REPORTE_POLIGONO`, por defecto Baja California); si no, el error va con la columna vacía, porque el problema es la pareja (suele ser la longitud sin el signo menos o un punto de otro estado) |
 | Mes/año del Incidente (o Fecha) | Sí | Fecha de Excel, `AAAA-MM`, `AAAA-MM-DD`, `MM/AAAA` o `DD/MM/AAAA`; desde 1900 y no posterior al mes actual. Solo se guarda el mes |
-| Categoria | Sí | Una categoría del catálogo, por nombre o etiqueta ("Inundación", "inundacion", "INUNDACION"). "Derrumbe" cuenta como deslave |
+| Categoria | Sí | Una categoría del catálogo, por nombre o etiqueta ("Inundación", "inundacion", "INUNDACION"). "Derrumbe" cuenta como deslave. Si el texto coincide con dos categorías (la etiqueta no es única en la base), la fila se rechaza |
 | Colonia | No | Texto, hasta 200 caracteres; vacía = sin colonia |
-| Personas afectadas (total), Fallecidos | No | Entero de 0 o más; vacío = sin dato |
+| Personas afectadas (total), Fallecidos | No | Entero de 0 a 1,000,000; 0 es un dato y vacío = sin dato |
 
 - **.xlsx:** se lee la primera hoja que tenga los encabezados.
 - **.csv:** separador coma, punto y coma o tabulador (el que más aparezca en el
@@ -285,12 +285,26 @@ fecha, con las columnas del formato de importación más **Origen** (`reporte` o
 esas dos columnas se ignoran al importar.
 
 - La categoría va con su etiqueta del catálogo.
-- **CSV:** UTF-8 con BOM (para que Excel respete los acentos), fecha `AAAA-MM-DD`.
+- **CSV:** UTF-8 con BOM (para que Excel respete los acentos), fecha `AAAA-MM-DD`. Un
+  texto que empieza con `=`, `+`, `-` o `@` sale con `'` adelante, para que Excel no
+  lo tome como fórmula (la colonia sale de la dirección que escribe el ciudadano). Al
+  importar se quita, así que el texto vuelve igual.
 - **XLSX:** hoja "Formato para importación", fecha como fecha de Excel (`mm/aaaa`).
   Excel guarda 15 dígitos significativos, así que las coordenadas pierden menos de un
   micrómetro.
 - Nombre del archivo: `riesgo-historico-AAAA-MM-DD.csv` (o `.xlsx`), en
   `Content-Disposition`.
+- La fecha va en hora de Tijuana con su horario de verano (la base de zonas horarias va
+  embebida en el binario, porque la imagen de Alpine no la trae).
+
+**Volver a importar lo exportado:**
+
+- Sigue los mismos límites que cualquier importación: 50,000 filas y 1 MiB por
+  archivo. Una exportación más grande se parte por periodo o por categoría.
+- Se **suma** a lo que ya hay: si los datasets originales siguen cargados, sus filas
+  quedan duplicadas. El sha256 compara archivos, no incidentes, y Origen y Dataset no
+  identifican a un incidente ni reemplazan nada. Para reemplazar, primero se borra el
+  dataset original.
 
 ## Quién lo ve
 

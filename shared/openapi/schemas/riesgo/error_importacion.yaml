@@ -1,7 +1,8 @@
 type: object
 description: >-
-  El archivo tiene filas inválidas y no se importó nada. Se devuelven las primeras 100; total_errores dice cuántas
-  hay en todo el archivo.
+  El archivo tiene filas inválidas y no se importó nada. errores trae los primeros 100 errores y total_errores
+  cuenta todos los errores del archivo, no las filas: una fila inválida puede tener varios (por ejemplo, fecha y
+  categoría).
 required: [message, total_errores, errores]
 properties:
   message:

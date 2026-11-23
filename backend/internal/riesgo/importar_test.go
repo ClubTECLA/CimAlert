@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -228,11 +229,18 @@ func TestExportarSeVuelveAImportar(t *testing.T) {
 			Categoria: "Inundación", PersonasAfectadas: ptr(21), Origen: "dataset", Dataset: "Lluvias"},
 		{Colonia: "", Latitude: 32.5149, Longitude: -117.0382, Fecha: time.Date(2026, 3, 15, 23, 30, 0, 0, time.UTC),
 			Categoria: "Socavón", Origen: "reporte"},
+		// Una dirección que Excel tomaría como fórmula, y un reporte de las
+		// 00:30 del 1 de junio en Tijuana (horario de verano, UTC-7): con una
+		// zona fija de UTC-8 saldría el 31 de mayo.
+		{Colonia: `=HYPERLINK("http://x","clic")`, Latitude: 32.5149, Longitude: -117.0382,
+			Fecha: time.Date(2026, 6, 1, 7, 30, 0, 0, time.UTC), Categoria: "Inundación", Origen: "dataset", Dataset: "-Lluvias"},
 	}
 	want := []FilaDataset{
 		{Fila: 2, IncidenteID: 6, Colonia: ptr("Centro, Playas"), Fecha: time.Date(1998, 2, 1, 0, 0, 0, 0, time.UTC),
 			Latitude: 32.3465962005551, Longitude: -117.06138074398, PersonasAfectadas: ptr(21)},
 		{Fila: 3, IncidenteID: 2, Fecha: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC), Latitude: 32.5149, Longitude: -117.0382},
+		{Fila: 4, IncidenteID: 6, Colonia: ptr(`=HYPERLINK("http://x","clic")`), Fecha: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
+			Latitude: 32.5149, Longitude: -117.0382},
 	}
 
 	for nombre, escribir := range map[string]func([]FilaExportada) ([]byte, error){"csv": EscribirCSV, "xlsx": EscribirXLSX} {
@@ -278,5 +286,78 @@ func TestNombreDataset(t *testing.T) {
 	}
 	if got := NombreDataset(strings.Repeat("ñ", 250), ""); len([]rune(got)) != 200 {
 		t.Errorf("largo: %d runas", len([]rune(got)))
+	}
+}
+
+func TestEscribirCSV_TextoQueSeriaFormula(t *testing.T) {
+	contenido, err := EscribirCSV([]FilaExportada{{Colonia: "=1+1", Categoria: "@SUMA", Dataset: "+x", Latitude: 32.5, Longitude: -117.05,
+		Fecha: time.Date(2023, 1, 1, 20, 0, 0, 0, time.UTC), Origen: "dataset"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Las coordenadas negativas no se tocan: son números, no texto.
+	if got := strings.Split(string(contenido), "\n")[1]; got != "'=1+1,32.5,-117.05,2023-01-01,'@SUMA,,,dataset,'+x" {
+		t.Errorf("fila = %q", got)
+	}
+	for _, c := range []struct{ entra, sale string }{
+		{"Centro", "Centro"}, {"'=1+1", "=1+1"}, {"'-Norte", "-Norte"}, {"'Apóstrofo", "'Apóstrofo"}, {"'", "'"},
+	} {
+		if got := sinProteccion(c.entra); got != c.sale {
+			t.Errorf("sinProteccion(%q) = %q, quería %q", c.entra, got, c.sale)
+		}
+	}
+}
+
+func TestLeerDataset_CSVWindows1252(t *testing.T) {
+	// 0x93 y 0x94 son “ ” en Windows-1252; en Latin-1 serían caracteres de control.
+	contenido := []byte("Colonia,Latitud,Longitud,Mes/a\xf1o del Incidente,Categoria\n" +
+		"\x93El Mirador\x94,32.3466,-117.0614,02/1998,Inundaci\xf3n\n")
+	filas, err := LeerDataset(contenido, catalogoPrueba, zonaPrueba, ahoraPrueba)
+	if err != nil {
+		t.Fatalf("LeerDataset: %v", err)
+	}
+	if len(filas) != 1 || filas[0].Colonia == nil || *filas[0].Colonia != "“El Mirador”" {
+		t.Errorf("filas = %+v", filas)
+	}
+}
+
+func TestLeerDataset_XLSXConFechas1904(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	fecha1904 := true
+	if err := f.SetWorkbookProps(&excelize.WorkbookPropsOptions{Date1904: &fecha1904}); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.SetSheetRow("Sheet1", "A1", &[]any{"Latitud", "Longitud", "Mes/año del Incidente", "Categoria"})
+	// 43497 en el sistema 1904 es el 2 de febrero de 2023 (en el de 1900 sería 2019).
+	_ = f.SetSheetRow("Sheet1", "A2", &[]any{32.37, -117.05, 43497, "Inundación"})
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	filas, err := LeerDataset(buf.Bytes(), catalogoPrueba, zonaPrueba, ahoraPrueba)
+	if err != nil {
+		t.Fatalf("LeerDataset: %v", err)
+	}
+	if want := time.Date(2023, 2, 1, 0, 0, 0, 0, time.UTC); len(filas) != 1 || !filas[0].Fecha.Equal(want) {
+		t.Errorf("filas = %+v, quería la fecha %v", filas, want)
+	}
+}
+
+func TestLeerDataset_CategoriaAmbigua(t *testing.T) {
+	// Dos categorías con la misma etiqueta: por la etiqueta no se sabe cuál es,
+	// pero por su nombre (único en la base) sí.
+	catalogo := append(slices.Clone(catalogoPrueba), Categoria{8, "inundacion_pluvial", "Inundación"})
+	contenido := []byte("Latitud,Longitud,Mes/año del Incidente,Categoria\n" +
+		"32.37,-117.05,2023-02,Inundación\n" +
+		"32.37,-117.05,2023-02,inundacion_pluvial\n")
+	_, err := LeerDataset(contenido, catalogo, zonaPrueba, ahoraPrueba)
+	var inv *FilasInvalidasError
+	if !errors.As(err, &inv) {
+		t.Fatalf("err = %v, quería *FilasInvalidasError", err)
+	}
+	want := []ErrorFila{{2, ColCategoria, `la categoría "Inundación" coincide con más de una categoría del catálogo`}}
+	if !reflect.DeepEqual(inv.Errores, want) {
+		t.Errorf("errores = %+v\nquería %+v", inv.Errores, want)
 	}
 }

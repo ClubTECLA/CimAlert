@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"encoding/csv"
 	"strconv"
+	"strings"
 	"time"
+	// La imagen de Alpine no trae la base de zonas horarias: se embebe para
+	// que America/Tijuana tenga su horario de verano.
+	_ "time/tzdata"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -28,15 +32,15 @@ var columnasExportadas = []string{
 	ColColonia, ColLatitud, ColLongitud, ColFecha, ColCategoria, ColPersonas, ColFallecidos, ColOrigen, ColDataset,
 }
 
-// zonaTijuana para escribir la fecha del incidente en hora local (el día 1 del
-// mes de un dataset se guarda a mediodía en Tijuana). La imagen de Alpine no
-// trae la base de zonas horarias: sin ella se usa UTC-8, que solo mueve la hora
-// y no cambia el día de un mediodía.
+// zonaTijuana para escribir la fecha del incidente en hora local. Con una
+// zona fija de UTC-8, un reporte de las 00:30 en horario de verano saldría con
+// el día anterior.
 var zonaTijuana = func() *time.Location {
-	if loc, err := time.LoadLocation("America/Tijuana"); err == nil {
-		return loc
+	loc, err := time.LoadLocation("America/Tijuana")
+	if err != nil {
+		panic(err) // no pasa: time/tzdata va embebido
 	}
-	return time.FixedZone("PST", -8*60*60)
+	return loc
 }()
 
 // FilaExportada es un incidente histórico de cualquiera de las dos fuentes.
@@ -60,7 +64,7 @@ type Archivo struct {
 }
 
 // EscribirCSV en UTF-8 con BOM, para que Excel respete los acentos al abrirlo.
-// La fecha va como AAAA-MM-DD.
+// La fecha va como AAAA-MM-DD. Los textos pasan por textoSeguro.
 func EscribirCSV(filas []FilaExportada) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteString("\xEF\xBB\xBF")
@@ -70,15 +74,15 @@ func EscribirCSV(filas []FilaExportada) ([]byte, error) {
 	}
 	for _, f := range filas {
 		if err := w.Write([]string{
-			f.Colonia,
+			textoSeguro(f.Colonia),
 			strconv.FormatFloat(f.Latitude, 'f', -1, 64),
 			strconv.FormatFloat(f.Longitude, 'f', -1, 64),
 			f.Fecha.In(zonaTijuana).Format("2006-01-02"),
-			f.Categoria,
+			textoSeguro(f.Categoria),
 			conteoTexto(f.PersonasAfectadas),
 			conteoTexto(f.Fallecidos),
 			f.Origen,
-			f.Dataset,
+			textoSeguro(f.Dataset),
 		}); err != nil {
 			return nil, err
 		}
@@ -143,6 +147,30 @@ func EscribirXLSX(filas []FilaExportada) ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+// inicioDeFormula son los caracteres con los que una hoja de cálculo toma una
+// celda de CSV como fórmula.
+const inicioDeFormula = "=+-@\t\r"
+
+// textoSeguro antepone ' a un texto que una hoja de cálculo tomaría como
+// fórmula: la colonia sale de la dirección que escribe el ciudadano, y
+// "=HYPERLINK(...)" se ejecutaría al abrir el CSV. Al importar, sinProteccion
+// lo quita. En el .xlsx no hace falta: los textos se guardan como texto.
+func textoSeguro(s string) string {
+	if s != "" && strings.ContainsRune(inicioDeFormula, rune(s[0])) {
+		return "'" + s
+	}
+	return s
+}
+
+// sinProteccion deshace textoSeguro, para que exportar y volver a importar no
+// cambie el texto.
+func sinProteccion(s string) string {
+	if len(s) >= 2 && s[0] == '\'' && strings.ContainsRune(inicioDeFormula, rune(s[1])) {
+		return s[1:]
+	}
+	return s
 }
 
 func conteoTexto(n *int) string {

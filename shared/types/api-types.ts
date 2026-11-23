@@ -538,7 +538,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** @description Descarga los incidentes históricos (reportes marcados como históricos y filas de los datasets) con el mismo filtro que el resumen. Las columnas son las del formato de importación más Origen (reporte o dataset) y Dataset, así que el archivo se puede volver a importar (las dos últimas se ignoran al importar). El CSV va en UTF-8 con BOM para que Excel respete los acentos. Solo lectura: no registra nada en el historial. */
+        /** @description Descarga los incidentes históricos (reportes marcados como históricos y filas de los datasets) con el mismo filtro que el resumen. Las columnas son las del formato de importación más Origen (reporte o dataset) y Dataset, así que el archivo se puede volver a importar (las dos últimas se ignoran al importar). El CSV va en UTF-8 con BOM para que Excel respete los acentos, y un texto que empieza con =, +, - o @ lleva ' adelante para que no se tome como fórmula (al importar se quita). Volver a importarlo sigue los límites de la importación (50,000 filas y 1 MiB; una exportación más grande se parte por periodo o categoría) y se suma a lo que ya hay: si los datasets originales siguen cargados, sus filas quedan duplicadas. Solo lectura: no registra nada en el historial. */
         get: operations["exportarRiesgo"];
         put?: never;
         post?: never;
@@ -1039,7 +1039,7 @@ export interface components {
             /** @example falta la fecha */
             mensaje: string;
         };
-        /** @description El archivo tiene filas inválidas y no se importó nada. Se devuelven las primeras 100; total_errores dice cuántas hay en todo el archivo. */
+        /** @description El archivo tiene filas inválidas y no se importó nada. errores trae los primeros 100 errores y total_errores cuenta todos los errores del archivo, no las filas: una fila inválida puede tener varios (por ejemplo, fecha y categoría). */
         error_importacion: {
             message: string;
             total_errores: number;
@@ -3160,6 +3160,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description ID de dataset inválido (no es un UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
             };
             /** @description No autenticado */
             401: {

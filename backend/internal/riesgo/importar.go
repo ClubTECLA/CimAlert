@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -129,8 +130,11 @@ type filaCruda struct {
 type tabla struct {
 	columnas map[string]int // columna del formato → índice
 	filas    []filaCruda
-	// En un .xlsx una fecha llega como número de serie de Excel.
-	esXLSX bool
+	// En un .xlsx una fecha llega como número de serie de Excel, contado
+	// desde 1900 o, en libros con el sistema de fechas 1904 (Excel de Mac
+	// antiguo), desde 1904.
+	esXLSX    bool
+	fecha1904 bool
 }
 
 // Zona es el área donde se aceptan las filas de un dataset. La cumple
@@ -183,7 +187,7 @@ func LeerDataset(contenido []byte, catalogo []Categoria, zona Zona, ahora time.T
 		f := FilaDataset{Fila: fc.num}
 		antes := total
 
-		if v := celda(ColColonia); v != "" {
+		if v := sinProteccion(celda(ColColonia)); v != "" {
 			if utf8.RuneCountInString(v) > maxColoniaRunas {
 				agregar(ErrorFila{fc.num, ColColonia, fmt.Sprintf("la colonia tiene más de %d caracteres", maxColoniaRunas)})
 			} else {
@@ -207,7 +211,7 @@ func LeerDataset(contenido []byte, catalogo []Categoria, zona Zona, ahora time.T
 
 		var ok bool
 
-		switch fecha, err := leerFecha(celda(ColFecha), t.esXLSX); {
+		switch fecha, err := leerFecha(celda(ColFecha), t.esXLSX, t.fecha1904); {
 		case err != nil:
 			agregar(ErrorFila{fc.num, ColFecha, err.Error()})
 		case fecha.After(limite):
@@ -216,15 +220,19 @@ func LeerDataset(contenido []byte, catalogo []Categoria, zona Zona, ahora time.T
 			f.Fecha = fecha
 		}
 
-		switch v := celda(ColCategoria); {
+		switch v := sinProteccion(celda(ColCategoria)); {
 		case v == "":
 			agregar(ErrorFila{fc.num, ColCategoria, "falta la categoría"})
 		default:
 			id, encontrada := categorias[normalizar(v)]
-			if !encontrada {
+			switch {
+			case !encontrada:
 				agregar(ErrorFila{fc.num, ColCategoria, fmt.Sprintf("la categoría %q no existe en el catálogo", v)})
+			case id == categoriaAmbigua:
+				agregar(ErrorFila{fc.num, ColCategoria, fmt.Sprintf("la categoría %q coincide con más de una categoría del catálogo", v)})
+			default:
+				f.IncidenteID = id
 			}
-			f.IncidenteID = id
 		}
 
 		if f.PersonasAfectadas, ok = leerConteo(celda(ColPersonas)); !ok {
@@ -274,16 +282,29 @@ func filaVacia(t tabla, fc filaCruda) bool {
 	return true
 }
 
+// categoriaAmbigua marca en indiceCategorias un texto que normalizado
+// coincide con dos categorías distintas (los ids de la base empiezan en 1).
+const categoriaAmbigua = -1
+
 // indiceCategorias reconoce cada categoría por su nombre y su etiqueta
-// normalizados, más los alias.
+// normalizados, más los alias. La etiqueta no es única en la base: si un texto
+// lleva a dos categorías queda como categoriaAmbigua y esa fila se rechaza, en
+// vez de quedarse con una de las dos sin avisar.
 func indiceCategorias(catalogo []Categoria) map[string]int {
 	idx := make(map[string]int, len(catalogo)*2+len(aliasCategorias))
+	agregar := func(clave string, id int) {
+		if previo, existe := idx[clave]; existe && previo != id {
+			idx[clave] = categoriaAmbigua
+			return
+		}
+		idx[clave] = id
+	}
 	for _, c := range catalogo {
-		idx[normalizar(c.Nombre)] = c.ID
-		idx[normalizar(c.Etiqueta)] = c.ID
+		agregar(normalizar(c.Nombre), c.ID)
+		agregar(normalizar(c.Etiqueta), c.ID)
 	}
 	for alias, nombre := range aliasCategorias {
-		if id, ok := idx[normalizar(nombre)]; ok {
+		if id, ok := idx[normalizar(nombre)]; ok && id != categoriaAmbigua {
 			if _, existe := idx[alias]; !existe {
 				idx[alias] = id
 			}
@@ -356,13 +377,13 @@ var formatosFecha = []string{
 
 // leerFecha devuelve el día 1 del mes de la fecha. En un .xlsx una celda con
 // fecha llega como su número de serie de Excel.
-func leerFecha(s string, esXLSX bool) (time.Time, error) {
+func leerFecha(s string, esXLSX, fecha1904 bool) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, errors.New("falta la fecha")
 	}
 	if esXLSX {
 		if serie, err := strconv.ParseFloat(s, 64); err == nil {
-			t, err := excelize.ExcelDateToTime(serie, false)
+			t, err := excelize.ExcelDateToTime(serie, fecha1904)
 			if err != nil || t.Year() < 1900 {
 				return time.Time{}, errors.New("la fecha no es válida")
 			}
@@ -413,6 +434,9 @@ func leerXLSX(contenido []byte) (tabla, error) {
 		t, faltan := armarTabla(renglones, 1)
 		if faltan == nil {
 			t.esXLSX = true
+			if props, err := f.GetWorkbookProps(); err == nil && props.Date1904 != nil {
+				t.fecha1904 = *props.Date1904
+			}
 			return t, nil
 		}
 		if i == 0 {
@@ -425,9 +449,13 @@ func leerXLSX(contenido []byte) (tabla, error) {
 func leerCSV(contenido []byte) (tabla, error) {
 	contenido = bytes.TrimPrefix(contenido, []byte("\xEF\xBB\xBF")) // BOM de UTF-8
 	if !utf8.Valid(contenido) {
-		// Excel en Windows guarda el CSV en Windows-1252 por defecto. Se lee
-		// como Latin-1, que coincide en todas las letras del español.
-		contenido = latin1AUTF8(contenido)
+		// Excel en Windows guarda el CSV en Windows-1252 por defecto. Coincide
+		// con Latin-1 en las letras del español, pero no en 0x80–0x9F (comillas
+		// tipográficas “ ”, guiones largos, €).
+		var err error
+		if contenido, err = charmap.Windows1252.NewDecoder().Bytes(contenido); err != nil {
+			return tabla{}, formatoInvalido("el archivo no es un .xlsx ni un .csv")
+		}
 	}
 	if bytes.IndexByte(contenido, 0) >= 0 {
 		return tabla{}, formatoInvalido("el archivo no es un .xlsx ni un .csv")
@@ -514,13 +542,4 @@ func separadorCSV(contenido []byte) rune {
 		}
 	}
 	return mejor
-}
-
-func latin1AUTF8(b []byte) []byte {
-	var out bytes.Buffer
-	out.Grow(len(b) + len(b)/8)
-	for _, c := range b {
-		out.WriteRune(rune(c))
-	}
-	return out.Bytes()
 }

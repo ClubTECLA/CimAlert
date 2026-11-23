@@ -186,6 +186,12 @@ datasetHistoricoPorId:
     responses:
       '204':
         description: Dataset borrado
+      '400':
+        description: ID de dataset inválido (no es un UUID)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
       '401':
         description: No autenticado
         content:
@@ -212,7 +218,11 @@ exportarRiesgo:
       Descarga los incidentes históricos (reportes marcados como históricos y filas de los datasets) con el mismo
       filtro que el resumen. Las columnas son las del formato de importación más Origen (reporte o dataset) y
       Dataset, así que el archivo se puede volver a importar (las dos últimas se ignoran al importar). El CSV va en
-      UTF-8 con BOM para que Excel respete los acentos. Solo lectura: no registra nada en el historial.
+      UTF-8 con BOM para que Excel respete los acentos, y un texto que empieza con =, +, - o @ lleva ' adelante para
+      que no se tome como fórmula (al importar se quita). Volver a importarlo sigue los límites de la importación
+      (50,000 filas y 1 MiB; una exportación más grande se parte por periodo o categoría) y se suma a lo que ya hay:
+      si los datasets originales siguen cargados, sus filas quedan duplicadas. Solo lectura: no registra nada en el
+      historial.
     security:
       - bearerAuth: [admin, moderador, analista, proteccion_civil, rescatista]
     parameters:

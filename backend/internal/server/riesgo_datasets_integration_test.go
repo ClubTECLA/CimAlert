@@ -245,6 +245,7 @@ func TestDatasetsHistoricos(t *testing.T) {
 		}
 		tc.expect(http.StatusNotFound, http.MethodDelete, "/v1/riesgo/datasets/"+d.Id.String(), nil)
 		tc.expect(http.StatusNotFound, http.MethodDelete, "/v1/riesgo/datasets/"+uuid.NewString(), nil)
+		tc.expect(http.StatusBadRequest, http.MethodDelete, "/v1/riesgo/datasets/no-es-uuid", nil)
 		// Borrado, el mismo archivo se puede volver a importar.
 		again := decode[httpapi.DatasetHistorico](t, tc.importarEsperando(http.StatusCreated, "lluvias.csv", []byte(archivo), ""))
 		tc.expect(http.StatusNoContent, http.MethodDelete, "/v1/riesgo/datasets/"+again.Id.String(), nil)
