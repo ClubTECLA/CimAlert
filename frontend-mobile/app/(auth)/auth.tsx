@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { AuthScreenShell } from '@/components/auth/AuthScreenShell';
 import { AuthTabs, AuthTab } from '@/components/auth/AuthTabs';
@@ -9,7 +9,12 @@ import { PrimaryButton } from '@/components/auth/PrimaryButton';
 import { GoogleButton } from '@/components/auth/GoogleButton';
 import { TermsCheckbox } from '@/components/auth/TermsCheckbox';
 import { useGoogleSignIn } from '@/hooks/useGoogleSignIn';
-import { iniciarSesionYEntrar, nuevoIntentoDeSesion } from '@/features/sesion/entrar';
+import {
+  descartarIntentoDeSesion,
+  esIntentoVigente,
+  iniciarSesionYEntrar,
+  nuevoIntentoDeSesion,
+} from '@/features/sesion/entrar';
 import { mensajeErrorAuth, sesionApi } from '@/features/sesion/api';
 import { esCorreoValido, PASSWORD_MIN } from '@/lib/correo';
 import { puedeSimularSesion } from '@/lib/session';
@@ -56,6 +61,19 @@ export default function AuthScreen() {
     acceptedTerms;
   const canSubmitLogin = correoValido && !!password;
 
+  // Al salir de esta pantalla (p. ej. a "¿Olvidaste la contraseña?", que la deja debajo en la pila), un
+  // login o registro que siga en curso se descarta: si luego responde, no inicia sesión ni muestra errores.
+  // También se quita el estado de carga, para que al volver los botones no sigan bloqueados.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        descartarIntentoDeSesion();
+        setEnviando(false);
+      },
+      [],
+    ),
+  );
+
   /** Pide el token al backend y entra al mapa; si falla, avisa y deja el formulario como estaba. */
   const autenticar = async (accion: 'login' | 'registro') => {
     setEnviando(true);
@@ -67,12 +85,15 @@ export default function AuthScreen() {
           : await sesionApi.register(email.trim(), username.trim(), password);
       iniciarSesionYEntrar(access_token, intento);
     } catch (error) {
+      // El error de un intento descartado o reemplazado por otro más nuevo ya no le importa al usuario.
+      if (!esIntentoVigente(intento)) return;
       Alert.alert(
         accion === 'login' ? 'No se pudo iniciar sesión' : 'No se pudo crear la cuenta',
         mensajeErrorAuth(error, accion)
       );
     } finally {
-      setEnviando(false);
+      // Solo el intento vigente apaga la carga: uno viejo no debe apagar la de un intento más nuevo.
+      if (esIntentoVigente(intento)) setEnviando(false);
     }
   };
 

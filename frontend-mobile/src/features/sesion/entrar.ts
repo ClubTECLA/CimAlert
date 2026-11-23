@@ -12,6 +12,15 @@ export function nuevoIntentoDeSesion(): number {
   return ultimoIntento;
 }
 
+/** true mientras `intento` sea el último: para no mostrar el error de un intento que ya se descartó. */
+export const esIntentoVigente = (intento: number): boolean => intento === ultimoIntento;
+
+/** Descarta el intento en curso (p. ej. al salir de la pantalla de login): su respuesta, buena o mala,
+ * se ignora cuando llegue. */
+export function descartarIntentoDeSesion(): void {
+  ultimoIntento += 1;
+}
+
 /** Inicia sesión y regresa al mapa, ya sea que el login se abrió desde la Bienvenida o desde el
  * mapa como invitado: `dismissTo` vuelve al mapa si está en el historial, o lo abre si no.
  * Con `intento`, solo entra si sigue siendo el intento más reciente. Devuelve si entró. */

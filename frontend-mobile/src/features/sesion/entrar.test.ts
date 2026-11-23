@@ -8,7 +8,7 @@ vi.mock('@/lib/session', () => ({
 }));
 vi.mock('expo-router', () => ({ router: { dismissTo: vi.fn() } }));
 
-import { iniciarSesionYEntrar, nuevoIntentoDeSesion } from './entrar';
+import { descartarIntentoDeSesion, esIntentoVigente, iniciarSesionYEntrar, nuevoIntentoDeSesion } from './entrar';
 
 // Un login cuya respuesta llega tarde no debe reemplazar la sesión de un intento posterior.
 describe('iniciarSesionYEntrar con intentos', () => {
@@ -29,6 +29,25 @@ describe('iniciarSesionYEntrar con intentos', () => {
     expect(iniciarSesionYEntrar('tok-primero', primero)).toBe(false);
     expect(iniciarSesion).toHaveBeenCalledTimes(1);
     expect(iniciarSesion).toHaveBeenCalledWith('tok-segundo');
+  });
+
+  it('un intento descartado al salir de la pantalla no abre sesión cuando responde', () => {
+    // Se pidió el login y, antes de que respondiera, se fue a "¿Olvidaste la contraseña?".
+    const intento = nuevoIntentoDeSesion();
+    descartarIntentoDeSesion();
+
+    expect(iniciarSesionYEntrar('tok-tarde', intento)).toBe(false);
+    expect(iniciarSesion).not.toHaveBeenCalled();
+  });
+
+  it('esIntentoVigente: solo el último intento sin descartar sigue vigente (para no mostrar errores viejos)', () => {
+    const viejo = nuevoIntentoDeSesion();
+    const nuevo = nuevoIntentoDeSesion();
+    expect(esIntentoVigente(viejo)).toBe(false);
+    expect(esIntentoVigente(nuevo)).toBe(true);
+
+    descartarIntentoDeSesion();
+    expect(esIntentoVigente(nuevo)).toBe(false);
   });
 
   it('sin token real ni mocks no abre ninguna sesión', () => {
