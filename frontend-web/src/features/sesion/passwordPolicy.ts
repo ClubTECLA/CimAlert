@@ -15,7 +15,7 @@ export function getPasswordRequirements(password: string): PasswordRequirement[]
     return [
         {
             label: `Al menos ${PASSWORD_MIN_LENGTH} caracteres`,
-            met: password.length >= PASSWORD_MIN_LENGTH,
+            met: Array.from(password).length >= PASSWORD_MIN_LENGTH,
         },
         {
             label: "Una mayúscula y un número",
@@ -28,7 +28,12 @@ export function getPasswordRequirements(password: string): PasswordRequirement[]
     ]
 }
 
+/** Bytes UTF-8 de la contraseña; bcrypt solo admite hasta PASSWORD_MAX_BYTES. */
+export function getPasswordByteLength(password: string): number {
+    return new TextEncoder().encode(password).length
+}
+
 export function isPasswordValid(password: string): boolean {
-    return new TextEncoder().encode(password).length <= PASSWORD_MAX_BYTES
+    return getPasswordByteLength(password) <= PASSWORD_MAX_BYTES
         && getPasswordRequirements(password).every(({ met }) => met)
 }

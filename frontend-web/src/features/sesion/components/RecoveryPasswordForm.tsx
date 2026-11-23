@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { SubmitEvent } from 'react'
 import { FiInfo } from 'react-icons/fi'
 import { LuCircleCheckBig } from 'react-icons/lu'
-import { getPasswordRequirements, isPasswordValid } from '@/features/sesion/passwordPolicy'
+import { getPasswordByteLength, getPasswordRequirements, isPasswordValid, PASSWORD_MAX_BYTES } from '@/features/sesion/passwordPolicy'
 import {
     formsInputsDivsStyle,
     inputsLabelsStyle,
@@ -22,6 +22,8 @@ export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordF
     const [confirmPassword, setConfirmPassword] = useState('')
     const requirements = getPasswordRequirements(password)
     const passwordValid = isPasswordValid(password)
+    const passwordBytes = getPasswordByteLength(password)
+    const passwordTooLong = passwordBytes > PASSWORD_MAX_BYTES
     const passwordsMatch = password.length > 0 && password === confirmPassword
 
     const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
@@ -43,13 +45,21 @@ export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordF
                     type="password"
                     autoComplete="new-password"
                     autoFocus
-                    aria-describedby="recovery-password-requirements"
+                    aria-describedby={passwordTooLong
+                        ? 'recovery-password-requirements recovery-password-bytes-error'
+                        : 'recovery-password-requirements'}
+                    aria-invalid={passwordTooLong}
                     className={inputsStyle}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     disabled={submitting}
                     required
                 />
+                {passwordTooLong && (
+                    <span id="recovery-password-bytes-error" className="text-sm text-red-600" role="alert">
+                        La contraseña tiene {passwordBytes} bytes; el límite es de {PASSWORD_MAX_BYTES} bytes.
+                    </span>
+                )}
             </div>
             <ul
                 id="recovery-password-requirements"

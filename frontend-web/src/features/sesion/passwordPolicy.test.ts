@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getPasswordRequirements, isPasswordValid, PASSWORD_MAX_BYTES } from './passwordPolicy'
+import { getPasswordByteLength, getPasswordRequirements, isPasswordValid, PASSWORD_MAX_BYTES } from './passwordPolicy'
 
 describe('passwordPolicy', () => {
     it('acepta una contraseña que cumple todos los requisitos', () => {
@@ -25,6 +25,12 @@ describe('passwordPolicy', () => {
     it(`acepta hasta ${PASSWORD_MAX_BYTES} bytes y rechaza más`, () => {
         expect(isPasswordValid(`A1!${'a'.repeat(PASSWORD_MAX_BYTES - 3)}`)).toBe(true)
         expect(isPasswordValid(`A1!${'a'.repeat(PASSWORD_MAX_BYTES - 2)}`)).toBe(false)
+    })
+
+    it('cuenta bytes UTF-8, no caracteres', () => {
+        expect(getPasswordByteLength('á')).toBe(2)
+        expect(getPasswordByteLength('😀')).toBe(4)
+        expect(isPasswordValid(`A1!${'á'.repeat(35)}`)).toBe(false)
     })
 
     it('expone cada requisito con su estado', () => {

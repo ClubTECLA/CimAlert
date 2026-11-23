@@ -275,6 +275,7 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
                     onChangeDigits={(next) => {
                         setCodeDigits(next)
                         setCodeInvalid(false)
+                        cleanMessage()
                     }}
                     onSubmit={verifyCode}
                     onResend={() => requestRecovery(email, false)}
