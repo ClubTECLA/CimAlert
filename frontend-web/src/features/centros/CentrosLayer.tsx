@@ -101,7 +101,7 @@ function useCentroMarkers(centros: ApiCentro[], onOpenDetail: (centroId: string)
 }
 
 // Capa de centros del mapa: siempre, salvo con un panel de incidentes abierto. Dentro del módulo de centros pinta los
-// del filtro de la lista (y los incidentes se ocultan, ver IncidentsLayer); fuera, todos los activos. Lleva a la vista
+// del filtro de la lista (y los incidentes se ocultan, ver IncidentsLayer); fuera, todos los activos (a menos que se filtren). Lleva a la vista
 // el que tiene el detalle abierto.
 export default function CentrosLayer() {
     const { map } = useMap();
@@ -117,7 +117,6 @@ export default function CentrosLayer() {
     // El abierto se pinta aunque el filtro lo oculte; si no, el mapa se centraría en un punto vacío.
     const shown = useMemo(() => {
         if (hidden || !centros) return NO_CENTROS;
-        if (!filtered) return centros;
         if (!activeId || filteredCentros.some((centro) => centro.id === activeId)) return filteredCentros;
         const open = centros.find((centro) => centro.id === activeId);
         return open ? [...filteredCentros, open] : filteredCentros;
