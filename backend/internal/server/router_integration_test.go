@@ -94,7 +94,7 @@ func newTestClient(t *testing.T) *testClient {
 		})),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(testPool(t)))),
 		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)))),
-	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga))
+	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga), server.WithDocs(true))
 
 	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer}
 }
