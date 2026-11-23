@@ -287,8 +287,11 @@ esas dos columnas se ignoran al importar.
 - La categoría va con su etiqueta del catálogo.
 - **CSV:** UTF-8 con BOM (para que Excel respete los acentos), fecha `AAAA-MM-DD`. Un
   texto que empieza con `=`, `+`, `-` o `@` sale con `'` adelante, para que Excel no
-  lo tome como fórmula (la colonia sale de la dirección que escribe el ciudadano). Al
-  importar se quita, así que el texto vuelve igual.
+  lo tome como fórmula (la colonia sale de la dirección que escribe el ciudadano). Un
+  texto que ya empieza con `'` también lleva otro adelante (`'-Norte` sale como
+  `''-Norte`). Al importar un CSV se quita ese primer `'`, así que el texto vuelve
+  igual; un `'Texto` escrito a mano no se toca. En el `.xlsx` no se agrega ni se quita
+  nada.
 - **XLSX:** hoja "Formato para importación", fecha como fecha de Excel (`mm/aaaa`).
   Excel guarda 15 dígitos significativos, así que las coordenadas pierden menos de un
   micrómetro.
@@ -300,11 +303,21 @@ esas dos columnas se ignoran al importar.
 **Volver a importar lo exportado:**
 
 - Sigue los mismos límites que cualquier importación: 50,000 filas y 1 MiB por
-  archivo. Una exportación más grande se parte por periodo o por categoría.
+  archivo. Una exportación más grande se parte por periodo o por categoría. Si aun así
+  más de 50,000 filas comparten mes y categoría, ningún filtro las separa: se parte el
+  archivo por renglones, y cada parte conserva la fila de encabezado y queda dentro de
+  los límites.
+- La categoría sale con su etiqueta. Si dos categorías del catálogo comparten etiqueta
+  (o el nombre de una es la etiqueta de otra), la importación rechaza esas filas por
+  ambiguas. Antes de reimportar, se corrige el catálogo o se cambia la columna
+  Categoria por un valor que solo coincida con una categoría (el nombre, si no choca
+  con otra etiqueta).
 - Se **suma** a lo que ya hay: si los datasets originales siguen cargados, sus filas
   quedan duplicadas. El sha256 compara archivos, no incidentes, y Origen y Dataset no
-  identifican a un incidente ni reemplazan nada. Para reemplazar, primero se borra el
-  dataset original.
+  identifican a un incidente ni reemplazan nada. Para reemplazar, primero se importa
+  el archivo nuevo y se comprueba que funcionó (responde `201` y el dataset aparece en
+  la lista con las filas esperadas); después se borra el dataset original. Así, si la
+  importación falla, el original sigue cargado.
 
 ## Quién lo ve
 
