@@ -52,23 +52,29 @@ function isOnSegment(point: Position, a: Position, b: Position): boolean {
     const [x, y] = point;
     const [ax, ay] = a;
     const [bx, by] = b;
-    const cross = (x - ax) * (by - ay) - (y - ay) * (bx - ax);
-    if (Math.abs(cross) > EPSILON) return false;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const longitud = Math.hypot(dx, dy);
+    // La tolerancia es una distancia perpendicular, no un producto cruzado sin normalizar: si no, un segmento corto
+    // admitiría puntos fuera de él. Vértices repetidos (longitud 0) solo cubren su propia posición.
+    if (longitud === 0) return Math.hypot(x - ax, y - ay) <= EPSILON;
+    const cross = (x - ax) * dy - (y - ay) * dx;
+    if (Math.abs(cross) > EPSILON * longitud) return false;
     return x >= Math.min(ax, bx) - EPSILON
         && x <= Math.max(ax, bx) + EPSILON
         && y >= Math.min(ay, by) - EPSILON
         && y <= Math.max(ay, by) + EPSILON;
 }
 
-/** Ray casting sobre un anillo. El borde cuenta como dentro, para que un pin justo encima no desaparezca. */
-function inRing(point: Position, ring: Position[]): boolean {
+/** Ray casting sobre un anillo. `bordeDentro` distingue el exterior (sí) del borde de un hueco (no). */
+function inRing(point: Position, ring: Position[], bordeDentro = true): boolean {
     if (ring.length < 3) return false;
     const [x, y] = point;
     let inside = false;
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
         const a = ring[j];
         const b = ring[i];
-        if (isOnSegment(point, a, b)) return true;
+        if (isOnSegment(point, a, b)) return bordeDentro;
         const [ax, ay] = a;
         const [bx, by] = b;
         if ((ay > y) !== (by > y) && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) {
@@ -89,7 +95,8 @@ export function pointInPolygon(point: Position, polygon: Polygon): boolean {
     if (!exterior || !inRing([0, 0], exterior)) return false;
     for (const hole of holes) {
         const proyectado = anilloProyectado(hole, point);
-        if (!proyectado || inRing([0, 0], proyectado)) return false;
+        // ST_Covers incluye los bordes del polígono, también los de los huecos: solo se excluye su interior estricto.
+        if (!proyectado || inRing([0, 0], proyectado, false)) return false;
     }
     return true;
 }

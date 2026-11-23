@@ -36,6 +36,8 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
 
     // Firma de la última respuesta de cada lista: si no cambió, no se toca el estado y ni la lista ni el mapa se repintan.
     const reportesSignatureRef = useRef("");
+    // Alcance de la lista guardada: la respuesta de un área es un subconjunto y no sirve como lista completa.
+    const reportesScopeRef = useRef("");
     const categoriesSignatureRef = useRef("");
     // Sesión a la que pertenece cada petición: al cerrar sesión se incrementa y se descartan las respuestas
     // que lleguen después, para no restaurar los datos del usuario anterior.
@@ -55,6 +57,7 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         const preferences = readAreaPreferences();
         const knownTotal = areaFilterStore.getTotalReportes();
         const enBackend = polygon !== null && resolveAreaMode(preferences, knownTotal ?? 0) === "backend";
+        const scope = enBackend && polygon ? `area:${JSON.stringify(polygon)}` : "todos";
 
         // Una sola petición de reportes por carga. Sin área hace falta la lista completa (y con ella se mide el
         // total); con área dibujada se decide con el total ya memorizado. En 'auto', si aún no se conoce, la
@@ -75,8 +78,10 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         if (!isCurrent()) return;
 
         // Cada lista se aplica por separado: si fallan los reportes, las categorías siguen llegando (Nuevo incidente
-        // solo necesita esas), y al revés. Lo que falla conserva lo último que se cargó bien.
+        // solo necesita esas), y al revés. Lo que falla conserva lo último que se cargó bien, salvo que pertenezca a
+        // otro alcance: el subconjunto de un área ya quitada no puede seguir mostrándose como la lista completa.
         if (reportResult.status === "fulfilled") {
+            reportesScopeRef.current = scope;
             if (reportResult.value.total !== undefined) areaFilterStore.setTotalReportes(reportResult.value.total);
             setLastSync(Date.now());
             const signature = JSON.stringify(reportResult.value.lista);
@@ -84,6 +89,10 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
                 reportesSignatureRef.current = signature;
                 setReportes(reportResult.value.lista);
             }
+        } else if (reportesScopeRef.current !== scope) {
+            reportesScopeRef.current = scope;
+            reportesSignatureRef.current = "";
+            setReportes(null);
         }
         if (categoryResult.status === "fulfilled") {
             const signature = JSON.stringify(categoryResult.value);

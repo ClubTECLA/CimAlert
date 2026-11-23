@@ -45,6 +45,19 @@ describe("pointInPolygon", () => {
         expect(pointInPolygon([5, 5], conHueco)).toBe(false);
     });
 
+    it("el borde del hueco cuenta como parte del polígono", () => {
+        const conHueco = polygon(square(0, 0, 10, 10), square(3, 3, 7, 7));
+        expect(pointInPolygon([3, 3], conHueco)).toBe(true);
+        expect(pointInPolygon([5, 3], conHueco)).toBe(true);
+        expect(pointInPolygon([5, 5], conHueco)).toBe(false);
+    });
+
+    it("un punto cerca de un segmento corto no se toma como borde", () => {
+        const triangulo = polygon([[0, 0], [0.0001, 0.0001], [0, 0.0001], [0, 0]]);
+        expect(pointInPolygon([0.00006, 0.00004], triangulo)).toBe(false);
+        expect(pointInPolygon([0.00005, 0.00005], triangulo)).toBe(true);
+    });
+
     it("un polígono vacío o degenerado no contiene nada", () => {
         expect(pointInPolygon([0, 0], polygon())).toBe(false);
         expect(pointInPolygon([0, 0], polygon([[0, 0], [0, 0]]))).toBe(false);

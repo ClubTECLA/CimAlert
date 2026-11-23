@@ -166,7 +166,10 @@ export default function PolygonLayer() {
 
         const onKeyDown = (event: KeyboardEvent) => {
             const current = stateRef.current;
-            if (!current.isDrawing || event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+            if (!current.isDrawing) return;
+            // Los atajos son del mapa: no se comen la activación con Enter de controles, enlaces ni campos de los paneles.
+            if (event.target instanceof Element
+                && event.target.closest("button, a, input, textarea, select, [contenteditable], [role='button']")) return;
             if (event.key === "Enter") {
                 event.preventDefault();
                 current.finish();
