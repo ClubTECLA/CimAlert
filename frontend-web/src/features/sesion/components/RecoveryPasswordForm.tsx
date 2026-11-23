@@ -35,7 +35,7 @@ export function RecoveryPasswordForm({ onSubmit, submitting }: RecoveryPasswordF
             onSubmit={handleSubmit}
         >
             <h1 className={titleStyle}>Crea una nueva contraseña</h1>
-            <span className={subtitleStyle}>Elige una contraseña nueva. Confirmaremos el código al guardarla.</span>
+            <span className={subtitleStyle}>El código ya fue validado. Elige una contraseña nueva y guárdala antes de que venza el permiso (15 minutos).</span>
             <div className={`${formsInputsDivsStyle} mt-4`}>
                 <label htmlFor="recovery-new-password" className={inputsLabelsStyle}>Nueva contraseña</label>
                 <input

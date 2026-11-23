@@ -17,7 +17,7 @@ const CODE_INDEXES = Array.from({ length: CODE_LENGTH }, (_, index) => index)
 interface RecoveryCodeFormProps {
     digits: string[]
     onChangeDigits: (digits: string[]) => void
-    onSubmit: (pin: string) => void
+    onSubmit: (pin: string) => Promise<void>
     onResend: () => Promise<boolean>
     submitting: boolean
     /** El backend rechazó el código; se marca en rojo hasta que el usuario edite. */
@@ -123,7 +123,7 @@ export function RecoveryCodeForm({
 
     const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault()
-        if (isComplete) onSubmit(joinCode(digits))
+        if (isComplete) void onSubmit(joinCode(digits))
     }
 
     const handleResend = async () => {
@@ -199,7 +199,7 @@ export function RecoveryCodeForm({
                 type="submit"
                 disabled={!isComplete || submitting}
             >
-                Continuar
+                Validar código
             </button>
         </form>
     )

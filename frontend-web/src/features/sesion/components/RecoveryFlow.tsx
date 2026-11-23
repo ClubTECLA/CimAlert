@@ -4,7 +4,7 @@ import { IoChevronBack } from 'react-icons/io5'
 import { LuCircleCheckBig } from 'react-icons/lu'
 import { SysMessage, useSysMessage } from '@/components/ui/SysMessageContext'
 import { emptyCode } from '@/features/sesion/codeInput'
-import { solicitarRecuperacion, verificarRecuperacion } from '@/features/sesion/recovery.service'
+import { restablecerContrasena, solicitarRecuperacion, verificarRecuperacion } from '@/features/sesion/recovery.service'
 import { formsStyle } from './authStyles'
 import { RecoveryCodeForm } from './RecoveryCodeForm'
 import { RecoveryEmailForm } from './RecoveryEmailForm'
@@ -34,7 +34,7 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
     const [step, setStep] = useState<RecoveryStep>('email')
     const [email, setEmail] = useState('')
     const [codeDigits, setCodeDigits] = useState<string[]>(emptyCode)
-    const [pin, setPin] = useState('')
+    const [resetToken, setResetToken] = useState('')
     const [codeInvalid, setCodeInvalid] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const submittingRef = useRef(false)
@@ -67,11 +67,12 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
 
             if (advanceToCode) {
                 setEmail(targetEmail)
-                setPin('')
                 setCodeDigits(emptyCode())
-                setCodeInvalid(false)
                 setStep('code')
             }
+            // Un PIN nuevo invalida el token que viniera de una verificación anterior.
+            setResetToken('')
+            setCodeInvalid(false)
             showMessage(
                 'Si hay una cuenta que pueda recuperarse con ese correo, recibirás un código. Revisa también la carpeta de spam.',
                 { color: 'blue', type: 'inline', showTime: null, title: 'Solicitud recibida' },
@@ -96,7 +97,7 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
         }
     }
 
-    const verifyRecovery = async (newPassword: string) => {
+    const verifyCode = async (pin: string) => {
         if (submittingRef.current) return
         submittingRef.current = true
         setSubmitting(true)
@@ -104,9 +105,63 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
         const requestId = beginRequest()
 
         try {
-            await verificarRecuperacion({ email, pin, new_password: newPassword })
+            const { reset_token } = await verificarRecuperacion({ email, pin })
             if (!isCurrentRequest(requestId)) return
 
+            setResetToken(reset_token)
+            setCodeInvalid(false)
+            setStep('password')
+        } catch (error) {
+            if (!isCurrentRequest(requestId)) return
+
+            const status = error instanceof Error && 'status' in error ? error.status : undefined
+            if (status === 400) {
+                // El código no sirve: se marca en rojo y se conservan los dígitos.
+                setCodeInvalid(true)
+                showMessage(
+                    'El código es inválido o expiró. Revisa los seis dígitos o solicita uno nuevo.',
+                    { color: 'red', type: 'inline', showTime: null, title: 'No se pudo validar el código' },
+                )
+            } else if (status === 429) {
+                showMessage(
+                    'Se realizaron demasiados intentos. Espera un momento antes de volver a intentarlo.',
+                    { color: 'red', type: 'inline', showTime: null, title: 'No se pudo validar el código' },
+                )
+            } else {
+                showMessage(
+                    error instanceof Error
+                        ? error.message
+                        : 'No se pudo validar el código. Inténtalo de nuevo.',
+                    { color: 'red', type: 'inline', showTime: null, title: 'No se pudo validar el código' },
+                )
+            }
+        } finally {
+            submittingRef.current = false
+            if (isCurrentRequest(requestId)) setSubmitting(false)
+        }
+    }
+
+    const resetPassword = async (newPassword: string) => {
+        if (submittingRef.current) return
+        if (!resetToken) {
+            setStep('email')
+            showMessage(
+                'Vuelve a solicitar un código para continuar.',
+                { color: 'red', type: 'inline', showTime: null, title: 'No se pudo actualizar la contraseña' },
+            )
+            return
+        }
+
+        submittingRef.current = true
+        setSubmitting(true)
+        cleanMessage()
+        const requestId = beginRequest()
+
+        try {
+            await restablecerContrasena({ reset_token: resetToken, new_password: newPassword })
+            if (!isCurrentRequest(requestId)) return
+
+            setResetToken('')
             showMessage(
                 'Tu contraseña se actualizó correctamente. Ya puedes iniciar sesión.',
                 { color: 'green', type: 'inline', showTime: null, title: 'Contraseña actualizada' },
@@ -117,11 +172,13 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
 
             const status = error instanceof Error && 'status' in error ? error.status : undefined
             if (status === 400) {
-                // El código no sirve: volver al paso del código conservando los dígitos.
-                setCodeInvalid(true)
-                setStep('code')
+                // El token venció o ya se usó y el PIN quedó consumido: hay que pedir uno nuevo.
+                setResetToken('')
+                setCodeDigits(emptyCode())
+                setCodeInvalid(false)
+                setStep('email')
                 showMessage(
-                    'El código es inválido o expiró. Revisa los seis dígitos o solicita uno nuevo.',
+                    'El permiso para cambiar la contraseña venció. Vuelve a enviar tu correo para recibir un código nuevo.',
                     { color: 'red', type: 'inline', showTime: null, title: 'No se pudo actualizar la contraseña' },
                 )
             } else if (status === 429) {
@@ -146,7 +203,16 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
     const goBack = () => {
         cleanMessage()
         setCodeInvalid(false)
-        setStep(step === 'password' ? 'code' : 'email')
+        setResetToken('')
+        setCodeDigits(emptyCode())
+        if (step === 'password') {
+            // Validar el código consume el PIN: para cambiarlo hay que pedir uno nuevo.
+            showMessage(
+                'El código ya fue validado. Vuelve a enviar tu correo para recibir uno nuevo.',
+                { color: 'blue', type: 'inline', showTime: null, title: 'Cambiar código' },
+            )
+        }
+        setStep('email')
     }
 
     return (
@@ -210,18 +276,14 @@ export function RecoveryFlow({ onBackToLogin, onComplete }: RecoveryFlowProps) {
                         setCodeDigits(next)
                         setCodeInvalid(false)
                     }}
-                    onSubmit={(value) => {
-                        setPin(value)
-                        cleanMessage()
-                        setStep('password')
-                    }}
+                    onSubmit={verifyCode}
                     onResend={() => requestRecovery(email, false)}
                     submitting={submitting}
                     invalid={codeInvalid}
                 />
             )}
             {step === 'password' && (
-                <RecoveryPasswordForm onSubmit={verifyRecovery} submitting={submitting} />
+                <RecoveryPasswordForm onSubmit={resetPassword} submitting={submitting} />
             )}
         </section>
     )

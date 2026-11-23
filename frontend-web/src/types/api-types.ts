@@ -57,6 +57,10 @@ export type ApiRecoveryRequest =
     operations['solicitarRecuperacion']['requestBody']['content']['application/json']
 export type ApiVerifyRecoveryRequest =
     operations['verificarRecuperacion']['requestBody']['content']['application/json']
+export type ApiVerifyRecoveryResponse =
+    operations['verificarRecuperacion']['responses'][200]['content']['application/json']
+export type ApiResetPasswordRequest =
+    operations['restablecerContrasena']['requestBody']['content']['application/json']
 export type AuthResponse = LoginResponse | RegisterResponse
 export type AuthEndpoint = 'login' | 'register'
 export type AuthRequest<T extends AuthEndpoint> =
