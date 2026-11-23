@@ -106,6 +106,18 @@ describe('http', () => {
       expect(expirarSesion).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['una lista de pares', [['Authorization', 'Bearer otro']] as [string, string][]],
+      ['un objeto Headers', new Headers({ Authorization: 'Bearer otro' })],
+    ])('el token de quien llama en %s reemplaza al de la sesión', async (_, headers) => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'no autenticado' }, 401));
+
+      await expect(http('/auth/me', { headers })).rejects.toMatchObject({ status: 401 });
+      const enviados = Object.entries(cabecerasDe(fetchMock)).filter(([k]) => k.toLowerCase() === 'authorization');
+      expect(enviados.map(([, v]) => v)).toEqual(['Bearer otro']);
+      expect(expirarSesion).toHaveBeenCalledWith('otro');
+    });
+
     it('otros errores (403, 500) no tocan la sesión', async () => {
       fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'prohibido' }, 403));
       await expect(http('/reportes')).rejects.toMatchObject({ status: 403 });

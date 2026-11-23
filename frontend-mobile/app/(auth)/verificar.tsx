@@ -7,6 +7,7 @@ import { PrimaryButton } from '@/components/auth/PrimaryButton';
 import { StepDots } from '@/components/auth/StepDots';
 import { mensajeErrorAuth, RECUPERACION, sesionApi } from '@/features/sesion/api';
 import { puedeSimularSesion } from '@/lib/session';
+import { useVigenciaDePantalla } from '@/hooks/useVigenciaDePantalla';
 import { colors } from '@/theme/colors';
 import { fontFamily } from '@/theme/typography';
 
@@ -32,6 +33,8 @@ export default function VerificarScreen() {
   const [enviadoEn, setEnviadoEn] = useState(() => Number(pedidoEn) || Date.now());
   const [secondsLeft, setSecondsLeft] = useState(OTP_SECONDS);
   const [reenviando, setReenviando] = useState(false);
+  // Si se sale de la pantalla mientras se reenvía, la respuesta ya no cambia nada ni muestra alertas.
+  const vigencia = useVigenciaDePantalla(() => setReenviando(false));
 
   useEffect(() => {
     const tick = () =>
@@ -51,16 +54,18 @@ export default function VerificarScreen() {
   const reenviar = async () => {
     setReenviando(true);
     const pedidoAhora = Date.now();
+    const marca = vigencia.iniciar();
     try {
       if (!puedeSimularSesion) await sesionApi.solicitarRecuperacion(email);
+      if (!vigencia.vigente(marca)) return;
       // El backend cancela el código anterior al mandar uno nuevo.
       setCode(codigoVacio());
       setEnviadoEn(pedidoAhora);
       Alert.alert('Código reenviado', `Te mandamos un código nuevo a ${email}.`);
     } catch (error) {
-      Alert.alert('No se pudo reenviar el código', mensajeErrorAuth(error, 'recuperacion'));
+      if (vigencia.vigente(marca)) Alert.alert('No se pudo reenviar el código', mensajeErrorAuth(error, 'recuperacion'));
     } finally {
-      setReenviando(false);
+      if (vigencia.vigente(marca)) setReenviando(false);
     }
   };
 

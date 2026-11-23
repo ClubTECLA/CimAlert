@@ -8,6 +8,7 @@ import { StepDots } from '@/components/auth/StepDots';
 import { esErrorDeCodigo, mensajeErrorAuth, sesionApi } from '@/features/sesion/api';
 import { PASSWORD_MIN } from '@/lib/correo';
 import { puedeSimularSesion } from '@/lib/session';
+import { useVigenciaDePantalla } from '@/hooks/useVigenciaDePantalla';
 import { colors } from '@/theme/colors';
 import { fontFamily } from '@/theme/typography';
 
@@ -18,6 +19,9 @@ export default function NuevaContrasenaScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // Si se sale de la pantalla mientras se cambia la contraseña, su respuesta ya no muestra alertas: el
+  // "Revisar código" de un error tardío llevaría a otra pantalla.
+  const vigencia = useVigenciaDePantalla(() => setEnviando(false));
 
   const canSubmit = password.length >= PASSWORD_MIN && password === confirmPassword && !enviando;
 
@@ -26,13 +30,16 @@ export default function NuevaContrasenaScreen() {
 
   const confirmar = async () => {
     setEnviando(true);
+    const marca = vigencia.iniciar();
     try {
       // Con mocks no hay backend: se recorre el diseño sin cambiar nada.
       if (!puedeSimularSesion) await sesionApi.verificarRecuperacion(email, pin, password);
+      if (!vigencia.vigente(marca)) return;
       Alert.alert('Contraseña actualizada', 'Ya puedes iniciar sesión con tu nueva contraseña.', [
         { text: 'Iniciar sesión', onPress: irAlLogin },
       ]);
     } catch (error) {
+      if (!vigencia.vigente(marca)) return;
       const mensaje = mensajeErrorAuth(error, 'recuperacion');
       Alert.alert(
         'No se pudo cambiar la contraseña',
@@ -46,7 +53,7 @@ export default function NuevaContrasenaScreen() {
           : undefined
       );
     } finally {
-      setEnviando(false);
+      if (vigencia.vigente(marca)) setEnviando(false);
     }
   };
 

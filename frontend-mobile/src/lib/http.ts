@@ -71,10 +71,11 @@ export async function http<T>(
   };
   // Los headers de quien llama van al final y reemplazan a los de arriba aunque cambien las mayúsculas
   // ("authorization" sustituye a "Authorization"): HTTP no las distingue y no deben quedar las dos.
-  for (const [nombre, valor] of Object.entries((init.headers as Record<string, string> | undefined) ?? {})) {
+  // `new Headers` acepta las tres formas de RequestInit.headers: objeto, lista de pares o Headers.
+  new Headers(init.headers).forEach((valor, nombre) => {
     for (const k of Object.keys(headers)) if (k.toLowerCase() === nombre.toLowerCase()) delete headers[k];
     headers[nombre] = valor;
-  }
+  });
   // El token que de verdad se mandó: quien llama puede poner su propio Authorization.
   const autorizacion = Object.entries(headers).find(([k]) => k.toLowerCase() === 'authorization')?.[1];
   const tokenEnviado = autorizacion?.startsWith('Bearer ') ? autorizacion.slice('Bearer '.length) : null;
