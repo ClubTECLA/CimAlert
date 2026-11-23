@@ -43,9 +43,10 @@ func TestBuscarArea(t *testing.T) {
 	}
 
 	dentroReporte := crearReporteEn(32.5149, -117.0382)
-	fueraReporte := crearReporteEn(32.7, -117.2)
+	// Fuera del área dibujada, pero dentro de la zona permitida por el backend.
+	fueraReporte := crearReporteEn(32.515, -117.0)
 	dentroCentro := crearCentroEn(32.515, -117.038)
-	fueraCentro := crearCentroEn(32.7, -117.2)
+	fueraCentro := crearCentroEn(32.515, -117.0)
 
 	resp := decode[httpapi.BuscarAreaResponse](t,
 		c.expect(http.StatusOK, http.MethodPost, "/v1/areas/buscar", map[string]any{"poligono": areaCentro()}))

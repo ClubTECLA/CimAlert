@@ -28,6 +28,7 @@ type store interface {
 	ListReportesPorUbicacion(ctx context.Context, arg sqlc.ListReportesPorUbicacionParams) ([]sqlc.ListReportesPorUbicacionRow, error)
 	ListReportesByUserId(ctx context.Context, arg sqlc.ListReportesByUserIdParams) ([]sqlc.ListReportesByUserIdRow, error)
 	CambiarEstadoReporte(ctx context.Context, arg CambiarEstadoTxParams) (sqlc.Reporte, error)
+	CambiarHistorico(ctx context.Context, arg CambiarHistoricoTxParams) error
 	ActualizarTags(ctx context.Context, arg ActualizarTagsTxParams) error
 	EliminarReporte(ctx context.Context, id, actorID uuid.UUID) error
 }
@@ -45,12 +46,13 @@ const tiempoLimpieza = 10 * time.Second
 type Service struct {
 	store    store
 	archivos Archivos
+	zona     Poligono
 }
 
-// NewService crea un servicio de reportes con la store y el cliente de
-// archivos dados.
-func NewService(store store, archivos Archivos) *Service {
-	return &Service{store: store, archivos: archivos}
+// NewService crea un servicio de reportes con la store, el cliente de
+// archivos y la zona donde se permite crear reportes.
+func NewService(store store, archivos Archivos, zona Poligono) *Service {
+	return &Service{store: store, archivos: archivos, zona: zona}
 }
 
 // Crear crea un reporte del incidente dado, con la ubicación inicial del
@@ -61,6 +63,9 @@ func NewService(store store, archivos Archivos) *Service {
 func (s *Service) Crear(ctx context.Context, nuevo Nuevo) (Detalle, error) {
 	if nuevo.EsOficial && !PuedeGestionar(nuevo.Rol) {
 		return Detalle{}, ErrOficialNoPermitido
+	}
+	if !s.zona.Contiene(nuevo.Latitude, nuevo.Longitude) {
+		return Detalle{}, ErrCoordenadaInvalida
 	}
 
 	// Una dirección vacía o solo con espacios se guarda como NULL, para que el
@@ -289,6 +294,26 @@ func (s *Service) CambiarEstado(ctx context.Context, rol string, userID, id uuid
 		ID: id, Estado: estado, ActorID: userID,
 	})
 
+	if db.IsNotFound(err) {
+		return Detalle{}, ErrNotFound
+	}
+	if err != nil {
+		return Detalle{}, err
+	}
+	return s.Obtener(ctx, id)
+}
+
+// CambiarHistorico marca (true) o desmarca (false) el reporte como
+// histórico. Solo los roles distintos de ciudadano pueden hacerlo. Un
+// reporte histórico sale de Incidentes y cuenta para el riesgo.
+func (s *Service) CambiarHistorico(ctx context.Context, rol string, userID, id uuid.UUID, esHistorico bool) (Detalle, error) {
+	if !PuedeGestionar(rol) {
+		return Detalle{}, ErrHistoricoNoPermitido
+	}
+
+	err := s.store.CambiarHistorico(ctx, CambiarHistoricoTxParams{
+		ID: id, EsHistorico: esHistorico, ActorID: userID,
+	})
 	if db.IsNotFound(err) {
 		return Detalle{}, ErrNotFound
 	}

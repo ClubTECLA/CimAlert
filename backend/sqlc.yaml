@@ -15,6 +15,7 @@ sql:
       - "internal/centro/centro.sql"
       - "internal/area/area.sql"
       - "internal/mantenimiento/mantenimiento.sql"
+      - "internal/riesgo/riesgo.sql"
     schema: "internal/db/migrations"
     gen:
       go:

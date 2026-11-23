@@ -21,6 +21,7 @@ import { isOfficialRole } from '@/features/sesion/users';
 import LayersPill from './LayersPill';
 import PolygonLayer from './PolygonLayer';
 import { usePolygon } from './usePolygon';
+import RiesgoLayer from './RiesgoLayer';
 
 setWorkerUrl(workerUrl);
 
@@ -165,6 +166,7 @@ export default function MapContainer() {
       <ActiveFiltersBadge />
       <LayersPill />
       <IncidentsLayer />
+      <RiesgoLayer />
       <CentrosLayer />
       <PolygonLayer />
     </div>

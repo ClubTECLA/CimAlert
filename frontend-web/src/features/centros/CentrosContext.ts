@@ -5,7 +5,7 @@ import type { CentroFilters } from "./centroFormat";
 // El contexto solo declara el contrato; CentrosProvider lo conecta con la API y el filtro.
 // Es la única puerta de las vistas y del mapa a los centros y a sus tipos.
 export interface CentrosContextType {
-    /** Centros activos; null mientras llega la primera carga. */
+    /** Centros activos; null mientras no han llegado los centros y el catálogo de tipos. */
     centros: ApiCentro[] | null
     /** Catálogo de tipos por id; vacío hasta que llega. */
     tipos: Map<number, ApiTipoCentro>

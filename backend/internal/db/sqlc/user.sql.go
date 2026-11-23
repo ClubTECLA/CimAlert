@@ -37,12 +37,34 @@ SET
 WHERE
     user_id = $1
     AND used_at IS NULL
-    AND expires_at > now()
 `
 
+// Sin filtrar por expires_at: un PIN verificado puede haber expirado y
+// tener todavía un token de reset vivo, que también hay que cancelar.
 func (q *Queries) CancelPINByUserID(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, cancelPINByUserID, userID)
 	return err
+}
+
+const consumeResetByID = `-- name: ConsumeResetByID :execrows
+UPDATE
+    recovery_pins
+SET
+    used_at = now()
+WHERE
+    id = $1
+    AND used_at IS NULL
+    AND verified_at IS NOT NULL
+    AND reset_expires_at > clock_timestamp()
+`
+
+// Cierra el token de reset; 0 filas si ya se usó, se canceló o expiró.
+func (q *Queries) ConsumeResetByID(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, consumeResetByID, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const countPINsLastHourByUserID = `-- name: CountPINsLastHourByUserID :one
@@ -146,15 +168,40 @@ func (q *Queries) DeleteUsedOrExpiredPINByUserID(ctx context.Context, userID uui
 	return err
 }
 
+const getActiveResetByTokenHash = `-- name: GetActiveResetByTokenHash :one
+SELECT
+    id,
+    user_id
+FROM
+    recovery_pins
+WHERE
+    reset_token_hash = $1
+    AND used_at IS NULL
+    AND reset_expires_at > now()
+`
+
+type GetActiveResetByTokenHashRow struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetActiveResetByTokenHash(ctx context.Context, resetTokenHash []byte) (GetActiveResetByTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, getActiveResetByTokenHash, resetTokenHash)
+	var i GetActiveResetByTokenHashRow
+	err := row.Scan(&i.ID, &i.UserID)
+	return i, err
+}
+
 const getLatestActivePINByUserID = `-- name: GetLatestActivePINByUserID :one
 SELECT
-    id, user_id, pin_hash, created_at, expires_at, attempts, used_at
+    id, user_id, pin_hash, created_at, expires_at, attempts, used_at, verified_at, reset_token_hash, reset_expires_at
 FROM
     recovery_pins
 WHERE
     user_id = $1
     AND expires_at > now()
     AND used_at IS NULL
+    AND verified_at IS NULL
 ORDER BY
     created_at DESC
 LIMIT 1
@@ -171,6 +218,9 @@ func (q *Queries) GetLatestActivePINByUserID(ctx context.Context, userID uuid.UU
 		&i.ExpiresAt,
 		&i.Attempts,
 		&i.UsedAt,
+		&i.VerifiedAt,
+		&i.ResetTokenHash,
+		&i.ResetExpiresAt,
 	)
 	return i, err
 }
@@ -291,6 +341,7 @@ func (q *Queries) GetUserWithRolByID(ctx context.Context, id uuid.UUID) (GetUser
 
 const listAllUsers = `-- name: ListAllUsers :many
 SELECT
+    u.id,
     u.username,
     u.email,
     r.nombre AS rol_name,
@@ -307,10 +358,11 @@ ORDER BY
 `
 
 type ListAllUsersRow struct {
-	Username      string  `json:"username"`
-	Email         *string `json:"email"`
-	RolName       string  `json:"rol_name"`
-	ReportesCount int     `json:"reportes_count"`
+	ID            uuid.UUID `json:"id"`
+	Username      string    `json:"username"`
+	Email         *string   `json:"email"`
+	RolName       string    `json:"rol_name"`
+	ReportesCount int       `json:"reportes_count"`
 }
 
 func (q *Queries) ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error) {
@@ -323,6 +375,7 @@ func (q *Queries) ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error) {
 	for rows.Next() {
 		var i ListAllUsersRow
 		if err := rows.Scan(
+			&i.ID,
 			&i.Username,
 			&i.Email,
 			&i.RolName,
@@ -377,19 +430,30 @@ func (q *Queries) SetNewPasswordByUserID(ctx context.Context, arg SetNewPassword
 	return err
 }
 
-const setPinAsUsedByID = `-- name: SetPinAsUsedByID :execrows
+const setPinAsVerifiedByID = `-- name: SetPinAsVerifiedByID :execrows
 UPDATE
     recovery_pins
 SET
-    used_at = now()
-WHERE   
+    verified_at = now(),
+    reset_token_hash = $2,
+    reset_expires_at = $3
+WHERE
     id = $1
     AND used_at IS NULL
+    AND verified_at IS NULL
     AND expires_at > clock_timestamp()
 `
 
-func (q *Queries) SetPinAsUsedByID(ctx context.Context, id uuid.UUID) (int64, error) {
-	result, err := q.db.Exec(ctx, setPinAsUsedByID, id)
+type SetPinAsVerifiedByIDParams struct {
+	ID             uuid.UUID  `json:"id"`
+	ResetTokenHash []byte     `json:"reset_token_hash"`
+	ResetExpiresAt *time.Time `json:"reset_expires_at"`
+}
+
+// Condicional para que de dos verificaciones concurrentes del mismo PIN solo
+// una emita token.
+func (q *Queries) SetPinAsVerifiedByID(ctx context.Context, arg SetPinAsVerifiedByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setPinAsVerifiedByID, arg.ID, arg.ResetTokenHash, arg.ResetExpiresAt)
 	if err != nil {
 		return 0, err
 	}

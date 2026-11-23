@@ -37,6 +37,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
 	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+	"github.com/ClubTECLA/cimalert/backend/internal/riesgo"
 	"github.com/ClubTECLA/cimalert/backend/internal/server"
 	"github.com/ClubTECLA/cimalert/backend/internal/usuario"
 	"github.com/gin-gonic/gin"
@@ -81,7 +82,7 @@ func newTestClient(t *testing.T) *testClient {
 
 	gin.SetMode(gin.TestMode)
 	router := server.NewRouter(server.Handlers{
-		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(testPool(t)), almacen)),
+		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(testPool(t)), almacen, reporte.PoligonoBC)),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(testPool(t)))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(testPool(t)))),
 		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), usuario.NewRecuperacion(usuarios, mailer, []byte(testJWTSecret))),
@@ -94,6 +95,7 @@ func newTestClient(t *testing.T) *testClient {
 		})),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(testPool(t)))),
 		Areas:   area.NewHandler(area.NewService(area.Store{Queries: sqlc.New(testPool(t))})),
+		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)))),
 	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga))
 
 	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer}
@@ -231,6 +233,11 @@ func TestStatus(t *testing.T) {
 		{
 			name: "crear reporte con incidente inexistente", method: http.MethodPost, path: "/v1/reportes",
 			body: map[string]any{"incidente_id": 999, "latitude": 32.5149, "longitude": -117.0382},
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "crear reporte fuera de la zona permitida", method: http.MethodPost, path: "/v1/reportes",
+			body: map[string]any{"incidente_id": 1, "latitude": 32.7157, "longitude": -117.1611},
 			want: http.StatusBadRequest,
 		},
 		{name: "obtener reporte inexistente", method: http.MethodGet, path: "/v1/reportes/" + uuid.Nil.String(), want: http.StatusNotFound},

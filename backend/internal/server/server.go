@@ -13,6 +13,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
 	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+	"github.com/ClubTECLA/cimalert/backend/internal/riesgo"
 	"github.com/ClubTECLA/cimalert/backend/internal/usuario"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -41,7 +42,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 	archivos := almacen.NewCliente(cfg.MultimediaURL, multimediaTimeout)
 
 	return NewRouter(Handlers{
-		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(pool), archivos)),
+		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(pool), archivos, cfg.ReportePoligono)),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(pool))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(pool))),
 		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), rec),
@@ -56,5 +57,6 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 		})),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(pool))),
 		Areas:   area.NewHandler(area.NewService(area.Store{Queries: sqlc.New(pool)})),
+		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(pool))),
 	}, cfg.JWTSecret, usuarios.GetPasswordChangedAtByUserID, WithMaxMultimediaBytes(cfg.MaxMultimediaBytes)), nil
 }

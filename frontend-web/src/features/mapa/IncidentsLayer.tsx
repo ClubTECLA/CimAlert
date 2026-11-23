@@ -8,6 +8,7 @@ import { useMap } from "./useMap";
 import { useLocationPicker } from "./useLocationPicker";
 import { useReportes } from "@/features/reportes/useReportes";
 import { useCommonPanel } from "@/panels/useCommonPanel";
+import { useRiesgo } from "@/features/riesgo/useRiesgo";
 import { isCentroPanel } from "@/features/centros/centrosPanels";
 import type { ApiReporteResumen } from "@/types/api-types";
 
@@ -27,11 +28,15 @@ export default function IncidentsLayer() {
     // Incidente cuyo detalle está abierto (desde el mapa o desde la lista): el mapa lo lleva a la vista y lo resalta.
     const activeId = currentPanel?.view === "Detalle Incidente" ? currentPanel.props.reporteId : null;
     // Se pinta aunque el filtro lo oculte (p. ej. abierto desde el Resumen): si no, el mapa se centraría en un punto vacío.
+    // Mientras el mapa muestra el riesgo (panel "Riesgo" o modo mapa) los pines de los activos se ocultan para no
+    // mezclarlos con el calor de los históricos.
+    const { activo: riesgo } = useRiesgo();
     const visibleReportes = useMemo(() => {
+        if (riesgo) return NO_REPORTES;
         if (!activeId || filteredReportes.some((reporte) => reporte.id === activeId)) return filteredReportes;
         const open = reportes?.find((reporte) => reporte.id === activeId);
         return open ? [...filteredReportes, open] : filteredReportes;
-    }, [activeId, filteredReportes, reportes]);
+    }, [riesgo, activeId, filteredReportes, reportes]);
 
     const reportesById = useMemo(() => new Map(visibleReportes.map((reporte) => [reporte.id, reporte])), [visibleReportes]);
     const active = activeId ? reportesById.get(activeId) : undefined;

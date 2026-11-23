@@ -9,7 +9,7 @@ import { SegmentedTabs, TabItem } from "@/components/ui/SegmentedTabs";
 import { folio, formatDateTime, fotoUrl } from "@/features/reportes/reportFormat";
 import { direccionDe } from "@/features/mapa/geocoding.services";
 import { useCentros } from "@/features/centros/useCentros";
-import { tipoStyle } from "@/features/centros/tiposCentro";
+import { esRefugio, tipoStyle } from "@/features/centros/tiposCentro";
 import { estaOcupado, lugaresDisponibles, lugaresTexto } from "@/features/centros/centroFormat";
 import CentroIcon from "@/features/centros/components/CentroIcon";
 import PanelNavButton from "@/components/layout/PanelNavButton";
@@ -82,10 +82,13 @@ export default function CentroDetailView({ centroId }: CentroDetailViewProps) {
     }
 
     const { color, icon } = tipoStyle(tipo);
-    const lugares = lugaresDisponibles(centro);
-    const ocupado = estaOcupado(centro);
+    // Estado, lugares y capacidad solo en refugios: en los demás tipos no se lleva esa cuenta.
+    const refugio = esRefugio(tipo);
+    const capacidad = refugio ? centro.capacidad : null;
+    const lugares = refugio ? lugaresDisponibles(centro) : null;
+    const ocupado = estaOcupado(centro, tipo);
     const ubicacion = direccion ?? `${centro.latitude.toFixed(5)}, ${centro.longitude.toFixed(5)}`;
-    const estadoBadge = <Badge tone={ocupado ? "danger" : "success"} dot>{ocupado ? "Ocupado" : "Disponible"}</Badge>;
+    const estadoBadge = refugio && <Badge tone={ocupado ? "danger" : "success"} dot>{ocupado ? "Ocupado" : "Disponible"}</Badge>;
     const folioCentro = <span className="font-mono text-xs font-medium text-ink-muted">{folio(centro.id, "CEN")}</span>;
 
     return (
@@ -98,7 +101,7 @@ export default function CentroDetailView({ centroId }: CentroDetailViewProps) {
             >
                 <span className="ml-auto flex items-center gap-1.5 rounded-full bg-surface px-2.5 py-1.25 text-xs font-semibold text-brand-text">
                     <LuUsers className="size-3.5" aria-hidden />
-                    {tipo?.nombre ?? "Centro"}{centro.capacidad !== null && ` · ${centro.capacidad} lugares`}
+                    {tipo?.nombre ?? "Centro"}{capacidad !== null && ` · ${capacidad} lugares`}
                 </span>
             </DetailHero>
 
@@ -127,7 +130,7 @@ export default function CentroDetailView({ centroId }: CentroDetailViewProps) {
                 {/* En teléfono el estado y el folio ya van junto al título: aquí queda solo la cuenta de lugares (si no
                     la hay, la fila se oculta para no dejar un hueco). */}
                 <div className={`flex flex-wrap items-center gap-2 ${lugares === null ? "max-sm:hidden" : ""}`}>
-                    <span className="flex max-sm:hidden">{estadoBadge}</span>
+                    {estadoBadge && <span className="flex max-sm:hidden">{estadoBadge}</span>}
                     {lugares !== null && <Badge tone="info">{lugaresTexto(lugares)}</Badge>}
                     <span className="flex max-sm:hidden">{folioCentro}</span>
                 </div>
@@ -153,7 +156,7 @@ export default function CentroDetailView({ centroId }: CentroDetailViewProps) {
                     <DetailRow
                         icon={<LuEye />}
                         label="Visibilidad en la app"
-                        value={`${centro.activo ? "Visible" : "Oculto"}${centro.capacidad !== null ? ` · capacidad de ${centro.capacidad} personas` : ""}`}
+                        value={`${centro.activo ? "Visible" : "Oculto"}${capacidad !== null ? ` · capacidad de ${capacidad} personas` : ""}`}
                     />
                     <DetailRow icon={<LuClock />} label="Registrado" value={formatDateTime(centro.created_at)} />
                 </div>

@@ -15,6 +15,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/middleware"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
 	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+	"github.com/ClubTECLA/cimalert/backend/internal/riesgo"
 	"github.com/ClubTECLA/cimalert/backend/internal/usuario"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -65,6 +66,7 @@ type Handlers struct {
 	Multimedia  *multimedia.Handler
 	Centros     *centro.Handler
 	Areas       *area.Handler
+	Riesgo      *riesgo.Handler
 }
 
 // Cada funcionalidad llama Handler a su handler, y dos campos embebidos no
@@ -78,6 +80,7 @@ type (
 	multimedias = multimedia.Handler
 	centros     = centro.Handler
 	areas       = area.Handler
+	riesgos     = riesgo.Handler
 )
 
 // api junta los handlers de cada funcionalidad en la interfaz que genera
@@ -91,6 +94,7 @@ type api struct {
 	*multimedias
 	*centros
 	*areas
+	*riesgos
 }
 
 // Assertion en tiempo de compilación: si el contrato gana un endpoint y
@@ -114,7 +118,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 
 	// Una sola tabla con las reglas de todos los errores que pueden devolver
 	// los handlers.
-	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP)
+	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP)
 
 	// Registra acciones con el RequestLogger
 	// El logger debe ser lo primero en utilizarse para que se registren los panics con su request_id
@@ -160,7 +164,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 	// Los manejadores de error por defecto de oapi-codegen responden {"msg": ...};
 	// se reemplazan para que coincidan con ErrorResponse ({"message": ...}).
 	strict := httpapi.NewStrictHandlerWithOptions(
-		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros, areas: h.Areas},
+		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros, areas: h.Areas, riesgos: h.Riesgo},
 		nil,
 		httpapi.StrictGinServerOptions{
 			RequestErrorHandlerFunc: func(c *gin.Context, err error) {
@@ -199,7 +203,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 			middleware.Auth(jwtSecret, string(httpapi.BearerAuthScopes), passwordChangedAt),
 			middleware.RequireRole(string(httpapi.BearerAuthScopes)),
 			// Solo en las rutas de recuperación, para frenar la fuerza bruta de PINs entre cuentas.
-			middleware.RateLimitPorIP(cfg.rateLimitRafaga, "/v1/auth/recovery", "/v1/auth/recovery/verify"),
+			middleware.RateLimitPorIP(cfg.rateLimitRafaga, "/v1/auth/recovery", "/v1/auth/recovery/verify", "/v1/auth/recovery/reset"),
 			// Antes del validador, que lee el body completo para validarlo.
 			middleware.BodyLimitFunc(func(c *gin.Context) int64 {
 				if c.FullPath() == rutaMultimedia {

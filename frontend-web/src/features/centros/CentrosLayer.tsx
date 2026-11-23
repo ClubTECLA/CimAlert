@@ -9,6 +9,7 @@ import { useCommonPanel } from "@/panels/useCommonPanel";
 import { useCentros } from "./useCentros";
 import { isAreaPanel, isCentroPanel, isIncidentPanel } from "./centrosPanels";
 import CentroPin from "./components/CentroPin";
+import { useRiesgo } from '@/features/riesgo/useRiesgo';
 
 // Sin centros que pintar: lista estable para no recrear los marcadores en cada render.
 const NO_CENTROS: ApiCentro[] = [];
@@ -100,15 +101,16 @@ function useCentroMarkers(centros: ApiCentro[], onOpenDetail: (centroId: string)
 }
 
 // Capa de centros del mapa: siempre, salvo con un panel de incidentes abierto. Dentro del módulo de centros pinta los
-// del filtro de la lista (y los incidentes se ocultan, ver IncidentsLayer); fuera, todos los activos. Lleva a la vista
+// del filtro de la lista (y los incidentes se ocultan, ver IncidentsLayer); fuera, todos los activos (a menos que se filtren). Lleva a la vista
 // el que tiene el detalle abierto.
 export default function CentrosLayer() {
     const { map } = useMap();
     const { currentPanel, openPanel } = useCommonPanel();
     const { centros, tipos, filteredCentros } = useCentros();
     const focusedRef = useRef<string | null>(null);
+    const { activo: riesgo} = useRiesgo();
 
-    const hidden = isIncidentPanel(currentPanel?.view);
+    const hidden = riesgo || isIncidentPanel(currentPanel?.view);
     // Con el panel del área se pinta lo que pasa el filtro del polígono, igual que en el módulo de centros.
     const filtered = isCentroPanel(currentPanel?.view) || isAreaPanel(currentPanel?.view);
     const activeId = currentPanel?.view === "Detalle Centro" ? currentPanel.props.centroId : null;
@@ -116,7 +118,6 @@ export default function CentrosLayer() {
     // El abierto se pinta aunque el filtro lo oculte; si no, el mapa se centraría en un punto vacío.
     const shown = useMemo(() => {
         if (hidden || !centros) return NO_CENTROS;
-        if (!filtered) return centros;
         if (!activeId || filteredCentros.some((centro) => centro.id === activeId)) return filteredCentros;
         const open = centros.find((centro) => centro.id === activeId);
         return open ? [...filteredCentros, open] : filteredCentros;

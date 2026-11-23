@@ -21,7 +21,8 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
     const { isAuthenticated } = useAuth();
 
     const [centros, setCentros] = useState<ApiCentro[] | null>(null);
-    const [tipos, setTipos] = useState<Map<number, ApiTipoCentro>>(NO_TIPOS);
+    // null hasta que el catálogo llega bien por primera vez.
+    const [tipos, setTipos] = useState<Map<number, ApiTipoCentro> | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [filters, setFilters] = useState<CentroFilters>(DEFAULT_CENTRO_FILTERS);
 
@@ -82,7 +83,7 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
             clearTimeout(initialLoadId);
             // Al cerrar sesión no deben quedar datos del usuario anterior.
             setCentros(null);
-            setTipos(NO_TIPOS);
+            setTipos(null);
             setError(null);
         };
     }, [isAuthenticated, refresh]);
@@ -104,18 +105,21 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         return () => window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
     }, [isAuthenticated, refresh]);
 
-    const filteredCentros = useMemo(() => filterCentros(centros ?? [], filters), [centros, filters]);
+    // Sin el catálogo no se sabe qué centros son refugios (ni si están ocupados): hasta que llega, los centros siguen
+    // "cargando" (o en error) para todos, en vez de clasificarlos mal.
+    const listos = tipos ? centros : null;
+    const filteredCentros = useMemo(() => tipos ? filterCentros(listos ?? [], filters, tipos) : [], [listos, filters, tipos]);
 
     const value = useMemo<CentrosContextType>(() => ({
-        centros,
-        tipos,
+        centros: listos,
+        tipos: tipos ?? NO_TIPOS,
         error,
         filteredCentros,
         filters,
         setFilters,
         refresh,
         crear,
-    }), [centros, tipos, error, filteredCentros, filters, refresh, crear]);
+    }), [listos, tipos, error, filteredCentros, filters, refresh, crear]);
 
     return (
         <CentrosContext.Provider value={value}>

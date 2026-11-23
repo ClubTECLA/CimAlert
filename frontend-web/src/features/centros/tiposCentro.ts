@@ -26,3 +26,6 @@ const normalizar = (texto: string) => texto.trim().toLowerCase().normalize("NFD"
 export function tipoStyle(tipo?: ApiTipoCentro): TipoStyle {
     return (tipo && TIPO_STYLES[normalizar(tipo.nombre)]) || DEFAULT_STYLE;
 }
+
+/** Solo los refugios llevan la cuenta de lugares (disponible u ocupado), como en la app móvil (refugios/mappers.ts). */
+export const esRefugio = (tipo?: ApiTipoCentro) => tipo !== undefined && normalizar(tipo.nombre) === "refugios";
