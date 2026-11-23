@@ -66,14 +66,14 @@ function setupLayers(map: MapLibreMap, data: LayerData) {
         type: "line",
         source: AREA_SOURCE,
         filter: ["==", ["geometry-type"], "Polygon"],
-        paint: { "line-color": BRAND, "line-width": 2.5, "line-dasharray": [3, 2] },
+        paint: { "line-color": BRAND, "line-width": 2.5, "line-dasharray": [3, 1] },
     });
     map.addLayer({
         id: DRAFT_LINE,
         type: "line",
         source: AREA_SOURCE,
         filter: ["==", ["geometry-type"], "LineString"],
-        paint: { "line-color": BRAND, "line-width": 2, "line-dasharray": [2, 2] },
+        paint: { "line-color": BRAND, "line-width": 2, "line-dasharray": [2, 1] },
     });
     map.addLayer({
         id: VERTEX_CIRCLES,
