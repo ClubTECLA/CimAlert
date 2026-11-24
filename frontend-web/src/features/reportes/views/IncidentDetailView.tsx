@@ -14,7 +14,7 @@ import { useReporteDetalle } from "@/features/reportes/useReporteDetalle";
 import { useSysMessage } from "@/components/ui/SysMessageContext";
 import type { ApiComentario, ApiEstadoReporte } from "@/types/api-types";
 import { categoryIcon } from "@/features/categorias/categories";
-import { folio, formatDateTime, fotoUrl, incidentBorderColor, incidentColor, incidentIconColor, PENDING_ICON_STYLE, pinOfficialFirst } from "@/features/reportes/reportFormat";
+import { folio, formatDateTime, incidentBorderColor, incidentColor, incidentIconColor, PENDING_ICON_STYLE, pinOfficialFirst } from "@/features/reportes/reportFormat";
 import { isOfficialRole, rolLabel } from "@/features/sesion/users";
 import { esEstadoFinal, estadosSiguientes } from "@/features/reportes/estadoTransiciones";
 
@@ -132,7 +132,7 @@ export default function IncidentDetailView({ reporteId }: IncidentDetailViewProp
     return (
         // Ancho fijo del Figma (440 px aprox.): con w-fit, un comentario largo ensancharía el panel.
         <div className="flex h-full min-h-0 w-full flex-col gap-2 font-ui sm:w-[max(25rem,calc(25vw-2rem))]">
-            <DetailHero color={color} icon={icon} photo={photo && fotoUrl(photo.path)}>
+            <DetailHero color={color} icon={icon} photo={photo?.url}>
                 {!!reporte?.multimedia.length &&
                     <span className="flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1.25 text-xs font-semibold text-white">
                         <LuImage className="size-3.5" aria-hidden />

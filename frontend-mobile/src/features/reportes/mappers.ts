@@ -45,7 +45,7 @@ export interface ReporteApi extends ReporteResumenApi {
   created_at: string;
   updated_at: string;
   comentarios: ComentarioApi[];
-  multimedia: Array<{ id: number; path: string; user_id: string; created_at: string }>;
+  multimedia: Array<{ id: number; path: string; url: string; user_id: string; created_at: string }>;
   tags: Array<{ id: number; nombre: string; count: number }>;
   locations: unknown[];
 }
@@ -101,6 +101,10 @@ export function origenDeApi(apiUrl: string): string {
 export const urlMultimedia = (path: string, apiUrl: string): string =>
   `${origenDeApi(apiUrl)}/multimedia/${path.replace(/^\/+/, '')}`;
 
+/** El backend manda cada archivo con un `url` firmado que vence (`/multimedia/{path}?md5=…&expires=…`):
+ * se usa tal cual, sin armarlo con el `path` ni guardarlo. */
+export const urlFirmada = (url: string, apiUrl: string): string => `${origenDeApi(apiUrl)}/${url.replace(/^\/+/, '')}`;
+
 const buscarIncidente = (catalogo: IncidenteApi[], id: number) => catalogo.find((i) => i.id === id);
 
 // `user_id` no viene en el backend y ninguna pantalla lo lee: se deja vacío.
@@ -145,7 +149,7 @@ export function mapearDetalle(r: ReporteApi, catalogo: IncidenteApi[], apiUrl: s
   return {
     ...baseReporte(r, catalogo),
     tags: r.tags.map((t) => t.nombre),
-    image_url: foto ? urlMultimedia(foto.path, apiUrl) : undefined,
+    image_url: foto ? urlFirmada(foto.url, apiUrl) : undefined,
     status: mapearEstado(r.estado_actual) ?? 'pendiente',
     created_at: r.created_at,
   };

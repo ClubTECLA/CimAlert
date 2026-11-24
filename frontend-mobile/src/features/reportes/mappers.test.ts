@@ -9,6 +9,7 @@ import {
   mapearResumen,
   zonasActivas,
   origenDeApi,
+  urlFirmada,
   urlMultimedia,
   type IncidenteApi,
   type ReporteApi,
@@ -115,6 +116,12 @@ describe('origenDeApi / urlMultimedia', () => {
     );
   });
 
+  it('usa el url firmado del backend con el origen de la API, sin tocar la firma', () => {
+    expect(urlFirmada('/multimedia/a/b.jpg?md5=X-_&expires=1', 'http://10.0.2.2/api/v1')).toBe(
+      'http://10.0.2.2/multimedia/a/b.jpg?md5=X-_&expires=1',
+    );
+  });
+
   it('tolera una barra inicial en el path', () => {
     expect(urlMultimedia('/foto.jpg', 'http://10.0.2.2/api/v1')).toBe('http://10.0.2.2/multimedia/foto.jpg');
   });
@@ -188,7 +195,9 @@ describe('mapearDetalle', () => {
     created_at: '2026-10-22T08:00:00Z',
     updated_at: '2026-10-22T09:00:00Z',
     comentarios: [],
-    multimedia: [{ id: 1, path: 'a/b.jpg', user_id: 'u1', created_at: '2026-10-22T08:00:00Z' }],
+    multimedia: [
+      { id: 1, path: 'a/b.jpg', url: '/multimedia/a/b.jpg?md5=FIRMA&expires=1795504489', user_id: 'u1', created_at: '2026-10-22T08:00:00Z' },
+    ],
     tags: [
       { id: 1, nombre: 'Profundo', count: 3 },
       { id: 2, nombre: 'Peligroso', count: 1 },
@@ -201,7 +210,7 @@ describe('mapearDetalle', () => {
     const r = mapearDetalle(detalle(), catalogo, 'http://10.0.2.2/api/v1');
     expect(r.created_at).toBe('2026-10-22T08:00:00Z');
     expect(r.tags).toEqual(['Profundo', 'Peligroso']);
-    expect(r.image_url).toBe('http://10.0.2.2/multimedia/a/b.jpg');
+    expect(r.image_url).toBe('http://10.0.2.2/multimedia/a/b.jpg?md5=FIRMA&expires=1795504489');
     expect(r.categorias).toEqual(['socavon']);
     expect(r.upvotes).toBe(4);
   });
