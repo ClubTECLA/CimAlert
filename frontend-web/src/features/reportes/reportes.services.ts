@@ -76,13 +76,14 @@ export async function agregarAvistamiento(reporteId: string): Promise<ApiAgregar
     return apiRequest(`${reportePath(reporteId)}/avistamientos`, { method: 'PATCH' })
 }
 
-// POST /reportes/{reporteId}/multimedia: la foto del creador del reporte (una por usuario, JPEG ya reducido con prepararFoto).
+// POST /reportes/{reporteId}/multimedia: la foto o el video del creador del reporte (uno por usuario; JPEG ya reducido
+// con prepararFoto o MP4 revisado con prepararVideo). El backend distingue el tipo por el contenido, no por el nombre.
 export async function subirMultimedia(
     reporteId: string,
     file: Blob,
 ): Promise<ApiSubirMultimediaResponse> {
     const formData = new FormData()
-    formData.append('file', file, 'foto.jpg')
+    formData.append('file', file, file.type === 'video/mp4' ? 'video.mp4' : 'foto.jpg')
 
     return apiRequest(`${reportePath(reporteId)}/multimedia`, {
         method: 'POST',

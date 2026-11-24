@@ -15,7 +15,7 @@ export interface NuevoReporte {
     descripcion: string
     /** Etiquetas elegidas, del catálogo de la categoría; sin ninguna no se envían. */
     tagIds: number[]
-    /** Foto ya preparada con prepararFoto. */
+    /** Foto ya preparada con prepararFoto, o video revisado con prepararVideo. */
     foto?: Blob
 }
 
@@ -42,29 +42,31 @@ const ok = () => true
 const failed = () => false
 const statusOf = (error: unknown) => (error as { status?: number } | null)?.status
 
-/** Traduce el error de la subida según la tabla de multimedia/README.md. */
-export function falloFoto(error: unknown): FalloFoto {
+/** Traduce el error de la subida según la tabla de multimedia/README.md (en un video, 422 es que dura demasiado). */
+export function falloFoto(error: unknown, video = false): FalloFoto {
+    const archivo = video ? 'el video' : 'la foto'
+    const archivos = video ? 'videos' : 'fotos'
     switch (statusOf(error)) {
         case 413:
         case 422:
-            return { motivo: 'la foto es demasiado grande para el servidor', reintentable: false }
+            return { motivo: video ? 'el video pesa o dura más de lo que admite el servidor' : 'la foto es demasiado grande para el servidor', reintentable: false }
         case 400:
-            return { motivo: 'el servidor no aceptó el formato de la foto', reintentable: false }
+            return { motivo: `el servidor no aceptó el formato ${video ? 'del video' : 'de la foto'}`, reintentable: false }
         case 401:
         case 403:
         case 404:
-            return { motivo: 'no tienes permiso para subir fotos a este reporte', reintentable: false }
+            return { motivo: `no tienes permiso para subir ${archivos} a este reporte`, reintentable: false }
         case 503:
-            return { motivo: 'el almacenamiento de fotos no está disponible', reintentable: true }
+            return { motivo: `el almacenamiento de ${archivos} no está disponible`, reintentable: true }
         default:
             // Sin conexión, tiempo límite u otro error del servidor.
-            return { motivo: 'la foto no se pudo subir', reintentable: true }
+            return { motivo: `${archivo} no se pudo subir`, reintentable: true }
     }
 }
 
 /**
- * Sube (o reintenta) solo la foto de un reporte ya creado; nunca lo recrea. Devuelve null si quedó guardada.
- * Un 409 cuenta como guardada: este usuario ya tiene su foto en el reporte, p. ej. de un intento anterior que llegó
+ * Sube (o reintenta) solo la foto o el video de un reporte ya creado; nunca lo recrea. Devuelve null si quedó guardado.
+ * Un 409 cuenta como guardado: este usuario ya tiene su archivo en el reporte, p. ej. de un intento anterior que llegó
  * al servidor aunque aquí se agotara el tiempo.
  */
 export async function subirFoto(reporteId: string, foto: Blob, api = publicacionApi): Promise<FalloFoto | null> {
@@ -72,7 +74,7 @@ export async function subirFoto(reporteId: string, foto: Blob, api = publicacion
         await api.subirMultimedia(reporteId, foto)
         return null
     } catch (error) {
-        return statusOf(error) === 409 ? null : falloFoto(error)
+        return statusOf(error) === 409 ? null : falloFoto(error, foto.type === 'video/mp4')
     }
 }
 
