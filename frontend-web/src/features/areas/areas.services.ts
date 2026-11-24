@@ -11,7 +11,9 @@ import { apiRequest, sessionToken } from '@/lib/http'
 let inflight: Promise<ApiBuscarAreaResponse> | null = null
 let inflightKey = ''
 
-export function buscarArea(poligono: Polygon): Promise<ApiBuscarAreaResponse> {
+// async también convierte un fallo al leer el token (p. ej. localStorage bloqueado) en promesa rechazada:
+// ReportesProvider y CentrosProvider manejan las cargas con Promise.allSettled, no con try/catch sincrónico.
+export async function buscarArea(poligono: Polygon): Promise<ApiBuscarAreaResponse> {
     const key = JSON.stringify([sessionToken.get(), poligono])
     if (inflight && inflightKey === key) return inflight
 

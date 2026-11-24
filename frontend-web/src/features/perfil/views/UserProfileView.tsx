@@ -97,12 +97,19 @@ function ProfilePanel({ user }: ProfileViewProps) {
 
     const handleSave = () => {
         const savedDraft = { ...draft, area: normalizeAreaPreferences(draft.area) };
-        setDraft(savedDraft);
         // No hay endpoint de perfil: solo se conservan las preferencias. Nombre y correo siguen siendo un borrador
         // comparado con la sesión, para no anunciar como guardados valores que se perderían al reabrir el panel.
-        setGeneralPreferences(savedDraft.general);
-        setSecurityPreferences(savedDraft.security);
-        setAreaPreferences(savedDraft.area);
+        const guardado = [
+            setGeneralPreferences(savedDraft.general),
+            setSecurityPreferences(savedDraft.security),
+            setAreaPreferences(savedDraft.area),
+        ].every(Boolean);
+        if (!guardado) {
+            // El borrador no se toca: lo que no se pudo escribir sigue pendiente y se puede reintentar o descartar.
+            showMessage("No se pudieron guardar las preferencias. Inténtalo de nuevo.", { type: "float", color: "red", title: "Mi perfil" });
+            return;
+        }
+        setDraft(savedDraft);
         showMessage("Preferencias guardadas. Nombre y correo no se pueden guardar todavía.", { type: "float", color: "green", title: "Mi perfil" });
     };
 
