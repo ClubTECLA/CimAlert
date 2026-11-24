@@ -2,44 +2,41 @@ package area
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/centro"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
+	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
 )
 
-// store son las dos consultas con PostGIS que necesita la búsqueda por área. Es
-// estrecha a propósito: los tests unitarios la sustituyen por un fake.
-type store interface {
-	ListReportesEnArea(ctx context.Context, poligono string) ([]sqlc.ListReportesEnAreaRow, error)
-	ListCentrosEnArea(ctx context.Context, poligono string) ([]sqlc.ListCentrosEnAreaRow, error)
+type reportes interface {
+	ListarEnArea(ctx context.Context, p geo.Poligono) ([]reporte.Resumen, error)
 }
-
-// Store usa las consultas generadas por sqlc directamente: no hay operaciones
-// de varias sentencias en esta búsqueda.
-type Store struct {
-	*sqlc.Queries
+type centros interface {
+	ListarEnArea(ctx context.Context, p geo.Poligono) ([]centro.Centro, error)
 }
-
-var _ store = (*Store)(nil)
 
 type Service struct {
-	store store
+	reportes reportes
+	centros  centros
 }
 
-func NewService(s store) *Service {
-	return &Service{store: s}
+func NewService(r reportes, c centros) *Service {
+	return &Service{reportes: r, centros: c}
 }
 
-// Buscar devuelve reportes y centros cuyo centroide cae dentro del polígono. El
-// polígono viaja como GeoJSON en texto: la conversión a geography y el índice
-// GiST viven en la consulta SQL.
-func (s *Service) Buscar(ctx context.Context, poligono string) ([]sqlc.ListReportesEnAreaRow, []sqlc.ListCentrosEnAreaRow, error) {
-	reportes, err := s.store.ListReportesEnArea(ctx, poligono)
+func (s *Service) Buscar(ctx context.Context, tipo string, anillos [][][]float64) ([]reporte.Resumen, []centro.Centro, error) {
+	p, err := geo.DesdeGeoJSON(tipo, anillos) // valida una sola vez
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %v", ErrAreaInvalida, err)
+	}
+	rs, err := s.reportes.ListarEnArea(ctx, p)
 	if err != nil {
 		return nil, nil, err
 	}
-	centros, err := s.store.ListCentrosEnArea(ctx, poligono)
+	cs, err := s.centros.ListarEnArea(ctx, p)
 	if err != nil {
 		return nil, nil, err
 	}
-	return reportes, centros, nil
+	return rs, cs, nil
 }
