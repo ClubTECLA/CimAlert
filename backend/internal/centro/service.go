@@ -8,6 +8,7 @@ import (
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 	"github.com/google/uuid"
 )
 
@@ -18,6 +19,7 @@ type store interface {
 	CreateCentroTx(ctx context.Context, arg CreateCentroTxParams) (Centro, error)
 	GetCentroById(ctx context.Context, id uuid.UUID) (sqlc.GetCentroByIdRow, error)
 	ListCentros(ctx context.Context, incluirInactivos bool) ([]sqlc.ListCentrosRow, error)
+	ListCentrosEnArea(ctx context.Context, poligono string) ([]sqlc.ListCentrosEnAreaRow, error)
 }
 
 type Service struct {
@@ -148,6 +150,21 @@ func (s *Service) ObtenerCentro(ctx context.Context, id uuid.UUID) (Centro, erro
 
 func (s *Service) ListarCentros(ctx context.Context, incluirInactivos bool) ([]Centro, error) {
 	rows, err := s.store.ListCentros(ctx, incluirInactivos)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Centro, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, Centro(r))
+	}
+	return out, nil
+}
+
+// ListarEnArea devuelve los centros cuyo punto cae dentro del polígono
+// (GeoJSON en texto).
+// centro/service.go
+func (s *Service) ListarEnArea(ctx context.Context, p geo.Poligono) ([]Centro, error) {
+	rows, err := s.store.ListCentrosEnArea(ctx, p.GeoJSON())
 	if err != nil {
 		return nil, err
 	}

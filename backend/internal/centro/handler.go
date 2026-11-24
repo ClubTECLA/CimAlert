@@ -31,7 +31,7 @@ func toNuevoTipoCentro(b *httpapi.CrearTipoCentroRequest) NuevoTipoCentro {
 	return nuevo
 }
 
-func toCentro(c Centro) httpapi.Centro {
+func ToCentro(c Centro) httpapi.Centro {
 	return httpapi.Centro{
 		Activo:      c.Activo,
 		Cantidad:    c.Cantidad,
@@ -39,6 +39,22 @@ func toCentro(c Centro) httpapi.Centro {
 		CreatedAt:   c.CreatedAt,
 		Descripcion: c.Descripcion,
 		Id:          c.ID,
+		ImagePath:   c.ImagePath,
+		Latitude:    c.Latitude,
+		Longitude:   c.Longitude,
+		Nombre:      c.Nombre,
+		TipoCentro:  c.TipoCentro,
+	}
+}
+
+func ToCentroRow(c sqlc.ListCentrosEnAreaRow) Centro {
+	return Centro{
+		Activo:      c.Activo,
+		Cantidad:    c.Cantidad,
+		Capacidad:   c.Capacidad,
+		CreatedAt:   c.CreatedAt,
+		Descripcion: c.Descripcion,
+		ID:          c.ID,
 		ImagePath:   c.ImagePath,
 		Latitude:    c.Latitude,
 		Longitude:   c.Longitude,
@@ -105,7 +121,7 @@ func (h *Handler) CrearCentro(ctx context.Context, request httpapi.CrearCentroRe
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.CrearCentro201JSONResponse(toCentro(c)), nil
+	return httpapi.CrearCentro201JSONResponse(ToCentro(c)), nil
 }
 
 func (h *Handler) ObtenerCentro(ctx context.Context, request httpapi.ObtenerCentroRequestObject) (httpapi.ObtenerCentroResponseObject, error) {
@@ -113,7 +129,7 @@ func (h *Handler) ObtenerCentro(ctx context.Context, request httpapi.ObtenerCent
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.ObtenerCentro200JSONResponse(toCentro(c)), nil
+	return httpapi.ObtenerCentro200JSONResponse(ToCentro(c)), nil
 }
 
 func (h *Handler) ListarCentros(ctx context.Context, request httpapi.ListarCentrosRequestObject) (httpapi.ListarCentrosResponseObject, error) {
@@ -124,7 +140,7 @@ func (h *Handler) ListarCentros(ctx context.Context, request httpapi.ListarCentr
 	}
 	out := make(httpapi.ListarCentros200JSONResponse, 0, len(centros))
 	for _, c := range centros {
-		out = append(out, toCentro(c))
+		out = append(out, ToCentro(c))
 	}
 	return out, nil
 }
