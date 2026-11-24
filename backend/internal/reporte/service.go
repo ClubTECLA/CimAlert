@@ -28,6 +28,7 @@ type store interface {
 	AddAvistamientoById(ctx context.Context, id uuid.UUID) (sqlc.AddAvistamientoByIdRow, error)
 	ListReportesPorUbicacion(ctx context.Context, arg sqlc.ListReportesPorUbicacionParams) ([]sqlc.ListReportesPorUbicacionRow, error)
 	ListReportesByUserId(ctx context.Context, arg sqlc.ListReportesByUserIdParams) ([]sqlc.ListReportesByUserIdRow, error)
+	ListReportesEnArea(ctx context.Context, poligono string) ([]sqlc.ListReportesEnAreaRow, error)
 	CambiarEstadoReporte(ctx context.Context, arg CambiarEstadoTxParams) (sqlc.Reporte, error)
 	CambiarHistorico(ctx context.Context, arg CambiarHistoricoTxParams) error
 	ActualizarTags(ctx context.Context, arg ActualizarTagsTxParams) error
@@ -398,4 +399,18 @@ func (s *Service) borrarArchivo(ctx context.Context, path string) {
 	if err := s.archivos.Borrar(ctx, path); err != nil {
 		slog.WarnContext(ctx, "couldn't delete a deleted report's file", "path", path, "error", err)
 	}
+}
+
+// ListarEnArea devuelve los reportes cuyo punto cae dentro del polígono
+// (GeoJSON en texto).
+func (s *Service) ListarEnArea(ctx context.Context, p geo.Poligono) ([]Resumen, error) {
+	rows, err := s.store.ListReportesEnArea(ctx, p.GeoJSON())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Resumen, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toResumen(sqlc.ListReportesResumenRow(r)))
+	}
+	return out, nil
 }

@@ -31,6 +31,7 @@ type fakeReporteStore struct {
 	resumen     []sqlc.ListReportesResumenRow
 	cercanos    []sqlc.ListReportesPorUbicacionRow
 	delUsuario  []sqlc.ListReportesByUserIdRow
+	enArea      []sqlc.ListReportesEnAreaRow
 
 	lastArg     CreateTxParams
 	lastListArg sqlc.ListReportesResumenParams
@@ -38,6 +39,7 @@ type fakeReporteStore struct {
 
 	lastCercanosArg   sqlc.ListReportesPorUbicacionParams
 	lastDelUsuarioArg sqlc.ListReportesByUserIdParams
+	lastEnAreaArg     string
 
 	lastCambiarEstadoArg CambiarEstadoTxParams
 	cambiarEstadoCalled  bool
@@ -180,6 +182,14 @@ func (f *fakeReporteStore) CambiarHistorico(_ context.Context, arg CambiarHistor
 	r.EsHistorico = arg.EsHistorico
 	f.byID[arg.ID] = r
 	return nil
+}
+
+func (f *fakeReporteStore) ListReportesEnArea(_ context.Context, poligono string) ([]sqlc.ListReportesEnAreaRow, error) {
+	f.lastEnAreaArg = poligono
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.enArea, nil
 }
 
 func TestReporteService_Crear(t *testing.T) {
@@ -958,5 +968,45 @@ func TestReporteService_CambiarHistorico_NoEncontrado(t *testing.T) {
 	_, err := svc.CambiarHistorico(context.Background(), "admin", uuid.New(), uuid.New(), true)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("CambiarHistorico() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestReporteService_ListarEnArea(t *testing.T) {
+	store := newFakeReporteStore()
+	direccion := "Av. Revolución 1234"
+	store.enArea = []sqlc.ListReportesEnAreaRow{
+		{ID: uuid.New(), IncidenteEtiqueta: "Socavón", Direccion: &direccion},
+	}
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
+	poligono := geo.Poligono{
+		{Lat: 32.5, Lon: -117.1},
+		{Lat: 32.5, Lon: -116.9},
+		{Lat: 32.7, Lon: -117.0},
+	}
+
+	rows, err := svc.ListarEnArea(t.Context(), poligono)
+	if err != nil {
+		t.Fatalf("ListarEnArea() error = %v, want nil", err)
+	}
+	if want := "Socavón en Av. Revolución 1234"; len(rows) != 1 || rows[0].Titulo != want {
+		t.Fatalf("ListarEnArea() = %+v, want titulo %q", rows, want)
+	}
+	if want := poligono.GeoJSON(); store.lastEnAreaArg != want {
+		t.Fatalf("ListReportesEnArea() arg = %q, want %q", store.lastEnAreaArg, want)
+	}
+}
+
+func TestReporteService_ListarEnArea_ErrorDeStore(t *testing.T) {
+	store := newFakeReporteStore()
+	store.listErr = errors.New("db caída")
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
+
+	poligono := geo.Poligono{
+		{Lat: 32.5, Lon: -117.1},
+		{Lat: 32.5, Lon: -116.9},
+		{Lat: 32.7, Lon: -117.0},
+	}
+	if _, err := svc.ListarEnArea(t.Context(), poligono); !errors.Is(err, store.listErr) {
+		t.Fatalf("ListarEnArea() error = %v, want %v", err, store.listErr)
 	}
 }
