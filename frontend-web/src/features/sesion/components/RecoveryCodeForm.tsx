@@ -9,9 +9,9 @@ import {
     setDigit,
     writeDigits,
 } from '@/features/sesion/codeInput'
+import { RESEND_SECONDS, resendSecondsRemaining } from '@/features/sesion/resendCooldown'
 import { submitButtonStyle, subtitleStyle, titleStyle } from './authStyles'
 
-const RESEND_SECONDS = 45
 const CODE_INDEXES = Array.from({ length: CODE_LENGTH }, (_, index) => index)
 /** Id compartido con RecoveryFlow, donde se muestra el mensaje de error del PIN. */
 export const RECOVERY_CODE_ERROR_ID = 'recovery-code-error'
@@ -34,19 +34,27 @@ export function RecoveryCodeForm({
     submitting,
     invalid = false,
 }: RecoveryCodeFormProps) {
-    const [secondsRemaining, setSecondsRemaining] = useState(RESEND_SECONDS)
+    const [resendAt, setResendAt] = useState(() => Date.now() + RESEND_SECONDS * 1000)
+    const [now, setNow] = useState(() => Date.now())
+    const secondsRemaining = resendSecondsRemaining(resendAt, now)
+    const cooldownActive = secondsRemaining > 0
     const inputRefs = useRef<Array<HTMLInputElement | null>>([])
     const isComplete = isCodeComplete(digits)
 
     useEffect(() => {
-        if (secondsRemaining === 0) return
+        if (!cooldownActive) return
 
-        const timeout = window.setTimeout(() => {
-            setSecondsRemaining((remaining) => Math.max(remaining - 1, 0))
-        }, 1000)
+        const refresh = () => setNow(Date.now())
+        // Intervalo recurrente: aunque un tick no cambie el número redondeado (reloj ajustado), sigue
+        // consultando la hora real. Al volver de una pestaña suspendida, visibilitychange hace lo propio.
+        const interval = window.setInterval(refresh, 1000)
+        document.addEventListener('visibilitychange', refresh)
 
-        return () => window.clearTimeout(timeout)
-    }, [secondsRemaining])
+        return () => {
+            window.clearInterval(interval)
+            document.removeEventListener('visibilitychange', refresh)
+        }
+    }, [cooldownActive, resendAt])
 
     // Enfoca un input y coloca el cursor al final del dígito, para poder borrarlo
     // de inmediato con Backspace.
@@ -131,7 +139,9 @@ export function RecoveryCodeForm({
     const handleResend = async () => {
         if (await onResend()) {
             onChangeDigits(emptyCode())
-            setSecondsRemaining(RESEND_SECONDS)
+            const sentAt = Date.now()
+            setResendAt(sentAt + RESEND_SECONDS * 1000)
+            setNow(sentAt)
         }
     }
 
