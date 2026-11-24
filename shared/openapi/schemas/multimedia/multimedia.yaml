@@ -1,11 +1,17 @@
 type: object
 description: Archivo (foto o video) que un usuario adjuntó a un reporte.
-required: [id, path, user_id, created_at]
+required: [id, path, url, user_id, created_at]
 properties:
   id:
     type: integer
   path:
     type: string
+    description: Ruta del archivo dentro del almacenamiento. Para mostrarlo usa `url`.
+  url:
+    type: string
+    description: >-
+      Enlace firmado para ver el archivo. Vence (por defecto en una hora), así que no se
+      guarda: se pide de nuevo el reporte cuando haga falta.
   user_id:
     type: string
     format: uuid

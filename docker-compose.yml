@@ -64,6 +64,9 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-}
       RECOVERY_SECRET: ${RECOVERY_SECRET}
       MAIL_DRIVER: ${MAIL_DRIVER:-}
+      # Firma los enlaces a las fotos y videos; nginx debe tener el mismo secreto.
+      MEDIA_LINK_SECRET: ${MEDIA_LINK_SECRET:?define MEDIA_LINK_SECRET en .env}
+      MEDIA_LINK_TTL: ${MEDIA_LINK_TTL:-}
       REPORTE_POLIGONO: ${REPORTE_POLIGONO:-}
       # /v1/docs y /v1/openapi.json solo se publican si es "true" (en local).
       DOCS_ENABLED: ${DOCS_ENABLED:-false}
@@ -124,7 +127,10 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
-    # Sirve las fotos guardadas por multimedia en /multimedia/, solo lectura.
+    # Sirve las fotos guardadas por multimedia en /multimedia/, solo lectura,
+    # y solo con un enlace firmado con este secreto (el mismo que usa el backend).
+    environment:
+      MEDIA_LINK_SECRET: ${MEDIA_LINK_SECRET:?define MEDIA_LINK_SECRET en .env}
     volumes:
       - uploads:/data/uploads:ro
     depends_on: [backend, frontend-web]

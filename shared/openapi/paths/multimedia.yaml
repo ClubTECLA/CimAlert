@@ -13,8 +13,8 @@ subirMultimedia:
       el video, los del contenedor (las cajas udta, meta y uuid). No analiza los
       datos del video, así que la información que el códec lleve dentro de sus
       muestras (por ejemplo mensajes SEI de H.264) se conserva. El servicio
-      multimedia lo guarda; el path de la respuesta se sirve en /multimedia/{path}
-      y termina en .jpg o .mp4.
+      multimedia lo guarda. La respuesta trae `path` (termina en .jpg o .mp4) y `url`,
+      un enlace firmado para verlo en /multimedia/ que vence (por defecto en una hora).
     tags: [Multimedia]
     parameters:
       - name: reporteId

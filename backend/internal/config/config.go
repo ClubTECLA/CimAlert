@@ -20,6 +20,9 @@ const minJWTSecretLen = 32
 
 const defaultJWTTTL = 24 * time.Hour
 
+// defaultMediaLinkTTL es cuánto dura un enlace firmado a un archivo de multimedia.
+const defaultMediaLinkTTL = time.Hour
+
 // defaultMultimediaURL apunta al servicio multimedia corriendo en el mismo host (go run).
 // En compose se pasa MULTIMEDIA_URL con el nombre del servicio.
 const defaultMultimediaURL = "http://localhost:8081"
@@ -54,6 +57,11 @@ type Config struct {
 
 	MultimediaURL      string
 	MaxMultimediaBytes int64
+
+	// MediaLinkSecret firma los enlaces a los archivos de multimedia; nginx
+	// debe tener el mismo. MediaLinkTTL es lo que dura cada enlace.
+	MediaLinkSecret string
+	MediaLinkTTL    time.Duration
 
 	MaxFotoBytes   int64
 	MaxFotoPixeles int64
@@ -102,6 +110,8 @@ func Load() (Config, error) {
 		LogFormat:      getEnvOrDefault("LOG_FORMAT", "json"),
 		RecoverySecret: os.Getenv("RECOVERY_SECRET"),
 		MailDriver:     os.Getenv("MAIL_DRIVER"),
+
+		MediaLinkSecret: os.Getenv("MEDIA_LINK_SECRET"),
 	}
 	var missing []string
 	if cfg.DatabaseURL == "" {
@@ -126,6 +136,12 @@ func Load() (Config, error) {
 	if err := validarRecuperacion(cfg.RecoverySecret, cfg.MailDriver); err != nil {
 		return Config{}, err
 	}
+	if cfg.MediaLinkSecret == "" {
+		return Config{}, fmt.Errorf("missing environment vars: [MEDIA_LINK_SECRET]")
+	}
+	if len(cfg.MediaLinkSecret) < minJWTSecretLen {
+		return Config{}, fmt.Errorf("MEDIA_LINK_SECRET must be at least %d bytes long, got %d", minJWTSecretLen, len(cfg.MediaLinkSecret))
+	}
 
 	if raw := os.Getenv("DOCS_ENABLED"); raw != "" {
 		cfg.DocsEnabled, err = strconv.ParseBool(raw)
@@ -144,6 +160,18 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("JWT_TTL must be greater than zero")
 		}
 		cfg.JWTTTL = ttl
+	}
+
+	cfg.MediaLinkTTL = defaultMediaLinkTTL
+	if raw := os.Getenv("MEDIA_LINK_TTL"); raw != "" {
+		ttl, err := time.ParseDuration(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid MEDIA_LINK_TTL: %w", err)
+		}
+		if ttl <= 0 {
+			return Config{}, fmt.Errorf("MEDIA_LINK_TTL must be greater than zero")
+		}
+		cfg.MediaLinkTTL = ttl
 	}
 
 	cfg.MultimediaURL = os.Getenv("MULTIMEDIA_URL")

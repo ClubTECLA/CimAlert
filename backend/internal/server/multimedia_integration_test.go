@@ -18,6 +18,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/almacen"
@@ -144,6 +145,10 @@ func TestSubirMultimedia(t *testing.T) {
 	if m.Path != wantPath {
 		t.Errorf("path = %q, quería %q", m.Path, wantPath)
 	}
+	// El enlace apunta al archivo, lleva firma y fecha de vencimiento: nginx los comprueba.
+	if !strings.HasPrefix(m.Url, "/multimedia/"+wantPath+"?md5=") || !strings.Contains(m.Url, "&expires=") {
+		t.Errorf("url = %q, quería un enlace firmado de %q", m.Url, wantPath)
+	}
 	if len(c.multimedia.subidas) != 1 {
 		t.Fatalf("multimedia recibió %d archivo(s), quería 1", len(c.multimedia.subidas))
 	}
@@ -163,6 +168,8 @@ func TestSubirMultimedia(t *testing.T) {
 	obtenido := decode[httpapi.Reporte](t, rec)
 	if len(obtenido.Multimedia) != 1 || obtenido.Multimedia[0].Path != wantPath {
 		t.Errorf("multimedia del reporte = %+v, quería un archivo con path %q", obtenido.Multimedia, wantPath)
+	} else if !strings.HasPrefix(obtenido.Multimedia[0].Url, "/multimedia/"+wantPath+"?md5=") {
+		t.Errorf("url del reporte = %q, quería un enlace firmado de %q", obtenido.Multimedia[0].Url, wantPath)
 	}
 }
 
