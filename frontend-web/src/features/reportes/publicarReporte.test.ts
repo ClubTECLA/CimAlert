@@ -113,6 +113,14 @@ describe("subirFoto", () => {
             motivo: "la foto es demasiado grande para el servidor", reintentable: false,
         });
     });
+
+    it("con un video, el motivo habla del video (422: dura demasiado)", async () => {
+        const video = new Blob(["mp4"], { type: "video/mp4" });
+        expect(await subirFoto("r1", video, fakeApi({ multimedia: 422 }))).toEqual({
+            motivo: "el video pesa o dura más de lo que admite el servidor", reintentable: false,
+        });
+        expect((await subirFoto("r1", video, fakeApi({ multimedia: 503 })))?.motivo).toBe("el almacenamiento de videos no está disponible");
+    });
 });
 
 describe("falloFoto", () => {
