@@ -1,3 +1,5 @@
+import type { Polygon } from "geojson";
+import { pointInPolygon } from "@/lib/geo";
 import type { ApiCentro, ApiTipoCentro } from "@/types/api-types";
 import { esRefugio } from "./tiposCentro";
 
@@ -11,17 +13,20 @@ export interface CentroFilters {
     tab: CentroTab
     /** Se guardan los tipos ocultos y no los visibles: un tipo nuevo aparece sin tocar el filtro. */
     hiddenTipos: number[]
+    /** El mismo área que ReportFilters: el polígono lo coordina PolygonSelectionProvider en los dos módulos. */
+    polygon?: Polygon | null
 }
 
 
 export const DEFAULT_CENTRO_FILTERS: CentroFilters = { tab: "activos", hiddenTipos: [] };
 
 /** Nombres de lo que difiere de DEFAULT_CENTRO_FILTERS; vacío si no hay filtro. */
-export function activeCentroFilterLabels({ tab, hiddenTipos }: CentroFilters): string[] {
+export function activeCentroFilterLabels({ tab, hiddenTipos, polygon }: CentroFilters): string[] {
     const hidden = hiddenTipos.length;
     return [
         ...(tab !== DEFAULT_CENTRO_FILTERS.tab ? [tab === "ocupados" ? "Centros ocupados" : "Todos los centros"] : []),
         ...(hidden ? [`${hidden} ${hidden === 1 ? "tipo de centro oculto" : "tipos de centro ocultos"}`] : []),
+        ...(polygon ? ["Área seleccionada"] : []),
     ];
 }
 
@@ -40,9 +45,10 @@ export const estaOcupado = (centro: Pick<ApiCentro, "capacidad" | "cantidad">, t
 export const lugaresTexto = (lugares: number) => `${lugares} ${lugares === 1 ? "lugar disponible" : "lugares disponibles"}`;
 
 /** Centros que pasan el filtro: los lista el panel "Centros" y los pinta el mapa, así siempre coinciden. */
-export function filterCentros(centros: ApiCentro[], { tab, hiddenTipos }: CentroFilters, tipos: Map<number, ApiTipoCentro>) {
+export function filterCentros(centros: ApiCentro[], { tab, hiddenTipos, polygon }: CentroFilters, tipos: Map<number, ApiTipoCentro>) {
     return centros.filter((centro) =>
         !hiddenTipos.includes(centro.tipo_centro)
         && (tab === "todos" || estaOcupado(centro, tipos.get(centro.tipo_centro)) === (tab === "ocupados"))
+        && (!polygon || pointInPolygon([centro.longitude, centro.latitude], polygon))
     );
 }

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Polygon } from "geojson";
 import { useAuth } from "@/features/sesion/useAuth";
+import { readAreaPreferences, resolveAreaMode } from "@/features/areas/areaPreferences";
+import { areaFilterStore } from "@/features/areas/areaFilterStore";
+import { LOCAL_STORAGE_CHANGE_EVENT, type LocalStorageChangeDetail } from "@/lib/useLocalStorage";
+import { AREA_FILTER_STORAGE_KEY } from "@/types/localStorage-types";
+import { buscarArea, invalidarBuscarArea } from "@/features/areas/areas.services";
 import { listarIncidentes } from "@/features/categorias/incidentes.services";
 import { listarReportes } from "./reportes.services";
 import { publicarReporte, subirFoto, type NuevoReporte } from "./publicarReporte";
@@ -24,12 +30,16 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
     // null hasta que llegan por primera vez.
     const [categories, setCategories] = useState<Map<number, ApiIncidente> | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [reportesError, setReportesError] = useState<string | null>(null);
+    const [categoriasError, setCategoriasError] = useState<string | null>(null);
     const [filters, setFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
     const [createdId, setCreatedId] = useState<string | null>(null);
     const [lastSync, setLastSync] = useState<number | null>(null);
 
     // Firma de la última respuesta de cada lista: si no cambió, no se toca el estado y ni la lista ni el mapa se repintan.
     const reportesSignatureRef = useRef("");
+    // Alcance de la lista guardada: la respuesta de un área es un subconjunto y no sirve como lista completa.
+    const reportesScopeRef = useRef("");
     const categoriesSignatureRef = useRef("");
     // Sesión a la que pertenece cada petición: al cerrar sesión se incrementa y se descartan las respuestas
     // que lleguen después, para no restaurar los datos del usuario anterior.
@@ -37,27 +47,54 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
     // Pueden coincidir varias cargas (sondeo, volver a la pestaña, publicar o cambiar un estado): solo se aplica
     // la última que se pidió, para que una respuesta lenta y vieja no pise a una más nueva.
     const requestRef = useRef(0);
+    // El área se lee de un ref para que refresh no cambie de identidad al dibujar: si cambiara, el efecto de la sesión
+    // se volvería a ejecutar y reiniciaría el sondeo cada vez que el usuario selecciona un área.
+    const polygonRef = useRef<Polygon | null>(filters.polygon ?? null);
 
     const refresh = useCallback(async () => {
         const session = sessionRef.current;
         const request = ++requestRef.current;
         const isCurrent = () => session === sessionRef.current && request === requestRef.current;
+        const polygon = polygonRef.current;
+        const preferences = readAreaPreferences();
+        const knownTotal = areaFilterStore.getTotalReportes();
+        const enBackend = polygon !== null && resolveAreaMode(preferences, knownTotal ?? 0) === "backend";
+        const scope = enBackend && polygon ? `area:${JSON.stringify(polygon)}` : "todos";
+
+        // Una sola petición de reportes por carga. Sin área hace falta la lista completa (y con ella se mide el
+        // total); con área dibujada se decide con el total ya memorizado. En 'auto', si aún no se conoce, la
+        // primera carga baja la completa para medir y filtra en el navegador; las siguientes ya usan PostGIS
+        // cuando corresponde. Los modos forzados no necesitan conocer el total.
+        let cargaReportes: Promise<{ lista: ApiReporteResumen[], total?: number }>;
+        if (enBackend && polygon) {
+            cargaReportes = buscarArea(polygon).then((area) => ({ lista: area.reportes }));
+        } else {
+            cargaReportes = listarReportes().then((todos) => ({ lista: todos, total: todos.length }));
+        }
+
         const [reportResult, categoryResult] = await Promise.allSettled([
-            listarReportes(),
+            cargaReportes,
             // También las inactivas: puede haber reportes de una categoría que ya se desactivó.
             listarIncidentes({ incluir_inactivos: true }),
         ]);
         if (!isCurrent()) return;
 
         // Cada lista se aplica por separado: si fallan los reportes, las categorías siguen llegando (Nuevo incidente
-        // solo necesita esas), y al revés. Lo que falla conserva lo último que se cargó bien.
+        // solo necesita esas), y al revés. Lo que falla conserva lo último que se cargó bien, salvo que pertenezca a
+        // otro alcance: el subconjunto de un área ya quitada no puede seguir mostrándose como la lista completa.
         if (reportResult.status === "fulfilled") {
+            reportesScopeRef.current = scope;
+            if (reportResult.value.total !== undefined) areaFilterStore.setTotalReportes(reportResult.value.total);
             setLastSync(Date.now());
-            const signature = JSON.stringify(reportResult.value);
+            const signature = JSON.stringify(reportResult.value.lista);
             if (signature !== reportesSignatureRef.current) {
                 reportesSignatureRef.current = signature;
-                setReportes(reportResult.value);
+                setReportes(reportResult.value.lista);
             }
+        } else if (reportesScopeRef.current !== scope) {
+            reportesScopeRef.current = scope;
+            reportesSignatureRef.current = "";
+            setReportes(null);
         }
         if (categoryResult.status === "fulfilled") {
             const signature = JSON.stringify(categoryResult.value);
@@ -67,17 +104,27 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        const failed = [reportResult, categoryResult].find((result) => result.status === "rejected");
-        setError(failed
-            ? (failed.reason instanceof Error ? failed.reason.message : "No se pudieron cargar los incidentes.")
-            : null);
+        const mensaje = (reason: unknown, fallback: string) => reason instanceof Error ? reason.message : fallback;
+        const falloReportes = reportResult.status === "rejected"
+            ? mensaje(reportResult.reason, "No se pudieron cargar los incidentes.")
+            : null;
+        const falloCategorias = categoryResult.status === "rejected"
+            ? mensaje(categoryResult.reason, "No se pudieron cargar las categorías.")
+            : null;
+        setReportesError(falloReportes);
+        setCategoriasError(falloCategorias);
+        setError(falloReportes ?? falloCategorias);
     }, []);
 
     const publicar = useCallback(async (nuevo: NuevoReporte) => {
         const publicacion = await publicarReporte(nuevo);
-        // Sin filtros, para que la lista y el mapa muestren el reporte nuevo y su pin se anime.
-        setFilters(DEFAULT_FILTERS);
+        // Sin filtros, para que la lista y el mapa muestren el reporte nuevo y su pin se anime. El área dibujada se
+        // conserva: publicar no debe quitar un filtro que el usuario no pidió quitar.
+        setFilters((prev) => ({ ...DEFAULT_FILTERS, polygon: prev.polygon }));
         setCreatedId(publicacion.reporte.id);
+        // El alta necesita datos posteriores al POST: si había una búsqueda por área en vuelo, reutilizarla dejaría
+        // fuera el reporte recién creado. Solo se invalida aquí; las lecturas normales siguen compartiendo resultados.
+        invalidarBuscarArea();
         void refresh();
         return publicacion;
     }, [refresh]);
@@ -114,13 +161,43 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
             clearTimeout(initialLoadId);
             clearInterval(intervalId);
             document.removeEventListener("visibilitychange", handleVisibility);
-            // Al cerrar sesión no deben quedar datos del usuario anterior.
+            // Al cerrar sesión no deben quedar datos del usuario anterior, ni su total de reportes.
+            areaFilterStore.setTotalReportes(null);
             reportesSignatureRef.current = "";
             categoriesSignatureRef.current = "";
             setReportes(null);
             setCategories(null);
             setError(null);
+            setReportesError(null);
+            setCategoriasError(null);
             setLastSync(null);
+        };
+    }, [isAuthenticated, refresh]);
+
+    // La fuente de datos cambia al dibujar, limpiar o restablecer el área: recargar solo entonces, no en el montaje
+    // (la carga inicial ya la hace el efecto de la sesión) ni al cambiar los demás filtros (esos son solo del cliente).
+    useEffect(() => {
+        const polygon = filters.polygon ?? null;
+        if (polygonRef.current === polygon) return; // montaje inicial: ya lo carga el efecto de la sesión
+        polygonRef.current = polygon;
+        if (isAuthenticated) void refresh();
+    }, [filters.polygon, isAuthenticated, refresh]);
+
+    // Cambiar la preferencia en "Mi perfil" se aplica enseguida: el hook de localStorage avisa con su evento en esta
+    // pestaña y el nativo `storage` avisa cuando el cambio viene de otra; esperar al sondeo dejaría el modo anterior.
+    useEffect(() => {
+        const onChange = (event: Event) => {
+            const detail = (event as CustomEvent<LocalStorageChangeDetail>).detail;
+            if (detail?.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
+        };
+        const onStorage = (event: StorageEvent) => {
+            if (event.key === AREA_FILTER_STORAGE_KEY && isAuthenticated) void refresh();
+        };
+        window.addEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+        window.addEventListener("storage", onStorage);
+        return () => {
+            window.removeEventListener(LOCAL_STORAGE_CHANGE_EVENT, onChange);
+            window.removeEventListener("storage", onStorage);
         };
     }, [isAuthenticated, refresh]);
 
@@ -139,6 +216,8 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         categories: categories ?? NO_CATEGORIES,
         categoriesLoaded: categories !== null,
         error,
+        reportesError,
+        categoriasError,
         filteredReportes,
         filters,
         setFilters,
@@ -149,7 +228,7 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         reintentarFoto: (reporteId, foto) => subirFoto(reporteId, foto),
         createdId,
         lastSync,
-    }), [reportes, categories, error, filteredReportes, filters, refresh, publicar, createdId, lastSync]);
+    }), [reportes, categories, error, reportesError, categoriasError, filteredReportes, filters, refresh, publicar, createdId, lastSync]);
 
     return (
         <ReportesContext.Provider value={value}>

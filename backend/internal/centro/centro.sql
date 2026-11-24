@@ -36,3 +36,13 @@ VALUES (
 )
 RETURNING id, tipo_centro, nombre, descripcion, image_path,
           latitude, longitude, capacidad, cantidad, activo, created_at;
+
+
+-- name: ListCentrosEnArea :many
+-- Solo activos, igual que la lista del mapa. Mismas columnas que ListCentros.
+SELECT id, tipo_centro, nombre, descripcion, image_path,
+       latitude, longitude, capacidad, cantidad, activo, created_at
+FROM centros
+WHERE activo
+AND ST_Covers(ST_GeomFromGeoJSON(sqlc.arg(poligono)::text)::geography, geom)
+ORDER BY nombre;

@@ -1,0 +1,25 @@
+type: object
+description: Polígono GeoJSON en coordenadas [longitud, latitud] (EPSG:4326). El anillo externo cierra repitiendo el primer vértice.
+required: [type, coordinates]
+properties:
+  type:
+    type: string
+    enum: [Polygon]
+  coordinates:
+    type: array
+    description: Un solo anillo exterior; los huecos se incorporarían como anillos adicionales.
+    minItems: 1
+    maxItems: 1
+    items:
+      type: array
+      description: Anillo exterior cerrado; se limita el tamaño para que la comprobación de lados siga siendo rápida.
+      minItems: 4
+      maxItems: 101
+      items:
+        type: array
+        description: Par [longitud, latitud].
+        minItems: 2
+        maxItems: 2
+        items:
+          type: number
+          format: double

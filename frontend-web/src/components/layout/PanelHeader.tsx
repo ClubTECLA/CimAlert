@@ -6,6 +6,9 @@ interface PanelHeaderProps {
     subtitle?: ReactNode
     /** Acciones a la derecha del título (p. ej. el botón "Nuevo"). */
     actions?: ReactNode
+    /** Sustituyen a la navegación por defecto (vistas con cambios sin guardar). */
+    onClose?: () => void
+    onBack?: () => void
 }
 
 const headerButtonStyle = "bg-subtle hover:bg-line-soft";
@@ -15,11 +18,11 @@ const headerButtonStyle = "bg-subtle hover:bg-line-soft";
 // contain:inline-size: la cabecera no cuenta para el ancho del panel (w-fit), que lo pone el contenido. Sin ella, con
 // "regresar" y una acción, una cabecera más ancha que el contenido ensanchaba el panel y descuadraba filas y scroll;
 // así es el título el que se parte en dos líneas.
-export default function PanelHeader({ title, subtitle, actions }: PanelHeaderProps) {
+export default function PanelHeader({ title, subtitle, actions, onClose, onBack }: PanelHeaderProps) {
     return (
         <div className="flex w-full items-center gap-3 font-ui contain-[inline-size]">
-            <PanelNavButton kind="back" className={headerButtonStyle} />
-            <PanelNavButton kind="close" className={headerButtonStyle} />
+            <PanelNavButton kind="back" className={headerButtonStyle} onNavigate={onBack} />
+            <PanelNavButton kind="close" className={headerButtonStyle} onNavigate={onClose} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <h2 className="text-title font-bold text-ink">{title}</h2>
                 {!!subtitle && <span className="text-caption text-ink-muted">{subtitle}</span>}

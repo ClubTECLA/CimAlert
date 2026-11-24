@@ -1,8 +1,9 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, createElement, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Marker, type MapMouseEvent } from "maplibre-gl";
 import { useMap } from "./useMap";
 import { freeMapCenter } from "./freeMapCenter";
 import { buscarDireccion, direccionDe } from "./geocoding.services";
+import { polygonDrawingStore } from "./polygonDrawingStore";
 
 export type Position = { latitude: number; longitude: number };
 
@@ -38,6 +39,11 @@ function restartLookup(ref: { current: AbortController | null }) {
  */
 function useLocationPickerState(): LocationPickerContextValue {
     const { map } = useMap();
+    // Mientras se dibuja un área, los clics son del polígono: el marcador compartido no debe moverse aunque este
+    // provider siga montado el instante en que empieza el dibujo. Se guarda en un ref para no re-registrar el listener.
+    const isDrawing = useSyncExternalStore(polygonDrawingStore.subscribe, polygonDrawingStore.get);
+    const drawingRef = useRef(isDrawing);
+    useEffect(() => { drawingRef.current = isDrawing; }, [isDrawing]);
 
     const [position, setPosition] = useState<Position | null>(() => {
         const center = map?.getCenter();
@@ -88,6 +94,7 @@ function useLocationPickerState(): LocationPickerContextValue {
             placeAt(lat, lng);
         };
         const handleMapClick = (e: MapMouseEvent) => {
+            if (drawingRef.current) return;
             marker.setLngLat(e.lngLat);
             placeAt(e.lngLat.lat, e.lngLat.lng);
         };

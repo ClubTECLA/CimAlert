@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -30,6 +31,7 @@ type fakeReporteStore struct {
 	resumen     []sqlc.ListReportesResumenRow
 	cercanos    []sqlc.ListReportesPorUbicacionRow
 	delUsuario  []sqlc.ListReportesByUserIdRow
+	enArea      []sqlc.ListReportesEnAreaRow
 
 	lastArg     CreateTxParams
 	lastListArg sqlc.ListReportesResumenParams
@@ -37,6 +39,7 @@ type fakeReporteStore struct {
 
 	lastCercanosArg   sqlc.ListReportesPorUbicacionParams
 	lastDelUsuarioArg sqlc.ListReportesByUserIdParams
+	lastEnAreaArg     string
 
 	lastCambiarEstadoArg CambiarEstadoTxParams
 	cambiarEstadoCalled  bool
@@ -181,9 +184,17 @@ func (f *fakeReporteStore) CambiarHistorico(_ context.Context, arg CambiarHistor
 	return nil
 }
 
+func (f *fakeReporteStore) ListReportesEnArea(_ context.Context, poligono string) ([]sqlc.ListReportesEnAreaRow, error) {
+	f.lastEnAreaArg = poligono
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.enArea, nil
+}
+
 func TestReporteService_Crear(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 	userID := uuid.New()
 
 	fakeNuevoReporte := Nuevo{
@@ -219,7 +230,7 @@ func TestReporteService_Crear(t *testing.T) {
 
 func TestReporteService_Crear_FueraDeZona(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	// Centro de San Diego.
 	_, err := svc.Crear(context.Background(), Nuevo{
@@ -252,7 +263,7 @@ func TestReporteService_Crear_Direccion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newFakeReporteStore()
-			svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+			svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 			r, err := svc.Crear(context.Background(), Nuevo{
 				UserID:      uuid.New(),
@@ -287,7 +298,7 @@ func TestReporteService_Crear_EsOficial(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newFakeReporteStore()
-			svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+			svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 			fakeNuevoReporte := Nuevo{
 				UserID:      uuid.New(),
@@ -316,7 +327,7 @@ func TestReporteService_Crear_EsOficial(t *testing.T) {
 
 func TestReporteService_Crear_NoOficialCiudadano(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	fakeNuevoReporte := Nuevo{
 		UserID:      uuid.New(),
@@ -339,7 +350,7 @@ func TestReporteService_Crear_NoOficialCiudadano(t *testing.T) {
 func TestReporteService_Crear_IncidenteNoExiste(t *testing.T) {
 	store := newFakeReporteStore()
 	store.createErr = &pgconn.PgError{Code: "23503", ConstraintName: "reporte_incidente_id_fkey"}
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	fakeNuevoReporte := Nuevo{
 		UserID:      uuid.New(),
@@ -358,7 +369,7 @@ func TestReporteService_Crear_IncidenteNoExiste(t *testing.T) {
 
 func TestReporteService_Obtener(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	fakeNuevoReporte := Nuevo{
 		UserID:      uuid.New(),
@@ -397,7 +408,7 @@ func TestReporteService_Obtener(t *testing.T) {
 }
 
 func TestReporteService_Obtener_NoEncontrado(t *testing.T) {
-	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, PoligonoBC)
+	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, geo.PoligonoBC)
 
 	_, err := svc.Obtener(context.Background(), uuid.New())
 	if !errors.Is(err, ErrNotFound) {
@@ -411,7 +422,7 @@ func ptr[T any](v T) *T { return &v }
 func TestReporteService_Listar_SinArea(t *testing.T) {
 	store := newFakeReporteStore()
 	store.resumen = []sqlc.ListReportesResumenRow{{ID: uuid.New(), IncidenteID: 2}}
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	rows, err := svc.Listar(context.Background(), nil, nil, nil, nil)
 	if err != nil {
@@ -427,7 +438,7 @@ func TestReporteService_Listar_SinArea(t *testing.T) {
 
 func TestReporteService_Listar_ConArea(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	if _, err := svc.Listar(context.Background(), ptr(32.4), ptr(32.6), ptr(-117.2), ptr(-116.8)); err != nil {
 		t.Fatalf("Listar() error = %v", err)
@@ -441,7 +452,7 @@ func TestReporteService_Listar_ConArea(t *testing.T) {
 
 func TestReporteService_Listar_AreaIncompleta(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	_, err := svc.Listar(context.Background(), ptr(32.4), nil, nil, nil)
 	if !errors.Is(err, ErrAreaIncompleta) {
@@ -462,7 +473,7 @@ func TestReporteService_Listar_AreaInvalida(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewService(newFakeReporteStore(), &fakeArchivos{}, PoligonoBC)
+			svc := NewService(newFakeReporteStore(), &fakeArchivos{}, geo.PoligonoBC)
 
 			_, err := svc.Listar(context.Background(), ptr(tt.minLat), ptr(tt.maxLat), ptr(tt.minLng), ptr(tt.maxLng))
 			if !errors.Is(err, ErrAreaInvalida) {
@@ -475,7 +486,7 @@ func TestReporteService_Listar_AreaInvalida(t *testing.T) {
 func TestReporteService_Listar_ErrorStore(t *testing.T) {
 	store := newFakeReporteStore()
 	store.listErr = errors.New("db caída")
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	if _, err := svc.Listar(context.Background(), nil, nil, nil, nil); !errors.Is(err, store.listErr) {
 		t.Fatalf("Listar() error = %v, want %v", err, store.listErr)
@@ -484,7 +495,7 @@ func TestReporteService_Listar_ErrorStore(t *testing.T) {
 
 func TestReporteService_AddAvistamientoById(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	fakeNuevoReporte := Nuevo{
 		UserID:      uuid.New(),
@@ -512,7 +523,7 @@ func TestReporteService_AddAvistamientoById(t *testing.T) {
 }
 
 func TestReporteService_AgregarAvistamiento_NoEncontrado(t *testing.T) {
-	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, PoligonoBC)
+	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, geo.PoligonoBC)
 
 	_, err := svc.AgregarAvistamiento(context.Background(), uuid.New())
 	if !errors.Is(err, ErrNotFound) {
@@ -523,7 +534,7 @@ func TestReporteService_AgregarAvistamiento_NoEncontrado(t *testing.T) {
 func TestReporteService_ListarCercanos_SinFiltros(t *testing.T) {
 	store := newFakeReporteStore()
 	store.cercanos = []sqlc.ListReportesPorUbicacionRow{{ID: uuid.New(), DistanciaM: 12.5}}
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	rows, err := svc.ListarCercanos(context.Background(), -117.0382, 32.5149, 2000, nil, nil, nil, 200)
 	if err != nil {
@@ -544,7 +555,7 @@ func TestReporteService_ListarCercanos_SinFiltros(t *testing.T) {
 
 func TestReporteService_ListarCercanos_ConFiltros(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 	desde := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	_, err := svc.ListarCercanos(context.Background(), -117.0382, 32.5149, 2000,
@@ -563,7 +574,7 @@ func TestReporteService_ListarCercanos_ConFiltros(t *testing.T) {
 func TestReporteService_ListarCercanos_ErrorDeStore(t *testing.T) {
 	store := newFakeReporteStore()
 	store.listErr = errors.New("db caída")
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	if _, err := svc.ListarCercanos(context.Background(), -117.0382, 32.5149, 2000, nil, nil, nil, 200); !errors.Is(err, store.listErr) {
 		t.Fatalf("ListarCercanos() error = %v, want %v", err, store.listErr)
@@ -573,7 +584,7 @@ func TestReporteService_ListarCercanos_ErrorDeStore(t *testing.T) {
 func TestReporteService_ListarPorUsuario(t *testing.T) {
 	store := newFakeReporteStore()
 	store.delUsuario = []sqlc.ListReportesByUserIdRow{{ID: uuid.New()}}
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 	userID := uuid.New()
 
 	rows, err := svc.ListarPorUsuario(context.Background(), userID, 10)
@@ -591,7 +602,7 @@ func TestReporteService_ListarPorUsuario(t *testing.T) {
 func TestReporteService_ListarPorUsuario_ErrorDeStore(t *testing.T) {
 	store := newFakeReporteStore()
 	store.listErr = errors.New("db caída")
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	if _, err := svc.ListarPorUsuario(context.Background(), uuid.New(), 200); !errors.Is(err, store.listErr) {
 		t.Fatalf("ListarPorUsuario() error = %v, want %v", err, store.listErr)
@@ -613,7 +624,7 @@ func TestReporteService_CambiarEstado_Rol(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("rol "+tt.rol, func(t *testing.T) {
 			store := newFakeReporteStore()
-			svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+			svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 			creado, err := svc.Crear(context.Background(), Nuevo{
 				UserID: uuid.New(), Rol: RolCiudadano, IncidenteID: 42, Latitude: 32.5, Longitude: -117,
 			})
@@ -649,7 +660,7 @@ func TestReporteService_CambiarEstado_Rol(t *testing.T) {
 }
 
 func TestReporteService_CambiarEstado_NoEncontrado(t *testing.T) {
-	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, PoligonoBC)
+	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, geo.PoligonoBC)
 
 	_, err := svc.CambiarEstado(context.Background(), "admin", uuid.New(), uuid.New(), sqlc.EstadoVerificado)
 	if !errors.Is(err, ErrNotFound) {
@@ -659,7 +670,7 @@ func TestReporteService_CambiarEstado_NoEncontrado(t *testing.T) {
 
 func TestReporteService_CambiarEstado_Transicion(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 	creado, err := svc.Crear(context.Background(), Nuevo{
 		UserID: uuid.New(), Rol: RolCiudadano, IncidenteID: 42, Latitude: 32.5, Longitude: -117,
 	})
@@ -684,7 +695,7 @@ func TestReporteService_CambiarEstado_Transicion(t *testing.T) {
 
 func TestReporteService_CambiarEstado_EstadoInvalido(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	_, err := svc.CambiarEstado(context.Background(), "admin", uuid.New(), uuid.New(), sqlc.Estado("Arreglado"))
 	if !errors.Is(err, ErrEstadoInvalido) {
@@ -699,7 +710,7 @@ func TestReporteService_ListarPorUsuario_Titulo(t *testing.T) {
 	store := newFakeReporteStore()
 	direccion := "Av. Revolución 1234"
 	store.delUsuario = []sqlc.ListReportesByUserIdRow{{ID: uuid.New(), IncidenteEtiqueta: "Socavón", Direccion: &direccion}}
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	rows, err := svc.ListarPorUsuario(context.Background(), uuid.New(), 10)
 	if err != nil {
@@ -724,7 +735,7 @@ func (f *fakeReporteStore) ActualizarTags(_ context.Context, arg ActualizarTagsT
 
 func TestReporteService_ActualizarTags_QuitaRepetidos(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 	creado, err := svc.Crear(context.Background(), Nuevo{
 		UserID: uuid.New(), Rol: RolCiudadano, IncidenteID: 42, Latitude: 32.5, Longitude: -117,
 	})
@@ -757,7 +768,7 @@ func TestReporteService_ActualizarTags_QuitaRepetidos(t *testing.T) {
 
 func TestReporteService_ActualizarTags_Demasiados(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	tags := make([]int, MaxTagsPorPeticion+1)
 	for i := range tags {
@@ -773,7 +784,7 @@ func TestReporteService_ActualizarTags_Demasiados(t *testing.T) {
 }
 
 func TestReporteService_ActualizarTags_NoEncontrado(t *testing.T) {
-	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, PoligonoBC)
+	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, geo.PoligonoBC)
 
 	_, err := svc.ActualizarTags(context.Background(), uuid.New(), uuid.New(), []int{1})
 	if !errors.Is(err, ErrNotFound) {
@@ -836,7 +847,7 @@ func TestReporteService_Eliminar_Permisos(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			store := newFakeReporteStore()
 			archivos := &fakeArchivos{}
-			svc := NewService(store, archivos, PoligonoBC)
+			svc := NewService(store, archivos, geo.PoligonoBC)
 			id := crearParaEliminar(t, store, svc, creador)
 
 			err := svc.Eliminar(context.Background(), tt.rol, tt.userID, id)
@@ -861,7 +872,7 @@ func TestReporteService_Eliminar_Permisos(t *testing.T) {
 
 func TestReporteService_Eliminar_NoEncontrado(t *testing.T) {
 	store := newFakeReporteStore()
-	svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 	err := svc.Eliminar(context.Background(), "admin", uuid.New(), uuid.New())
 	if !errors.Is(err, ErrNotFound) {
@@ -874,7 +885,7 @@ func TestReporteService_Eliminar_NoEncontrado(t *testing.T) {
 func TestReporteService_Eliminar_FallaBorrarArchivo(t *testing.T) {
 	store := newFakeReporteStore()
 	archivos := &fakeArchivos{err: errors.New("multimedia caído")}
-	svc := NewService(store, archivos, PoligonoBC)
+	svc := NewService(store, archivos, geo.PoligonoBC)
 	creador := uuid.New()
 	id := crearParaEliminar(t, store, svc, creador)
 
@@ -889,7 +900,7 @@ func TestReporteService_Eliminar_FallaBorrarArchivo(t *testing.T) {
 func TestReporteService_ActualizarTags_FueraDeRango(t *testing.T) {
 	for _, id := range []int{math.MaxInt32 + 1, math.MinInt32 - 1} {
 		store := newFakeReporteStore()
-		svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+		svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 
 		_, err := svc.ActualizarTags(context.Background(), uuid.New(), uuid.New(), []int{1, id})
 		if !errors.Is(err, ErrTagInvalido) {
@@ -917,7 +928,7 @@ func TestReporteService_CambiarHistorico(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("rol "+tt.rol, func(t *testing.T) {
 			store := newFakeReporteStore()
-			svc := NewService(store, &fakeArchivos{}, PoligonoBC)
+			svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
 			creado, err := svc.Crear(context.Background(), Nuevo{
 				UserID: uuid.New(), Rol: RolCiudadano, IncidenteID: 42, Latitude: 32.5, Longitude: -117,
 			})
@@ -953,9 +964,49 @@ func TestReporteService_CambiarHistorico(t *testing.T) {
 }
 
 func TestReporteService_CambiarHistorico_NoEncontrado(t *testing.T) {
-	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, PoligonoBC)
+	svc := NewService(newFakeReporteStore(), &fakeArchivos{}, geo.PoligonoBC)
 	_, err := svc.CambiarHistorico(context.Background(), "admin", uuid.New(), uuid.New(), true)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("CambiarHistorico() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestReporteService_ListarEnArea(t *testing.T) {
+	store := newFakeReporteStore()
+	direccion := "Av. Revolución 1234"
+	store.enArea = []sqlc.ListReportesEnAreaRow{
+		{ID: uuid.New(), IncidenteEtiqueta: "Socavón", Direccion: &direccion},
+	}
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
+	poligono := geo.Poligono{
+		{Lat: 32.5, Lon: -117.1},
+		{Lat: 32.5, Lon: -116.9},
+		{Lat: 32.7, Lon: -117.0},
+	}
+
+	rows, err := svc.ListarEnArea(t.Context(), poligono)
+	if err != nil {
+		t.Fatalf("ListarEnArea() error = %v, want nil", err)
+	}
+	if want := "Socavón en Av. Revolución 1234"; len(rows) != 1 || rows[0].Titulo != want {
+		t.Fatalf("ListarEnArea() = %+v, want titulo %q", rows, want)
+	}
+	if want := poligono.GeoJSON(); store.lastEnAreaArg != want {
+		t.Fatalf("ListReportesEnArea() arg = %q, want %q", store.lastEnAreaArg, want)
+	}
+}
+
+func TestReporteService_ListarEnArea_ErrorDeStore(t *testing.T) {
+	store := newFakeReporteStore()
+	store.listErr = errors.New("db caída")
+	svc := NewService(store, &fakeArchivos{}, geo.PoligonoBC)
+
+	poligono := geo.Poligono{
+		{Lat: 32.5, Lon: -117.1},
+		{Lat: 32.5, Lon: -116.9},
+		{Lat: 32.7, Lon: -117.0},
+	}
+	if _, err := svc.ListarEnArea(t.Context(), poligono); !errors.Is(err, store.listErr) {
+		t.Fatalf("ListarEnArea() error = %v, want %v", err, store.listErr)
 	}
 }

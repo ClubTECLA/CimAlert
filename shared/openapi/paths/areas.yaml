@@ -1,0 +1,33 @@
+buscarArea:
+  post:
+    operationId: buscarArea
+    description: Devuelve los reportes y centros activos dentro de un polígono GeoJSON. Sustituye al filtrado por punto en el navegador; ambos clientes comparten la misma regla espacial.
+    tags: [Áreas]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BuscarAreaRequest'
+    responses:
+      '200':
+        description: Reportes y centros dentro del área
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuscarAreaResponse'
+      '400':
+        description: El polígono no es válido
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    BuscarAreaRequest:
+      $ref: '../schemas/areas/buscar_area_request.yaml'
+    BuscarAreaResponse:
+      $ref: '../schemas/areas/buscar_area_response.yaml'
+    ErrorResponse:
+      $ref: '../schemas/error_response.yaml'

@@ -3,7 +3,7 @@ import { LuFilter, LuX } from "react-icons/lu";
 import { useCommonPanel } from "@/panels/useCommonPanel";
 import { usePanelRight } from "@/panels/usePanelRight";
 import { useReportes } from "@/features/reportes/useReportes";
-import { activeFilterLabels } from "@/features/reportes/reportFilters";
+import { activeFilterLabels, DEFAULT_FILTERS } from "@/features/reportes/reportFilters";
 import { useCentros } from "@/features/centros/useCentros";
 import { DEFAULT_CENTRO_FILTERS, activeCentroFilterLabels } from "@/features/centros/centroFormat";
 import { isCentroPanel, isIncidentPanel } from "@/features/centros/centrosPanels";
@@ -15,34 +15,46 @@ import { useRiesgo } from "@/features/riesgo/useRiesgo";
 // abierto, no cabe en el mapa libre: se oculta.
 // Cada grupo se avisa solo si su capa se ve en el mapa y ningún panel abierto ya enseña su filtro: no con el riesgo
 // (oculta los dos), ni con los paneles de centros o de incidentes (ocultan la otra capa y muestran su propio filtro).
+// Con "Área seleccionada" sí se muestra: el polígono sigue filtrando al cerrar el panel y el badge es la forma de volver
+// a él o de quitarlo.
 const PANELS_SHOWING_FILTERS = ["Incidentes", "Capas y filtros"];
+const AREA_LABEL = "Área seleccionada";
 
 export default function ActiveFiltersBadge() {
     const { currentPanelView, openPanel } = useCommonPanel();
-    const { reportes, filteredReportes, filters, resetFilters } = useReportes();
+    const { reportes, filteredReportes, filters, setFilters } = useReportes();
     const { centros, filteredCentros, filters: centroFilters, setFilters: setCentroFilters } = useCentros();
     const { activo: riesgo } = useRiesgo();
     const panelRight = usePanelRight();
 
     const view = currentPanelView ?? "";
-    const incidentLabels = reportes && !riesgo && !isCentroPanel(currentPanelView) && !PANELS_SHOWING_FILTERS.includes(view)
+    const muestraFiltros = !riesgo && !PANELS_SHOWING_FILTERS.includes(view);
+    const incidentLabels = muestraFiltros && reportes && !isCentroPanel(currentPanelView)
         ? activeFilterLabels(filters)
         : [];
-    const centroLabels = centros && !riesgo && !isIncidentPanel(currentPanelView) && !isCentroPanel(currentPanelView) && view !== "Capas y filtros"
+    // Los paneles de centros también avisan del área: sigue filtrando el mapa aunque no vean la lista de filtros.
+    const centroLabels = muestraFiltros && centros && !isIncidentPanel(currentPanelView)
         ? activeCentroFilterLabels(centroFilters)
         : [];
-
-    const labels = [...incidentLabels, ...centroLabels];
+    // El área se anuncia aunque falte alguna lista por cargar y en los paneles de centros. Los dos módulos pueden
+    // declararla, así que se deduplica; el X solo cuenta los filtros que sí se pueden quitar desde aquí.
+    const polygon = filters.polygon ?? centroFilters.polygon;
+    const labels = [...new Set([...incidentLabels, ...centroLabels, ...(muestraFiltros && polygon ? [AREA_LABEL] : [])])];
     if (!labels.length) return null;
+
+    const removiblesIncidentes = incidentLabels.filter((label) => label !== AREA_LABEL);
+    const removiblesCentros = centroLabels.filter((label) => label !== AREA_LABEL);
+    const hayRemovibles = removiblesIncidentes.length > 0 || removiblesCentros.length > 0;
 
     const counts = [
         incidentLabels.length > 0 && reportes ? `${filteredReportes.length} de ${reportes.length} incidentes` : null,
         centroLabels.length > 0 && centros ? `${filteredCentros.length} de ${centros.length} centros` : null,
     ].filter(Boolean);
 
+    // El área dibujada no se quita aquí: sigue filtrando hasta que se borre desde el panel del área.
     const quitarFiltros = () => {
-        if (incidentLabels.length) resetFilters();
-        if (centroLabels.length) setCentroFilters(DEFAULT_CENTRO_FILTERS);
+        if (removiblesIncidentes.length) setFilters((prev) => ({ ...DEFAULT_FILTERS, polygon: prev.polygon }));
+        if (removiblesCentros.length) setCentroFilters((prev) => ({ ...DEFAULT_CENTRO_FILTERS, polygon: prev.polygon }));
     };
 
     return (
@@ -57,8 +69,8 @@ export default function ActiveFiltersBadge() {
         >
             <button
                 type="button"
-                onClick={() => openPanel("Capas y filtros")}
-                title="Ver o cambiar los filtros"
+                onClick={() => openPanel(polygon ? "Área seleccionada" : "Capas y filtros")}
+                title={polygon ? "Ver el área seleccionada" : "Ver o cambiar los filtros"}
                 className="flex min-w-0 items-center gap-2.5 rounded-full py-0.5 pl-0.5 pr-2 text-left transition-colors hover:bg-subtle"
             >
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-white" aria-hidden>
@@ -72,15 +84,17 @@ export default function ActiveFiltersBadge() {
                     </span>
                 </span>
             </button>
-            <button
-                type="button"
-                onClick={quitarFiltros}
-                aria-label="Quitar filtros"
-                title="Quitar filtros"
-                className="flex size-8 shrink-0 items-center justify-center rounded-full text-icon transition-colors hover:bg-subtle"
-            >
-                <LuX className="size-4.5" />
-            </button>
+            {hayRemovibles && (
+                <button
+                    type="button"
+                    onClick={quitarFiltros}
+                    aria-label="Quitar filtros"
+                    title="Quitar filtros"
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full text-icon transition-colors hover:bg-subtle"
+                >
+                    <LuX className="size-4.5" />
+                </button>
+            )}
         </div>
     );
 }

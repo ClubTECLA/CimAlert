@@ -1,9 +1,10 @@
+import type { Polygon } from "geojson";
 import { describe, expect, it } from "vitest";
 import { activeFilterLabels, ALL_STATUSES, DEFAULT_FILTERS, filterReportes, OFFICIAL_STATUSES, OPEN_STATUSES, tabOf, tabStatuses, toggledOfficial, toggledStatus } from "./reportFilters";
 import type { ApiEstadoReporte, ApiReporteResumen } from "@/types/api-types";
 
-const reporte = (id: string, estado_actual: ApiEstadoReporte, es_oficial = false) =>
-    ({ id, estado_actual, es_oficial }) as ApiReporteResumen;
+const reporte = (id: string, estado_actual: ApiEstadoReporte, es_oficial = false, latitude = 32.55, longitude = -117.05) =>
+    ({ id, estado_actual, es_oficial, latitude, longitude }) as ApiReporteResumen;
 
 const reportes = [
     reporte("pendiente", "Pendiente"),
@@ -137,5 +138,24 @@ describe("tabOf", () => {
         expect(tabOf(["Resuelto"])).toBe("todos");
         expect(tabOf(["Descartado"])).toBe("todos");
         expect(tabOf(["Resuelto", "Pendiente"])).toBe("todos");
+    });
+});
+
+describe("filtro por área", () => {
+    const area: Polygon = {
+        type: "Polygon",
+        coordinates: [[[-117.1, 32.5], [-117.0, 32.5], [-117.0, 32.6], [-117.1, 32.6], [-117.1, 32.5]]],
+    };
+    const dentro = reporte("dentro", "Pendiente", false, 32.55, -117.05);
+    const fuera = reporte("fuera", "Pendiente", false, 33, -117.05);
+
+    it("solo pasan los reportes cuyas coordenadas caen en el polígono", () => {
+        expect(ids(filterReportes([dentro, fuera], { ...DEFAULT_FILTERS, polygon: area }))).toEqual(["dentro"]);
+    });
+
+    it("sin polígono pasan todos y el área se anuncia como filtro activo", () => {
+        expect(ids(filterReportes([dentro, fuera], DEFAULT_FILTERS))).toEqual(["dentro", "fuera"]);
+        expect(activeFilterLabels({ ...DEFAULT_FILTERS, polygon: area })).toContain("Área seleccionada");
+        expect(activeFilterLabels(DEFAULT_FILTERS)).not.toContain("Área seleccionada");
     });
 });

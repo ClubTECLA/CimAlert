@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/almacen"
+	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/httperr"
@@ -17,7 +18,7 @@ import (
 )
 
 // tabla es la que arma el servidor: las reglas de dominio y las de transporte.
-var tabla = httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP)
+var tabla = httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, area.ReglasHTTP)
 
 func TestResolver(t *testing.T) {
 	tests := []struct {
@@ -58,6 +59,8 @@ func TestResolver(t *testing.T) {
 		{"tipo de centro no encontrado", centro.ErrTipoCentroNotFound, http.StatusNotFound, "tipo de centro no encontrado"},
 		{"nombre de tipo de centro repetido", centro.ErrNameTipoCentroTaken, http.StatusConflict, "ya existe un tipo de centro con ese nombre"},
 		{"tipo de centro inválido con detalle", fmt.Errorf("%w: nombre vacío", centro.ErrTipoCentroInvalido), http.StatusBadRequest, "invalid tipo de centro: nombre vacío"},
+		{"tipo de centro inexistente", centro.ErrTipoCentroInexistente, http.StatusBadRequest, "el tipo de centro indicado no existe"},
+		{"área de búsqueda inválida", fmt.Errorf("%w: el anillo no está cerrado", area.ErrAreaInvalida), http.StatusBadRequest, "área inválida: el anillo no está cerrado"},
 
 		// El orden de la tabla y errors.Is existen para esto: los servicios
 		// envuelven los sentinels con contexto.
@@ -128,6 +131,7 @@ func TestResolver_TodosLosErroresDeDominio(t *testing.T) {
 		centro.ErrCentroInvalido,
 		centro.ErrCentroNotFound,
 		centro.ErrTipoCentroInexistente,
+		area.ErrAreaInvalida,
 	}
 
 	for _, err := range errs {

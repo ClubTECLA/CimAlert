@@ -1,9 +1,10 @@
+import type { Polygon } from "geojson";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CENTRO_FILTERS, estaOcupado, filterCentros, lugaresDisponibles, lugaresTexto } from "./centroFormat";
+import { activeCentroFilterLabels, DEFAULT_CENTRO_FILTERS, estaOcupado, filterCentros, lugaresDisponibles, lugaresTexto } from "./centroFormat";
 import type { ApiCentro, ApiTipoCentro } from "@/types/api-types";
 
-const centro = (id: string, tipo_centro: number, capacidad: number | null, cantidad: number | null) =>
-    ({ id, tipo_centro, capacidad, cantidad }) as ApiCentro;
+const centro = (id: string, tipo_centro: number, capacidad: number | null, cantidad: number | null, latitude = 5, longitude = 5) =>
+    ({ id, tipo_centro, capacidad, cantidad, latitude, longitude }) as ApiCentro;
 
 const refugios = { id: 1, nombre: "Refugios" } as ApiTipoCentro;
 const salud = { id: 2, nombre: "Salud" } as ApiTipoCentro;
@@ -42,6 +43,14 @@ describe("estaOcupado", () => {
     });
 });
 
+describe("activeCentroFilterLabels", () => {
+    it("anuncia el área seleccionada para que los paneles de centros la indiquen", () => {
+        const area: Polygon = { type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] };
+        expect(activeCentroFilterLabels(DEFAULT_CENTRO_FILTERS)).toEqual([]);
+        expect(activeCentroFilterLabels({ ...DEFAULT_CENTRO_FILTERS, polygon: area })).toEqual(["Área seleccionada"]);
+    });
+});
+
 describe("filterCentros", () => {
     it("de entrada (activos) muestra todo menos los refugios llenos", () => {
         expect(ids(filterCentros(centros, DEFAULT_CENTRO_FILTERS, tipos))).toEqual(["refugio-libre", "hospital", "hospital-lleno"]);
@@ -51,6 +60,14 @@ describe("filterCentros", () => {
         expect(ids(filterCentros(centros, { tab: "ocupados", hiddenTipos: [] }, tipos))).toEqual(["refugio-lleno"]);
         expect(ids(filterCentros(centros, { tab: "todos", hiddenTipos: [] }, tipos))).toEqual(ids(centros));
         expect(ids(filterCentros(centros, { tab: "todos", hiddenTipos: [2] }, tipos))).toEqual(["refugio-libre", "refugio-lleno"]);
+    });
+
+    it("el polígono se combina con la pestaña y los tipos ocultos", () => {
+        const area: Polygon = { type: "Polygon", coordinates: [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]] };
+        const dentro = centro("dentro", 1, 50, 10);
+        const fuera = centro("fuera", 1, 50, 10, 20, 20);
+        expect(ids(filterCentros([dentro, fuera], { ...DEFAULT_CENTRO_FILTERS, polygon: area }, tipos))).toEqual(["dentro"]);
+        expect(ids(filterCentros([dentro, fuera], { tab: "todos", hiddenTipos: [1], polygon: area }, tipos))).toEqual([]);
     });
 });
 
