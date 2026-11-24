@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -28,6 +29,20 @@ var PoligonoBC = Poligono{
 	{32.7773, -114.6650},
 	{32.5715, -117.3546},
 	{28.7000, -118.7000},
+}
+
+const maxVertices = 100
+
+// validar revisa área != 0 y que no haya lados que se crucen. exactos son
+// las coordenadas de p como racionales, en el mismo orden: {lat, lon}.
+func (p Poligono) validar(exactos [][2]*big.Rat) error {
+	if areaExacta(exactos).Sign() == 0 {
+		return errors.New("el polígono no tiene área: hay puntos repetidos o en línea")
+	}
+	if i, j, ok := p.cruce(); ok {
+		return fmt.Errorf("los lados %d y %d se cruzan: los puntos deben ir en orden alrededor del borde", i+1, j+1)
+	}
+	return nil
 }
 
 // Contiene reporta si (lat, lon) cae dentro del polígono (ray casting). Un
@@ -75,11 +90,8 @@ func ParsePoligono(s string) (Poligono, error) {
 	// triángulo plano (colineal o con un punto repetido) pasaría y rechazaría
 	// todo reporte. El área se calcula exacta sobre el decimal escrito: en
 	// float64 puntos colineales como 0.1;0.2;0.3 dejan un residuo distinto de 0.
-	if areaExacta(exactos).Sign() == 0 {
-		return nil, fmt.Errorf("el polígono no tiene área: hay puntos repetidos o en línea")
-	}
-	if i, j, ok := p.cruce(); ok {
-		return nil, fmt.Errorf("los lados %d y %d se cruzan: los puntos deben ir en orden alrededor del borde", i+1, j+1)
+	if err := p.validar(exactos); err != nil {
+		return nil, err
 	}
 	return p, nil
 }
@@ -151,4 +163,58 @@ func orientacion(a, b, c Punto) int {
 func enRango(a, b, c Punto) bool {
 	return min(a.Lon, b.Lon) <= c.Lon && c.Lon <= max(a.Lon, b.Lon) &&
 		min(a.Lat, b.Lat) <= c.Lat && c.Lat <= max(a.Lat, b.Lat)
+}
+
+func DesdeGeoJSON(tipo string, anillos [][][]float64) (Poligono, error) {
+	if tipo != "Polygon" || len(anillos) != 1 {
+		return nil, errors.New("se espera un Polygon con un solo anillo")
+	}
+	anillo := anillos[0]
+	if len(anillo) < 4 || len(anillo) > maxVertices+1 {
+		return nil, fmt.Errorf("el polígono debe tener entre 3 y %d vértices", maxVertices)
+	}
+	for _, pos := range anillo {
+		if len(pos) < 2 {
+			return nil, errors.New("coordenada incompleta")
+		}
+	}
+	if anillo[0][0] != anillo[len(anillo)-1][0] || anillo[0][1] != anillo[len(anillo)-1][1] {
+		return nil, errors.New("el anillo no está cerrado")
+	}
+	p := make(Poligono, 0, len(anillo)-1)
+	exactos := make([][2]*big.Rat, 0, len(anillo)-1)
+	for _, pos := range anillo[:len(anillo)-1] {
+		lon, lat := pos[0], pos[1] // GeoJSON es lon,lat
+		if !(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+			return nil, errors.New("coordenada fuera de rango")
+		}
+		p = append(p, Punto{Lat: lat, Lon: lon})
+		exactos = append(exactos, [2]*big.Rat{
+			new(big.Rat).SetFloat64(lat),
+			new(big.Rat).SetFloat64(lon),
+		})
+	}
+	if err := p.validar(exactos); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// GeoJSON devuelve el polígono como GeoJSON: orden lon,lat y anillo cerrado
+// (el último vértice repite el primero), que es lo que espera
+// ST_GeomFromGeoJSON.
+func (p Poligono) GeoJSON() string {
+	var b strings.Builder
+	b.WriteString(`{"type":"Polygon","coordinates":[[`)
+	for i := 0; i <= len(p); i++ {
+		pt := p[i%len(p)]
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, "[%s,%s]",
+			strconv.FormatFloat(pt.Lon, 'f', -1, 64),
+			strconv.FormatFloat(pt.Lat, 'f', -1, 64))
+	}
+	b.WriteString(`]]}`)
+	return b.String()
 }
