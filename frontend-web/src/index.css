@@ -131,8 +131,16 @@ body {
 
 /* Los campos de contraseña llevan nuestro propio botón de mostrar/ocultar. Se quitan los iconos
    nativos de los navegadores para que no aparezcan dos controles superpuestos. */
-input[type="password"]::-ms-reveal,
-input[type="password"]::-ms-clear,
+input[type="password"]::-ms-reveal {
+  display: none !important;
+  pointer-events: none;
+}
+
+input[type="password"]::-ms-clear {
+  display: none !important;
+  pointer-events: none;
+}
+
 input[type="password"]::-webkit-credentials-auto-fill-button {
   display: none !important;
   pointer-events: none;
