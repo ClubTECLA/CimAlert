@@ -27,6 +27,14 @@ func cuadrado() [][][]float64 {
 	}}
 }
 
+func anilloLargo() [][][]float64 {
+	anillo := make([][]float64, 0, maxVerticesPorAnillo+1)
+	for i := 0; i < maxVerticesPorAnillo; i++ {
+		anillo = append(anillo, []float64{-117 + float64(i)*1e-7, 32 + float64(i)*1e-7})
+	}
+	return [][][]float64{append(anillo, anillo[0])}
+}
+
 func TestValidarPoligono(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -34,6 +42,11 @@ func TestValidarPoligono(t *testing.T) {
 		quiereErr string
 	}{
 		{name: "válido", poligono: poligono(t, cuadrado())},
+		{
+			name:      "demasiados vértices",
+			poligono:  poligono(t, anilloLargo()),
+			quiereErr: "no puede tener más de",
+		},
 		{
 			name:      "otra geometría",
 			poligono:  httpapi.Poligono{Type: httpapi.PoligonoType("LineString"), Coordinates: cuadrado()},

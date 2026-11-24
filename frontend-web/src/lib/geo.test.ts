@@ -85,4 +85,22 @@ describe("polygonFromPoints", () => {
     it("tres vértices alineados no encierran área", () => {
         expect(polygonFromPoints([[0, 0], [1, 1], [2, 2]])).toBeNull();
     });
+
+    it("acepta triángulos y cóncavos", () => {
+        expect(polygonFromPoints([[0, 0], [2, 0], [1, 2]])).toEqual(
+            polygon([[0, 0], [2, 0], [1, 2], [0, 0]]),
+        );
+        expect(polygonFromPoints([[0, 0], [4, 0], [4, 1], [1, 1], [1, 4], [0, 4]])).toEqual(
+            polygon([[0, 0], [4, 0], [4, 1], [1, 1], [1, 4], [0, 4], [0, 0]]),
+        );
+    });
+
+    it("rechaza un anillo que se cruza aunque tenga área", () => {
+        // Área firmada 3: solo lo detiene la comprobación de lados, igual que en el backend.
+        expect(polygonFromPoints([[0, 0], [2, 2], [0, 3], [1, 0]])).toBeNull();
+    });
+
+    it("rechaza un vértice repetido no consecutivo", () => {
+        expect(polygonFromPoints([[0, 0], [3, 0], [0, 3], [3, 3]])).toBeNull();
+    });
 });

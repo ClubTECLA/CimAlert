@@ -5,7 +5,7 @@ import { readAreaPreferences, resolveAreaMode } from "@/features/areas/areaPrefe
 import { areaFilterStore } from "@/features/areas/areaFilterStore";
 import { LOCAL_STORAGE_CHANGE_EVENT, type LocalStorageChangeDetail } from "@/lib/useLocalStorage";
 import { AREA_FILTER_STORAGE_KEY } from "@/types/localStorage-types";
-import { buscarArea } from "@/features/areas/areas.services";
+import { buscarArea, invalidarBuscarArea } from "@/features/areas/areas.services";
 import { listarIncidentes } from "@/features/categorias/incidentes.services";
 import { listarReportes } from "./reportes.services";
 import { publicarReporte, subirFoto, type NuevoReporte } from "./publicarReporte";
@@ -30,6 +30,8 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
     // null hasta que llegan por primera vez.
     const [categories, setCategories] = useState<Map<number, ApiIncidente> | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [reportesError, setReportesError] = useState<string | null>(null);
+    const [categoriasError, setCategoriasError] = useState<string | null>(null);
     const [filters, setFilters] = useState<ReportFilters>(DEFAULT_FILTERS);
     const [createdId, setCreatedId] = useState<string | null>(null);
     const [lastSync, setLastSync] = useState<number | null>(null);
@@ -102,10 +104,16 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
             }
         }
 
-        const failed = [reportResult, categoryResult].find((result) => result.status === "rejected");
-        setError(failed
-            ? (failed.reason instanceof Error ? failed.reason.message : "No se pudieron cargar los incidentes.")
-            : null);
+        const mensaje = (reason: unknown, fallback: string) => reason instanceof Error ? reason.message : fallback;
+        const falloReportes = reportResult.status === "rejected"
+            ? mensaje(reportResult.reason, "No se pudieron cargar los incidentes.")
+            : null;
+        const falloCategorias = categoryResult.status === "rejected"
+            ? mensaje(categoryResult.reason, "No se pudieron cargar las categorías.")
+            : null;
+        setReportesError(falloReportes);
+        setCategoriasError(falloCategorias);
+        setError(falloReportes ?? falloCategorias);
     }, []);
 
     const publicar = useCallback(async (nuevo: NuevoReporte) => {
@@ -114,6 +122,9 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         // conserva: publicar no debe quitar un filtro que el usuario no pidió quitar.
         setFilters((prev) => ({ ...DEFAULT_FILTERS, polygon: prev.polygon }));
         setCreatedId(publicacion.reporte.id);
+        // El alta necesita datos posteriores al POST: si había una búsqueda por área en vuelo, reutilizarla dejaría
+        // fuera el reporte recién creado. Solo se invalida aquí; las lecturas normales siguen compartiendo resultados.
+        invalidarBuscarArea();
         void refresh();
         return publicacion;
     }, [refresh]);
@@ -157,6 +168,8 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
             setReportes(null);
             setCategories(null);
             setError(null);
+            setReportesError(null);
+            setCategoriasError(null);
             setLastSync(null);
         };
     }, [isAuthenticated, refresh]);
@@ -203,6 +216,8 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         categories: categories ?? NO_CATEGORIES,
         categoriesLoaded: categories !== null,
         error,
+        reportesError,
+        categoriasError,
         filteredReportes,
         filters,
         setFilters,
@@ -213,7 +228,7 @@ export function ReportesProvider({ children }: { children: ReactNode }) {
         reintentarFoto: (reporteId, foto) => subirFoto(reporteId, foto),
         createdId,
         lastSync,
-    }), [reportes, categories, error, filteredReportes, filters, refresh, publicar, createdId, lastSync]);
+    }), [reportes, categories, error, reportesError, categoriasError, filteredReportes, filters, refresh, publicar, createdId, lastSync]);
 
     return (
         <ReportesContext.Provider value={value}>

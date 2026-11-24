@@ -167,16 +167,18 @@ export default function PolygonLayer() {
         const onKeyDown = (event: KeyboardEvent) => {
             const current = stateRef.current;
             if (!current.isDrawing) return;
-            // Los atajos son del mapa: no se comen la activación con Enter de controles, enlaces ni campos de los paneles.
-            if (event.target instanceof Element
-                && event.target.closest("button, a, input, textarea, select, [contenteditable], [role='button']")) return;
-            if (event.key === "Enter") {
-                event.preventDefault();
-                current.finish();
-            } else if (event.key === "Escape") {
+            // Escape cancela siempre, también con el botón "Cancelar dibujo (Esc)" enfocado tras hacer clic en él.
+            if (event.key === "Escape") {
                 event.preventDefault();
                 current.cancel();
+                return;
             }
+            if (event.key !== "Enter") return;
+            // Enter sí respeta el foco en controles, enlaces y campos: allí activa su propio control.
+            if (event.target instanceof Element
+                && event.target.closest("button, a, input, textarea, select, [contenteditable], [role='button']")) return;
+            event.preventDefault();
+            current.finish();
         };
 
         map.on("click", onClick);

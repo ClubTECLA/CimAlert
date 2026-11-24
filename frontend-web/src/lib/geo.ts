@@ -101,9 +101,42 @@ export function pointInPolygon(point: Position, polygon: Polygon): boolean {
     return true;
 }
 
+function orientacion(a: Position, b: Position, c: Position): number {
+    const v = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+    return v > 0 ? 1 : v < 0 ? -1 : 0;
+}
+
+function enRango(a: Position, b: Position, c: Position): boolean {
+    return Math.min(a[0], b[0]) <= c[0] && c[0] <= Math.max(a[0], b[0])
+        && Math.min(a[1], b[1]) <= c[1] && c[1] <= Math.max(a[1], b[1]);
+}
+
+function segmentosSeTocan(a: Position, b: Position, c: Position, d: Position): boolean {
+    const o1 = orientacion(a, b, c);
+    const o2 = orientacion(a, b, d);
+    const o3 = orientacion(c, d, a);
+    const o4 = orientacion(c, d, b);
+    if (o1 !== o2 && o3 !== o4) return true;
+    return (o1 === 0 && enRango(a, b, c)) || (o2 === 0 && enRango(a, b, d))
+        || (o3 === 0 && enRango(c, d, a)) || (o4 === 0 && enRango(c, d, b));
+}
+
+/** Espejo del validador del backend: busca lados no contiguos que se toquen o se crucen. El anillo entra sin cierre. */
+function anilloSeCruza(anillo: Position[]): boolean {
+    const n = anillo.length;
+    for (let i = 0; i < n; i++) {
+        for (let j = i + 2; j < n; j++) {
+            if (i === 0 && j === n - 1) continue; // contiguos a través del cierre implícito
+            if (segmentosSeTocan(anillo[i], anillo[(i + 1) % n], anillo[j], anillo[(j + 1) % n])) return true;
+        }
+    }
+    return false;
+}
+
 /**
  * Vértices sueltos del dibujo → anillo GeoJSON cerrado. Quita repetidos consecutivos (el doble clic dispara dos clics)
- * y cierra con el primero. Devuelve null si no hay bastante para un área.
+ * y cierra con el primero. Devuelve null si no hay bastante para un área o si el anillo se cruza: el backend rechazaría
+ * esa geometría y finish() debe conservar la selección anterior.
  */
 export function polygonFromPoints(points: Position[]): Polygon | null {
     const unique: Position[] = [];
@@ -125,5 +158,6 @@ export function polygonFromPoints(points: Position[]): Polygon | null {
         area += x1 * y2 - x2 * y1;
     }
     if (Math.abs(area) < 1e-12) return null;
+    if (anilloSeCruza(unique)) return null;
     return { type: "Polygon", coordinates: [[...unique, unique[0]]] };
 }

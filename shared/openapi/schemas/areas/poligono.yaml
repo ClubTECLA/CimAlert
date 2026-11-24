@@ -12,7 +12,9 @@ properties:
     maxItems: 1
     items:
       type: array
+      description: Anillo exterior cerrado; se limita el tamaño para que la comprobación de lados siga siendo rápida.
       minItems: 4
+      maxItems: 1000
       items:
         type: array
         description: Par [longitud, latitud].

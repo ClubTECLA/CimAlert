@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { validateChildren } from "@/lib/validateChildren";
 import {
     backPanel as navigateBack,
@@ -8,6 +8,7 @@ import {
     openPanel as navigateToPanel,
 } from "./panelRouter";
 import { CommonPanelContext } from "./CommonPanelContext.ts";
+import { createLeaveGuardCoordinator, type LeaveGuard } from "./leaveGuard";
 import type { OpenPanel, PanelEntry } from "./panelTypes";
 
 export function CommonPanelProvider({ children }: { children: ReactNode }) {
@@ -16,24 +17,15 @@ export function CommonPanelProvider({ children }: { children: ReactNode }) {
     const [routerState, setRouterState] = useState(createPanelRouterState);
     // Guard de salida que registra la vista con borrador. Todas las navegaciones pasan por él, vengan de openPanel,
     // de backView, de closePanel o de una acción como cerrar sesión que envuelva requestLeave.
-    const leaveGuardRef = useRef<((action: () => void) => void) | null>(null);
+    const leaveGuard = useMemo(createLeaveGuardCoordinator, []);
 
-    const registerLeaveGuard = useCallback((guard: ((action: () => void) => void) | null) => {
-        leaveGuardRef.current = guard;
-    }, []);
+    const registerLeaveGuard = useCallback((guard: LeaveGuard | null) => {
+        leaveGuard.register(guard);
+    }, [leaveGuard]);
 
     const requestLeave = useCallback((action: () => void) => {
-        const guard = leaveGuardRef.current;
-        if (!guard) {
-            action();
-            return;
-        }
-        guard(() => {
-            // Aprobado: el guard se agota para que la acción de navegación no vuelva a pedir confirmación.
-            leaveGuardRef.current = null;
-            action();
-        });
-    }, []);
+        leaveGuard.request(action);
+    }, [leaveGuard]);
 
     // El Provider adapta la API pública al router puro; las decisiones de historial viven en panelRouter.
     // Callbacks estables: varios efectos de las vistas los tienen como dependencia y una identidad nueva en cada render

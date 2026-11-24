@@ -20,7 +20,7 @@ const noteStyle = "py-4 text-center text-sm text-ink-muted";
  */
 export default function AreaSelectionView() {
     const { openPanel } = useCommonPanel();
-    const { reportes, categories, filteredReportes } = useReportes();
+    const { reportes, categories, filteredReportes, reportesError, categoriasError, refresh: refreshReportes } = useReportes();
     const { centros, tipos, filteredCentros, error: centrosError, refresh: refreshCentros } = useCentros();
     const { polygon, start, clear } = usePolygon();
 
@@ -44,9 +44,22 @@ export default function AreaSelectionView() {
                     {polygon && (
                         <>
                             <span className={sectionTitleStyle}>INCIDENTES · {filteredReportes.length}</span>
-                            {!reportes && <span className={noteStyle}>Cargando incidentes…</span>}
-                            {reportes && filteredReportes.length === 0 && <span className={noteStyle}>Ningún incidente en esta área.</span>}
-                            {incidentes.map((reporte) =>
+                            {(reportesError || categoriasError) && (
+                                <div className={`${noteStyle} flex flex-col items-center gap-2`}>
+                                    {reportesError && <span>{reportesError}</span>}
+                                    {categoriasError && <span>{categoriasError}</span>}
+                                    <button
+                                        type="button"
+                                        onClick={() => void refreshReportes()}
+                                        className="rounded-full border border-line-strong px-4 py-1.5 text-sm font-semibold text-ink transition-colors hover:bg-line-soft"
+                                    >
+                                        Reintentar
+                                    </button>
+                                </div>
+                            )}
+                            {!reportesError && !reportes && <span className={noteStyle}>Cargando incidentes…</span>}
+                            {!reportesError && reportes && filteredReportes.length === 0 && <span className={noteStyle}>Ningún incidente en esta área.</span>}
+                            {!reportesError && incidentes.map((reporte) =>
                                 <IncidentRow
                                     key={reporte.id}
                                     reporte={reporte}
@@ -54,7 +67,7 @@ export default function AreaSelectionView() {
                                     onClick={() => openPanel("Detalle Incidente", { reporteId: reporte.id })}
                                 />
                             )}
-                            {filteredReportes.length > incidentes.length &&
+                            {!reportesError && filteredReportes.length > incidentes.length &&
                                 <button
                                     type="button"
                                     onClick={() => openPanel("Incidentes")}

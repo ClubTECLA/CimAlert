@@ -30,6 +30,10 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
     // coinciden solo se aplica la última.
     const sessionRef = useRef(0);
     const requestRef = useRef(0);
+    // Alcance de la lista guardada: el subconjunto de un área ya quitada no sirve como lista completa.
+    const centrosScopeRef = useRef("");
+    // Altas optimistas: si la recarga posterior falla, no se pueden perder al descartar datos de otro alcance.
+    const centrosOptimistasRef = useRef(new Set<string>());
     // Igual que en ReportesProvider: refresh no cambia de identidad al dibujar, para no reiniciar cargas ni efectos.
     const polygonRef = useRef<Polygon | null>(filters.polygon ?? null);
 
@@ -40,14 +44,29 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         // Misma decisión que ReportesProvider, leída del store compartido; buscarArea deduplica la petición
         // cuando ambos providers la piden a la vez.
         const enBackend = polygon !== null && areaFilterStore.resolveMode() === "backend";
+        const scope = enBackend && polygon ? `area:${JSON.stringify(polygon)}` : "todos";
         const [centroResult, tipoResult] = await Promise.allSettled([
             enBackend && polygon ? buscarArea(polygon).then((respuesta) => respuesta.centros) : listarCentros(),
             listarTiposCentro(),
         ]);
         if (session !== sessionRef.current || request !== requestRef.current) return;
 
-        // Cada lista por separado: si falla una, la otra se aplica y lo que falla conserva lo último que se cargó bien.
-        if (centroResult.status === "fulfilled") setCentros(centroResult.value);
+        // Cada lista por separado: si falla una, la otra se aplica y lo que falla conserva lo último que se cargó
+        // bien, salvo que pertenezca a otro alcance: los centros de un área ya quitada no pueden seguir mostrándose
+        // como la lista completa.
+        if (centroResult.status === "fulfilled") {
+            centrosScopeRef.current = scope;
+            centrosOptimistasRef.current.clear();
+            setCentros(centroResult.value);
+        } else if (centrosScopeRef.current !== scope) {
+            centrosScopeRef.current = scope;
+            // Solo se descartan los datos del alcance anterior; un centro recién creado se conserva hasta que
+            // una recarga correcta lo sustituya por la lista del servidor.
+            setCentros((prev) => {
+                const optimistas = prev?.filter((centro) => centrosOptimistasRef.current.has(centro.id)) ?? [];
+                return optimistas.length ? optimistas : null;
+            });
+        }
         if (tipoResult.status === "fulfilled") setTipos(new Map(tipoResult.value.map((tipo) => [tipo.id, tipo])));
 
         const failed = [centroResult, tipoResult].find((result) => result.status === "rejected");
@@ -64,6 +83,7 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         if (session !== sessionRef.current) return centro;
         // Se añade ya el que devolvió el POST: si la recarga falla, su detalle (que se abre al publicar) lo encuentra
         // igual. Si la recarga sale bien, la lista del servidor lo sustituye.
+        centrosOptimistasRef.current.add(centro.id);
         setCentros((prev) => [...(prev ?? []).filter((item) => item.id !== centro.id), centro]);
         // Sin filtros, para que la lista y el mapa muestren el centro nuevo, salvo el área dibujada: crear un centro
         // no debe quitar el filtro que el usuario eligió (se quita con "Limpiar selección" o restableciendo filtros).
@@ -85,6 +105,7 @@ export function CentrosProvider({ children }: { children: ReactNode }) {
         return () => {
             clearTimeout(initialLoadId);
             // Al cerrar sesión no deben quedar datos del usuario anterior.
+            centrosOptimistasRef.current.clear();
             setCentros(null);
             setTipos(null);
             setError(null);

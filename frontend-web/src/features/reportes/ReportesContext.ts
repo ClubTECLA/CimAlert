@@ -14,6 +14,10 @@ export interface ReportesContextType {
     categoriesLoaded: boolean
     /** Último fallo al cargar reportes o categorías; null si la última carga fue bien. */
     error: string | null
+    /** Fallo al cargar los reportes, sin incluir las categorías: bloquea la lista del área. */
+    reportesError: string | null
+    /** Fallo al cargar las categorías: deja los reportes visibles, pero sus etiquetas pueden quedar desactualizadas. */
+    categoriasError: string | null
     /** Reportes que pasan el filtro: los pinta el mapa y los lista el panel "Incidentes", así siempre coinciden. */
     filteredReportes: ApiReporteResumen[]
     filters: ReportFilters

@@ -4,11 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
 )
+
+// Tope del anillo, con el vértice de cierre incluido. Más allá, la comprobación
+// de lados cuadrática de anilloSeCruza deja de ser económica; el schema de la
+// API aplica el mismo límite.
+const maxVerticesPorAnillo = 1000
 
 // Handler implementa la operación buscarArea del contrato. El servidor lo
 // embebe junto a los de las demás funcionalidades.
@@ -33,6 +39,10 @@ func validarPoligono(poligono httpapi.Poligono) error {
 	anillo := poligono.Coordinates[0]
 	if len(anillo) < 4 {
 		return errors.New("El polígono necesita al menos tres vértices.")
+	}
+	// Se rechaza antes de anilloSeCruza: su coste crece con el cuadrado de los vértices.
+	if len(anillo) > maxVerticesPorAnillo {
+		return fmt.Errorf("El anillo no puede tener más de %d vértices (incluido el cierre).", maxVerticesPorAnillo)
 	}
 
 	primero, ultimo := anillo[0], anillo[len(anillo)-1]
