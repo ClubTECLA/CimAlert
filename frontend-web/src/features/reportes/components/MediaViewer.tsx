@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
+import { useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
 import { LuChevronLeft, LuChevronRight, LuPlay, LuTrash2, LuX } from "react-icons/lu";
 import type { ApiMultimedia } from "@/types/api-types";
 import { esVideoPath, fotoUrl, shortDate } from "@/features/reportes/reportFormat";
@@ -24,8 +24,9 @@ export default function MediaViewer({ items, index, onIndexChange, onClose, plac
     const several = items.length > 1;
     const go = (step: number) => onIndexChange((index + step + items.length) % items.length);
 
-    // close() al desmontar devuelve el foco a la cabecera que abrió el visor.
-    useEffect(() => {
+    // close() al desmontar devuelve el foco a la cabecera que abrió el visor. Layout: su limpieza corre antes de que
+    // React quite el diálogo del DOM; con uno ya desconectado el navegador no restaura el foco.
+    useLayoutEffect(() => {
         const dialog = dialogRef.current;
         dialog?.showModal();
         return () => dialog?.close();
