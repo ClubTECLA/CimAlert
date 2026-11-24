@@ -17,7 +17,7 @@ export function CommonPanelProvider({ children }: { children: ReactNode }) {
     const [routerState, setRouterState] = useState(createPanelRouterState);
     // Guard de salida que registra la vista con borrador. Todas las navegaciones pasan por él, vengan de openPanel,
     // de backView, de closePanel o de una acción como cerrar sesión que envuelva requestLeave.
-    const leaveGuard = useMemo(createLeaveGuardCoordinator, []);
+    const leaveGuard = useMemo(() => createLeaveGuardCoordinator(), []);
 
     const registerLeaveGuard = useCallback((guard: LeaveGuard | null) => {
         leaveGuard.register(guard);
