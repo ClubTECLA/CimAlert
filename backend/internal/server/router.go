@@ -118,7 +118,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 
 	// Una sola tabla con las reglas de todos los errores que pueden devolver
 	// los handlers.
-	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP)
+	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP, area.ReglasHTTP)
 
 	// Registra acciones con el RequestLogger
 	// El logger debe ser lo primero en utilizarse para que se registren los panics con su request_id
