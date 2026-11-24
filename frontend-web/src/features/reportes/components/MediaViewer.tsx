@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent } from "react";
 import { LuChevronLeft, LuChevronRight, LuPlay, LuTrash2, LuX } from "react-icons/lu";
 import type { ApiMultimedia } from "@/types/api-types";
-import { esVideoPath, fotoUrl, shortDate } from "@/features/reportes/reportFormat";
+import { esVideoPath, shortDate } from "@/features/reportes/reportFormat";
 
 interface MediaViewerProps {
     items: ApiMultimedia[]
@@ -70,10 +70,10 @@ export default function MediaViewer({ items, index, onIndexChange, onClose, plac
                     }
                     {/* key: al cambiar de archivo el reproductor empieza de cero en vez de seguir con el anterior. */}
                     {video
-                        ? <video key={current.path} src={fotoUrl(current.path)} controls autoPlay playsInline
+                        ? <video key={current.path} src={current.url} controls autoPlay playsInline
                             aria-label={`Video ${index + 1} de ${items.length}`}
                             className="max-h-[min(700px,calc(100dvh-20rem))] w-full max-w-280 rounded-[20px] bg-black object-contain" />
-                        : <img key={current.path} src={fotoUrl(current.path)} alt={`Foto ${index + 1} de ${items.length}`}
+                        : <img key={current.path} src={current.url} alt={`Foto ${index + 1} de ${items.length}`}
                             className="max-h-[min(700px,calc(100dvh-20rem))] w-auto max-w-[min(70rem,100%)] rounded-[20px] object-contain" />}
                     {several &&
                         <button type="button" aria-label="Siguiente" onClick={() => go(1)}
@@ -113,10 +113,10 @@ export default function MediaViewer({ items, index, onIndexChange, onClose, plac
                                 {esVideoPath(item.path)
                                     // #t=0.1: sin reproducir, algunos navegadores no pintan el primer fotograma.
                                     ? <>
-                                        <video src={`${fotoUrl(item.path)}#t=0.1`} muted preload="metadata" className="size-full object-cover" />
+                                        <video src={`${item.url}#t=0.1`} muted preload="metadata" className="size-full object-cover" />
                                         <LuPlay className="absolute inset-0 m-auto size-6 drop-shadow" aria-hidden />
                                     </>
-                                    : <img src={fotoUrl(item.path)} alt="" className="size-full object-cover" />}
+                                    : <img src={item.url} alt="" className="size-full object-cover" />}
                             </button>
                         )}
                     </div>

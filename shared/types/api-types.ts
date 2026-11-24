@@ -117,7 +117,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Sube la foto o el video del reporte. Solo lo puede subir su creador, y un solo archivo (foto o video, no los dos) por usuario por reporte. La foto debe ser un JPEG ya reducido por la app. El video debe ser un MP4 (H.264) ya comprimido por la app, de unos 5 segundos (por defecto el servidor acepta hasta 6; el despliegue puede cambiarlo con MAX_VIDEO_SEGUNDOS); los .mov de QuickTime se rechazan. El backend detecta el tipo por el contenido, no por el nombre ni el Content-Type, valida el tamaño y las dimensiones de la foto o la duración del video, y le quita los metadatos: el EXIF de la foto y, en el video, los del contenedor (las cajas udta, meta y uuid). No analiza los datos del video, así que la información que el códec lleve dentro de sus muestras (por ejemplo mensajes SEI de H.264) se conserva. El servicio multimedia lo guarda; el path de la respuesta se sirve en /multimedia/{path} y termina en .jpg o .mp4. */
+        /** @description Sube la foto o el video del reporte. Solo lo puede subir su creador, y un solo archivo (foto o video, no los dos) por usuario por reporte. La foto debe ser un JPEG ya reducido por la app. El video debe ser un MP4 (H.264) ya comprimido por la app, de unos 5 segundos (por defecto el servidor acepta hasta 6; el despliegue puede cambiarlo con MAX_VIDEO_SEGUNDOS); los .mov de QuickTime se rechazan. El backend detecta el tipo por el contenido, no por el nombre ni el Content-Type, valida el tamaño y las dimensiones de la foto o la duración del video, y le quita los metadatos: el EXIF de la foto y, en el video, los del contenedor (las cajas udta, meta y uuid). No analiza los datos del video, así que la información que el códec lleve dentro de sus muestras (por ejemplo mensajes SEI de H.264) se conserva. El servicio multimedia lo guarda. La respuesta trae `path` (termina en .jpg o .mp4) y `url`, un enlace firmado para verlo en /multimedia/ que vence (por defecto en una hora). */
         post: operations["subirMultimedia"];
         delete?: never;
         options?: never;
@@ -602,7 +602,10 @@ export interface components {
         /** @description Archivo (foto o video) que un usuario adjuntó a un reporte. */
         multimedia: {
             id: number;
+            /** @description Ruta del archivo dentro del almacenamiento. Para mostrarlo usa `url`. */
             path: string;
+            /** @description Enlace firmado para ver el archivo. Vence (por defecto en una hora), así que no se guarda: se pide de nuevo el reporte cuando haga falta. */
+            url: string;
             /** Format: uuid */
             user_id: string;
             /** Format: date-time */

@@ -52,7 +52,8 @@ export function confirmaciones(avistamientos: number) {
     return `${avistamientos} ${avistamientos === 1 ? "confirmación" : "confirmaciones"}`;
 }
 
-/** URL pública de una foto o video guardado: la sirve nginx fuera de /api (en desarrollo, el proxy de Vite). */
+/** URL de un archivo sin firma servido por nginx fuera de /api (hoy, la imagen de un centro). Las fotos y videos
+ * de un reporte vienen con un `url` firmado que vence: úsalo tal cual. */
 export function fotoUrl(path: string) {
     return `/multimedia/${path.split("/").map(encodeURIComponent).join("/")}`;
 }

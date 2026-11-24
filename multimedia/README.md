@@ -36,7 +36,7 @@ App / Web ──► nginx :80 ──► backend :8080 ──► multimedia :8081
    5. Envía el archivo a `multimedia` (`POST /upload`, carpeta `reportes/<id>` y `extension` `jpg` o `mp4`).
    6. Inserta la fila en `multimedia`. Si falla (por ejemplo `409` por el `UNIQUE`), pide a `multimedia` borrar el archivo (`DELETE /upload/{path}`) para no dejar huérfanos.
 5. **multimedia** guarda el archivo y responde su `path`; el backend lo devuelve al cliente.
-6. Para verlo, el cliente pide `GET /multimedia/<path>` y **nginx** lo sirve directo del volumen.
+6. Para verlo, el cliente usa el `url` firmado que trae la respuesta (`/multimedia/<path>?md5=…&expires=…`) y **nginx** lo sirve directo del volumen si la firma es buena y no venció.
 
 ## Cómo consumirlo
 
@@ -61,7 +61,7 @@ Authorization: Bearer <token>   (en ambas)
 
 | Código | Significado | Qué hacer |
 |---|---|---|
-| `201` | Guardada | Mostrar la foto con el `path` devuelto |
+| `201` | Guardada | Mostrar el archivo con el `url` firmado devuelto (vence; no lo guardes) |
 | `400` | Formato no soportado (solo JPEG o MP4), `.mov`, falta `file` o multipart mal armado | Avisar al usuario |
 | `401` | Sin sesión o token inválido | Volver a iniciar sesión |
 | `404` | El reporte no existe o el usuario no es su creador | No ofrecer subir foto a reportes ajenos |
@@ -70,11 +70,12 @@ Authorization: Bearer <token>   (en ambas)
 | `422` | Demasiados píxeles (máx. 16 MP) | Reducirla antes de subir |
 | `503` | Almacenamiento caído | Reintentar solo la foto, con espera |
 
-**Mostrar** — `GET /api/v1/reportes/{id}` trae `multimedia: [{ id, path, user_id, created_at }]`.
-La URL pública es **`<origen>/multimedia/<path>`, sin `/api`**; por ejemplo
-`http://localhost/multimedia/reportes/<id>/<32 hex>.jpg` (o `.mp4` si es video). Los archivos son inmutables
-(nombre aleatorio que no se reutiliza), así que se pueden cachear sin límite
-(`Cache-Control: immutable`). El listado del mapa (`GET /reportes`) **no** trae fotos.
+**Mostrar** — `GET /api/v1/reportes/{id}` trae `multimedia: [{ id, path, url, user_id, created_at }]`.
+Para mostrarlo se usa **`<origen>` + `url`**, sin `/api`; por ejemplo
+`http://localhost/multimedia/reportes/<id>/<32 hex>.jpg?md5=…&expires=…` (o `.mp4` si es video). El enlace lo firma
+el backend (`MEDIA_LINK_SECRET`, mismo valor en nginx) y vence a los `MEDIA_LINK_TTL` (1 h por defecto):
+sin firma o con una mala nginx responde `403`, y vencido, `410`. No se guarda: se vuelve a pedir el reporte.
+No incluye la IP, porque en celular cambia. El navegador lo cachea poco (`Cache-Control: private, max-age=300`). El listado del mapa (`GET /reportes`) **no** trae fotos.
 
 El contrato completo del endpoint público está en `shared/openapi/paths/multimedia.yaml`
 y sus tipos TypeScript en `shared/types/api-types.ts` (`operations["subirMultimedia"]`).
@@ -113,7 +114,7 @@ curl -s -X POST $B/reportes/$ID/multimedia -F "file=@/tmp/foto.jpg" -w ' -> %{ht
 Después:
 
 - `curl -s $B/reportes/$ID -H "Authorization: Bearer $T1" | jq .multimedia` trae la foto.
-- `http://localhost/multimedia/<path>` en el navegador la muestra.
+- `http://localhost` + el `url` del JSON, en el navegador, la muestra (sin la firma da `403`).
 - `docker compose exec nginx ls -R /data/uploads` lista el volumen.
 - Un `.txt` o PNG, en un reporte nuevo, da `400`; con `docker compose stop multimedia` y un reporte nuevo, la subida da `503`.
 
@@ -252,7 +253,7 @@ validan a la vez.
 ## Archivos guardados
 
 Los sirve nginx, no este servicio: monta el mismo volumen (`uploads`) en solo
-lectura y los expone en `/multimedia/<path>`, sin listado de directorios, sin seguir
+lectura y los expone en `/multimedia/<path>` solo con enlace firmado, sin listado de directorios, sin seguir
 symlinks y con `X-Content-Type-Options: nosniff`. Los archivos se crean con
 permisos `0644` y las carpetas con `0755` para que nginx pueda leerlos. La imagen
 corre con el usuario `multimedia` (UID 10001).

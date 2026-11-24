@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/enlace"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/httperr"
 	"github.com/ClubTECLA/cimalert/backend/internal/middleware"
@@ -14,11 +15,12 @@ import (
 // Handler implementa las operaciones de reportes del contrato; el servidor
 // lo embebe junto con los de las demás funcionalidades.
 type Handler struct {
-	svc *Service
+	svc     *Service
+	enlaces *enlace.Firmador
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, enlaces *enlace.Firmador) *Handler {
+	return &Handler{svc: svc, enlaces: enlaces}
 }
 
 func toComentario(c Comentario) httpapi.Comentario {
@@ -33,7 +35,7 @@ func toComentario(c Comentario) httpapi.Comentario {
 	}
 }
 
-func toReporte(r Detalle) httpapi.Reporte {
+func toReporte(r Detalle, enlaces *enlace.Firmador) httpapi.Reporte {
 	out := httpapi.Reporte{
 		Avistamientos: r.Reporte.Avistamientos,
 		Comentarios:   make([]httpapi.Comentario, 0, len(r.Comentarios)),
@@ -58,7 +60,7 @@ func toReporte(r Detalle) httpapi.Reporte {
 	}
 
 	for _, m := range r.Multimedia {
-		out.Multimedia = append(out.Multimedia, httpapi.Multimedia{CreatedAt: m.CreatedAt, Id: m.ID, Path: m.Path, UserId: m.UserID})
+		out.Multimedia = append(out.Multimedia, httpapi.Multimedia{CreatedAt: m.CreatedAt, Id: m.ID, Path: m.Path, Url: enlaces.URL(m.Path), UserId: m.UserID})
 	}
 
 	for _, t := range r.Tags {
@@ -105,7 +107,7 @@ func (h *Handler) CrearReporte(ctx context.Context, request httpapi.CrearReporte
 
 	}
 
-	return httpapi.CrearReporte201JSONResponse(toReporte(r)), nil
+	return httpapi.CrearReporte201JSONResponse(toReporte(r, h.enlaces)), nil
 }
 
 // ObtenerReporte devuelve un reporte por su id.
@@ -115,7 +117,7 @@ func (h *Handler) ObtenerReporte(ctx context.Context, request httpapi.ObtenerRep
 		return nil, err
 	}
 
-	return httpapi.ObtenerReporte200JSONResponse(toReporte(r)), nil
+	return httpapi.ObtenerReporte200JSONResponse(toReporte(r, h.enlaces)), nil
 }
 
 func toReporteResumen(r Resumen) httpapi.ReporteResumen {
@@ -225,7 +227,7 @@ func (h *Handler) AgregarAvistamiento(ctx context.Context, request httpapi.Agreg
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.AgregarAvistamiento200JSONResponse(toReporte(r)), nil
+	return httpapi.AgregarAvistamiento200JSONResponse(toReporte(r, h.enlaces)), nil
 }
 
 // CambiarEstadoReporte cambia el estado de un reporte. Qué rol puede y a qué
@@ -243,7 +245,7 @@ func (h *Handler) CambiarEstadoReporte(ctx context.Context, request httpapi.Camb
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.CambiarEstadoReporte200JSONResponse(toReporte(r)), nil
+	return httpapi.CambiarEstadoReporte200JSONResponse(toReporte(r, h.enlaces)), nil
 }
 
 // MarcarReporteHistorico marca el reporte como histórico. Qué rol puede lo
@@ -253,7 +255,7 @@ func (h *Handler) MarcarReporteHistorico(ctx context.Context, request httpapi.Ma
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.MarcarReporteHistorico200JSONResponse(toReporte(r)), nil
+	return httpapi.MarcarReporteHistorico200JSONResponse(toReporte(r, h.enlaces)), nil
 }
 
 // DesmarcarReporteHistorico devuelve el reporte a Incidentes.
@@ -262,7 +264,7 @@ func (h *Handler) DesmarcarReporteHistorico(ctx context.Context, request httpapi
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.DesmarcarReporteHistorico200JSONResponse(toReporte(r)), nil
+	return httpapi.DesmarcarReporteHistorico200JSONResponse(toReporte(r, h.enlaces)), nil
 }
 
 func (h *Handler) cambiarHistorico(ctx context.Context, id uuid.UUID, esHistorico bool) (Detalle, error) {
@@ -292,7 +294,7 @@ func (h *Handler) ActualizarTagsReporte(ctx context.Context, request httpapi.Act
 	if err != nil {
 		return nil, err
 	}
-	return httpapi.ActualizarTagsReporte200JSONResponse(toReporte(r)), nil
+	return httpapi.ActualizarTagsReporte200JSONResponse(toReporte(r, h.enlaces)), nil
 }
 
 // EliminarReporte borra un reporte. Quién puede lo decide el servicio.

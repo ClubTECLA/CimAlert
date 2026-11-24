@@ -3,6 +3,7 @@ package config
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
 )
@@ -14,6 +15,8 @@ func entornoMinimo(t *testing.T) {
 	t.Setenv("JWT_SECRET", "un-secreto-de-al-menos-32-bytes!!!")
 	t.Setenv("RECOVERY_SECRET", "otro-secreto-de-al-menos-32-bytes!")
 	t.Setenv("MAIL_DRIVER", "")
+	t.Setenv("MEDIA_LINK_SECRET", "secreto-de-enlaces-de-al-menos-32-bytes")
+	t.Setenv("MEDIA_LINK_TTL", "")
 	t.Setenv("MULTIMEDIA_URL", "")
 	t.Setenv("MAX_MULTIMEDIA_BYTES", "")
 	t.Setenv("REPORTE_POLIGONO", "")
@@ -295,5 +298,38 @@ func TestLoad_DocsEnabledInvalido(t *testing.T) {
 				t.Errorf("Load() con DOCS_ENABLED=%q: error = nil, want error", valor)
 			}
 		})
+	}
+}
+
+func TestLoad_EnlacesDeMultimedia(t *testing.T) {
+	entornoMinimo(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	if cfg.MediaLinkTTL != defaultMediaLinkTTL {
+		t.Errorf("MediaLinkTTL = %v, want %v", cfg.MediaLinkTTL, defaultMediaLinkTTL)
+	}
+
+	t.Setenv("MEDIA_LINK_TTL", "15m")
+	if cfg, err = Load(); err != nil || cfg.MediaLinkTTL != 15*time.Minute {
+		t.Errorf("MEDIA_LINK_TTL=15m: ttl = %v, err = %v", cfg.MediaLinkTTL, err)
+	}
+
+	for _, ttl := range []string{"0", "-1h", "mucho"} {
+		t.Setenv("MEDIA_LINK_TTL", ttl)
+		if _, err := Load(); err == nil {
+			t.Errorf("MEDIA_LINK_TTL=%q: error = nil, se esperaba error", ttl)
+		}
+	}
+}
+
+func TestLoad_SecretoDeEnlacesObligatorioYLargo(t *testing.T) {
+	for _, secreto := range []string{"", "corto"} {
+		entornoMinimo(t)
+		t.Setenv("MEDIA_LINK_SECRET", secreto)
+		if _, err := Load(); err == nil {
+			t.Errorf("MEDIA_LINK_SECRET=%q: error = nil, se esperaba error", secreto)
+		}
 	}
 }

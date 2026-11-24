@@ -9,6 +9,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/config"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/enlace"
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
 	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
@@ -40,8 +41,11 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 	// reporte borra los de un reporte eliminado.
 	archivos := almacen.NewCliente(cfg.MultimediaURL, multimediaTimeout)
 
+	// Las URLs de los archivos se firman y vencen; nginx comprueba la firma.
+	enlaces := enlace.New(cfg.MediaLinkSecret, cfg.MediaLinkTTL)
+
 	return NewRouter(Handlers{
-		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(pool), archivos, cfg.ReportePoligono)),
+		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(pool), archivos, cfg.ReportePoligono), enlaces),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(pool))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(pool))),
 		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), rec),
@@ -53,7 +57,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 		}, multimedia.OpcionesVideo{
 			MaxBytes:    cfg.MaxVideoBytes,
 			MaxDuracion: time.Duration(cfg.MaxVideoSegundos) * time.Second,
-		})),
+		}), enlaces),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(pool))),
 		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(pool))),
 	}, cfg.JWTSecret, usuarios.GetPasswordChangedAtByUserID, WithMaxMultimediaBytes(cfg.MaxMultimediaBytes), WithDocs(cfg.DocsEnabled)), nil

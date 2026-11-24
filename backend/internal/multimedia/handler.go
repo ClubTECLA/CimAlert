@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/enlace"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/httperr"
 	"github.com/ClubTECLA/cimalert/backend/internal/middleware"
@@ -20,15 +21,16 @@ var errFaltaArchivo = errors.New("falta el campo file")
 // Handler implementa las operaciones de multimedia del contrato; el servidor
 // lo embebe junto con los de las demás funcionalidades.
 type Handler struct {
-	svc *Service
+	svc     *Service
+	enlaces *enlace.Firmador
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, enlaces *enlace.Firmador) *Handler {
+	return &Handler{svc: svc, enlaces: enlaces}
 }
 
-func toMultimedia(m sqlc.Multimedia) httpapi.Multimedia {
-	return httpapi.Multimedia{CreatedAt: m.CreatedAt, Id: m.ID, Path: m.Path, UserId: m.UserID}
+func toMultimedia(m sqlc.Multimedia, enlaces *enlace.Firmador) httpapi.Multimedia {
+	return httpapi.Multimedia{CreatedAt: m.CreatedAt, Id: m.ID, Path: m.Path, Url: enlaces.URL(m.Path), UserId: m.UserID}
 }
 
 // archivoDelMultipart avanza hasta la parte "file" y la devuelve sin leerla.
@@ -68,5 +70,5 @@ func (h *Handler) SubirMultimedia(ctx context.Context, request httpapi.SubirMult
 		return nil, err
 	}
 
-	return httpapi.SubirMultimedia201JSONResponse(toMultimedia(m)), nil
+	return httpapi.SubirMultimedia201JSONResponse(toMultimedia(m, h.enlaces)), nil
 }

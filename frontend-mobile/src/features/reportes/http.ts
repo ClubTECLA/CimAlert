@@ -6,7 +6,7 @@ import {
   mapearComentario,
   mapearDetalle,
   mapearResumen,
-  urlMultimedia,
+  urlFirmada,
   type IncidenteApi,
   type ReporteApi,
   type ReporteCercanoApi,
@@ -73,15 +73,15 @@ export const reportesHttp: ReportesApi = {
     });
     return mapearDetalle(reporte, incidentes, env.apiUrl);
   },
-  // `POST /reportes/{id}/multimedia` (multipart, campo `file`). Devuelve el `path` guardado; nginx lo sirve en
-  // `/multimedia/{path}`. Con señal débil una foto de ~2 MB tarda más que una petición normal: más margen.
+  // `POST /reportes/{id}/multimedia` (multipart, campo `file`). Devuelve el `path` guardado y el `url` firmado
+  // (vence) con el que nginx lo sirve en `/multimedia/`. Con señal débil una foto de ~2 MB tarda más que una petición normal: más margen.
   subirFoto: async (id, uri) => {
-    const archivo = await http<{ path: string }>(
+    const archivo = await http<{ path: string; url: string }>(
       `/reportes/${id}/multimedia`,
       { method: 'POST', body: formularioFoto(await archivoDeFoto(uri)) },
       { tiempoLimiteMs: TIEMPO_SUBIDA_FOTO_MS },
     );
-    return urlMultimedia(archivo.path, env.apiUrl);
+    return urlFirmada(archivo.url, env.apiUrl);
   },
   // TODO(1b): apoyar y confirmar apuntan a rutas que no existen; el backend usa PATCH /reportes/{id}/avistamientos.
   apoyar: (id) => http<void>(`/reportes/${id}/apoyar`, { method: 'POST' }),

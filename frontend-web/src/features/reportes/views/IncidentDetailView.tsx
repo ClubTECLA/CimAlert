@@ -15,7 +15,7 @@ import { useReporteDetalle } from "@/features/reportes/useReporteDetalle";
 import { useSysMessage } from "@/components/ui/SysMessageContext";
 import type { ApiComentario, ApiEstadoReporte } from "@/types/api-types";
 import { categoryIcon } from "@/features/categorias/categories";
-import { esVideoPath, folio, formatDateTime, fotoUrl, incidentBorderColor, incidentColor, incidentIconColor, multimediaLabel, PENDING_ICON_STYLE, pinOfficialFirst } from "@/features/reportes/reportFormat";
+import { esVideoPath, folio, formatDateTime, incidentBorderColor, incidentColor, incidentIconColor, multimediaLabel, PENDING_ICON_STYLE, pinOfficialFirst } from "@/features/reportes/reportFormat";
 import { isOfficialRole, rolLabel } from "@/features/sesion/users";
 import { esEstadoFinal, estadosSiguientes } from "@/features/reportes/estadoTransiciones";
 
@@ -140,7 +140,7 @@ export default function IncidentDetailView({ reporteId }: IncidentDetailViewProp
             <DetailHero
                 color={color}
                 icon={icon}
-                photo={photo && fotoUrl(photo.path)}
+                photo={photo?.url}
                 video={!!photo && esVideoPath(photo.path)}
                 onOpen={() => setViewerIndex(0)}
             >

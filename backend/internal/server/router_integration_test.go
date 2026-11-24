@@ -32,6 +32,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/enlace"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
@@ -45,6 +46,8 @@ import (
 )
 
 const testJWTSecret = "test-secret-de-al-menos-32-bytes!!"
+
+const testMediaLinkSecret = "secreto-de-enlaces-de-al-menos-32-bytes"
 
 // incidenteSocavon es uno de los incidentes que siembra
 // 005_seed_incidentes (1 luz, 2 socavon, 3 arbol, 4 drenaje, 5 deslave).
@@ -78,10 +81,11 @@ func newTestClient(t *testing.T) *testClient {
 
 	almacen := &multimediaFalso{}
 	mailer := &mailerFalso{}
+	enlaces := enlace.New(testMediaLinkSecret, time.Hour)
 
 	gin.SetMode(gin.TestMode)
 	router := server.NewRouter(server.Handlers{
-		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(testPool(t)), almacen, reporte.PoligonoBC)),
+		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(testPool(t)), almacen, reporte.PoligonoBC), enlaces),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(testPool(t)))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(testPool(t)))),
 		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), usuario.NewRecuperacion(usuarios, mailer, []byte(testJWTSecret))),
@@ -91,7 +95,7 @@ func newTestClient(t *testing.T) *testClient {
 		}, multimedia.OpcionesVideo{
 			MaxBytes:    8 << 20,
 			MaxDuracion: 6 * time.Second,
-		})),
+		}), enlaces),
 		Centros: centro.NewHandler(centro.NewService(centro.NewStore(testPool(t)))),
 		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)))),
 	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga), server.WithDocs(true))
