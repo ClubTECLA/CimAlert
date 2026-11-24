@@ -1,4 +1,4 @@
-import type { components, operations } from '@tijuana-reporta/shared'
+import type { components, operations } from '@cimalert/shared'
 
 // Shared API schemas
 export type ApiComentario = components['schemas']['comentario']
@@ -21,6 +21,9 @@ export type ApiUsuarioMeResponse = components['schemas']['usuario_me_response']
 export type ApiIncidente = components['schemas']['incidente']
 export type ApiCrearIncidenteRequest = components['schemas']['crear_incidente_request']
 export type ApiActualizarIncidenteRequest = components['schemas']['actualizar_incidente_request']
+export type ApiCentro = components['schemas']['centro']
+export type ApiTipoCentro = components['schemas']['tipos_centro']
+export type ApiCrearCentroRequest = components['schemas']['crear_centro_request']
 
 // Report endpoint query, path, and response types
 export type ApiListarReportesQuery = operations['listarReportes']['parameters']['query']
@@ -87,3 +90,14 @@ export type ApiAgregarTagsRequest =
     operations['agregarTags']['requestBody']['content']['application/json']
 export type ApiAgregarTagsResponse =
     operations['agregarTags']['responses'][201]['content']['application/json']
+
+// Riesgo e histórico: mapa de calor, zonas, colonias y conteo por categoría (solo reportes históricos)
+export type ApiNivelRiesgo = components['schemas']['nivel_riesgo']
+export type ApiCeldaCalor = components['schemas']['celda_calor']
+export type ApiMapaCalor = components['schemas']['mapa_calor']
+export type ApiZonaRiesgo = components['schemas']['zona_riesgo']
+export type ApiColoniaRiesgo = components['schemas']['colonia_riesgo']
+export type ApiConteoCategoria = components['schemas']['conteo_categoria']
+export type ApiResumenRiesgo = components['schemas']['resumen_riesgo']
+export type ApiObtenerMapaCalorQuery = operations['obtenerMapaCalor']['parameters']['query']
+export type ApiObtenerResumenRiesgoQuery = NonNullable<operations['obtenerResumenRiesgo']['parameters']['query']>

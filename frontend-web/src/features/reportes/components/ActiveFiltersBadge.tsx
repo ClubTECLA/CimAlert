@@ -4,21 +4,46 @@ import { useCommonPanel } from "@/panels/useCommonPanel";
 import { usePanelRight } from "@/panels/usePanelRight";
 import { useReportes } from "@/features/reportes/useReportes";
 import { activeFilterLabels } from "@/features/reportes/reportFilters";
+import { useCentros } from "@/features/centros/useCentros";
+import { DEFAULT_CENTRO_FILTERS, activeCentroFilterLabels } from "@/features/centros/centroFormat";
+import { isCentroPanel, isIncidentPanel } from "@/features/centros/centrosPanels";
+import { useRiesgo } from "@/features/riesgo/useRiesgo";
 
-// Aviso sobre el mapa de que los pines están filtrados: el filtro sigue aplicándose al cerrar los paneles. Con el estilo
-// de "Capas activas" del Figma, justo encima del dock y en su mismo eje (el mapa libre a la derecha del panel); la
-// píldora de capas, si se muestra, va en la fila del dock. Por debajo de 1024 px, con un panel abierto, no cabe en el
-// mapa libre: se oculta.
-// No se muestra sin filtros ni con los paneles que ya enseñan el filtro ("Incidentes" y "Capas y filtros").
+// Aviso sobre el mapa de que los pines están filtrados (incidentes y centros): el filtro sigue aplicándose al cerrar los
+// paneles. Con el estilo de "Capas activas" del Figma, justo encima del dock y en su mismo eje (el mapa libre a la
+// derecha del panel); la píldora de capas, si se muestra, va en la fila del dock. Por debajo de 1024 px, con un panel
+// abierto, no cabe en el mapa libre: se oculta.
+// Cada grupo se avisa solo si su capa se ve en el mapa y ningún panel abierto ya enseña su filtro: no con el riesgo
+// (oculta los dos), ni con los paneles de centros o de incidentes (ocultan la otra capa y muestran su propio filtro).
 const PANELS_SHOWING_FILTERS = ["Incidentes", "Capas y filtros"];
 
 export default function ActiveFiltersBadge() {
     const { currentPanelView, openPanel } = useCommonPanel();
     const { reportes, filteredReportes, filters, resetFilters } = useReportes();
+    const { centros, filteredCentros, filters: centroFilters, setFilters: setCentroFilters } = useCentros();
+    const { activo: riesgo } = useRiesgo();
     const panelRight = usePanelRight();
-    const labels = activeFilterLabels(filters);
 
-    if (!reportes || !labels.length || PANELS_SHOWING_FILTERS.includes(currentPanelView ?? "")) return null;
+    const view = currentPanelView ?? "";
+    const incidentLabels = reportes && !riesgo && !isCentroPanel(currentPanelView) && !PANELS_SHOWING_FILTERS.includes(view)
+        ? activeFilterLabels(filters)
+        : [];
+    const centroLabels = centros && !riesgo && !isIncidentPanel(currentPanelView) && !isCentroPanel(currentPanelView) && view !== "Capas y filtros"
+        ? activeCentroFilterLabels(centroFilters)
+        : [];
+
+    const labels = [...incidentLabels, ...centroLabels];
+    if (!labels.length) return null;
+
+    const counts = [
+        incidentLabels.length > 0 && reportes ? `${filteredReportes.length} de ${reportes.length} incidentes` : null,
+        centroLabels.length > 0 && centros ? `${filteredCentros.length} de ${centros.length} centros` : null,
+    ].filter(Boolean);
+
+    const quitarFiltros = () => {
+        if (incidentLabels.length) resetFilters();
+        if (centroLabels.length) setCentroFilters(DEFAULT_CENTRO_FILTERS);
+    };
 
     return (
         <div
@@ -43,13 +68,13 @@ export default function ActiveFiltersBadge() {
                     <span className="truncate text-sm font-semibold text-ink">Filtro activo: {labels.join(" · ")}</span>
                     {/* role="status": al cambiar el filtro o llegar datos nuevos, el lector de pantalla lee el nuevo total. */}
                     <span role="status" className="truncate text-xs text-ink-muted">
-                        El mapa muestra {filteredReportes.length} de {reportes.length} incidentes
+                        El mapa muestra {counts.join(" · ")}
                     </span>
                 </span>
             </button>
             <button
                 type="button"
-                onClick={resetFilters}
+                onClick={quitarFiltros}
                 aria-label="Quitar filtros"
                 title="Quitar filtros"
                 className="flex size-8 shrink-0 items-center justify-center rounded-full text-icon transition-colors hover:bg-subtle"

@@ -4,7 +4,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
 	"github.com/google/uuid"
 )
 
@@ -135,6 +135,15 @@ type CambiarEstadoTxParams struct {
 	ID      uuid.UUID
 	Estado  sqlc.Estado
 	ActorID uuid.UUID
+}
+
+// CambiarHistoricoTxParams es lo que necesita marcar o desmarcar un reporte
+// como histórico: el reporte, el valor nuevo y quién lo cambia, para el
+// historial.
+type CambiarHistoricoTxParams struct {
+	ID          uuid.UUID
+	EsHistorico bool
+	ActorID     uuid.UUID
 }
 
 // MaxTagsPorPeticion es cuántos tags puede mandar un usuario en

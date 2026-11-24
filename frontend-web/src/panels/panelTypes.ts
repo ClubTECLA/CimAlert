@@ -14,6 +14,10 @@ export type PanelViewPropsMap = {
     "Usuarios": object;
     "Capas y filtros": object;
     "Busqueda": object;
+    "Riesgo": object;
+    "Centros": object;
+    "Detalle Centro": { centroId: string };
+    "Nuevo Centro": object;
 };
 
 export type PanelViewKey = keyof PanelViewPropsMap;

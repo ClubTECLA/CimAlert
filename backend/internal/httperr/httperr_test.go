@@ -6,14 +6,14 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/almacen"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/centro"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/comentario"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/httperr"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/incidente"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/multimedia"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/reporte"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/usuario"
+	"github.com/ClubTECLA/cimalert/backend/internal/almacen"
+	"github.com/ClubTECLA/cimalert/backend/internal/centro"
+	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
+	"github.com/ClubTECLA/cimalert/backend/internal/httperr"
+	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
+	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
+	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+	"github.com/ClubTECLA/cimalert/backend/internal/usuario"
 )
 
 // tabla es la que arma el servidor: las reglas de dominio y las de transporte.
@@ -43,6 +43,7 @@ func TestResolver(t *testing.T) {
 		{"nombre de tag repetido", incidente.ErrTagNameTaken, http.StatusConflict, "el incidente ya tiene un tag con ese nombre"},
 		{"área incompleta", reporte.ErrAreaIncompleta, http.StatusBadRequest, "area incompleta"},
 		{"área inválida", reporte.ErrAreaInvalida, http.StatusBadRequest, "area invalida"},
+		{"coordenada inválida", reporte.ErrCoordenadaInvalida, http.StatusBadRequest, "coordenada invalida"},
 		{"estado inválido", reporte.ErrEstadoInvalido, http.StatusBadRequest, "estado invalido"},
 		{"oficial no permitido", reporte.ErrOficialNoPermitido, http.StatusForbidden, "un ciudadano no puede crear reportes oficiales"},
 		{"estado no permitido", reporte.ErrEstadoNoPermitido, http.StatusForbidden, "un ciudadano no puede cambiar el estado de un reporte"},
@@ -113,6 +114,7 @@ func TestResolver_TodosLosErroresDeDominio(t *testing.T) {
 		incidente.ErrTagNameTaken,
 		reporte.ErrAreaIncompleta,
 		reporte.ErrAreaInvalida,
+		reporte.ErrCoordenadaInvalida,
 		reporte.ErrEstadoInvalido,
 		reporte.ErrTransicionInvalida,
 		reporte.ErrOficialNoPermitido,

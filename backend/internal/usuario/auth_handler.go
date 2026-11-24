@@ -5,10 +5,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/db/sqlc"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/httpapi"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/httperr"
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/middleware"
+	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
+	"github.com/ClubTECLA/cimalert/backend/internal/httperr"
+	"github.com/ClubTECLA/cimalert/backend/internal/middleware"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -78,18 +78,28 @@ func (h *Handler) SolicitarRecuperacion(ctx context.Context, request httpapi.Sol
 	return httpapi.SolicitarRecuperacion202Response{}, nil
 }
 
-// VerificarRecuperacion valida el PIN y cambia la contraseña; responde 204 sin token.
+// VerificarRecuperacion valida el PIN y devuelve el token de reset de un solo uso.
 func (h *Handler) VerificarRecuperacion(ctx context.Context, request httpapi.VerificarRecuperacionRequestObject) (httpapi.VerificarRecuperacionResponseObject, error) {
-	// El contrato solo pone el mínimo; el máximo es el de bcrypt, igual que en el registro.
-	if len(request.Body.NewPassword) > maxBcryptPasswordBytes {
-		return httpapi.VerificarRecuperacion400JSONResponse{Message: "password debe tener entre 8 y 72 bytes"}, nil
-	}
-
-	if err := h.rec.Verificar(ctx, string(request.Body.Email), request.Body.Pin, request.Body.NewPassword); err != nil {
+	token, err := h.rec.Verificar(ctx, string(request.Body.Email), request.Body.Pin)
+	if err != nil {
 		return nil, err
 	}
 
-	return httpapi.VerificarRecuperacion204Response{}, nil
+	return httpapi.VerificarRecuperacion200JSONResponse{ResetToken: token}, nil
+}
+
+// RestablecerContrasena cambia la contraseña con el token de reset; responde 204 sin token de sesión.
+func (h *Handler) RestablecerContrasena(ctx context.Context, request httpapi.RestablecerContrasenaRequestObject) (httpapi.RestablecerContrasenaResponseObject, error) {
+	// El contrato solo pone el mínimo; el máximo es el de bcrypt, igual que en el registro.
+	if len(request.Body.NewPassword) > maxBcryptPasswordBytes {
+		return httpapi.RestablecerContrasena400JSONResponse{Message: "password debe tener entre 8 y 72 bytes"}, nil
+	}
+
+	if err := h.rec.Restablecer(ctx, request.Body.ResetToken, request.Body.NewPassword); err != nil {
+		return nil, err
+	}
+
+	return httpapi.RestablecerContrasena204Response{}, nil
 }
 
 // toAuthResponse convierte un sqlc.User y un token en la respuesta de login/register.

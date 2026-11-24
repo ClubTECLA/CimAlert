@@ -14,7 +14,11 @@ import (
 type Querier interface {
 	AddAvistamientoById(ctx context.Context, id uuid.UUID) (AddAvistamientoByIdRow, error)
 	AddPINAttemptByPINID(ctx context.Context, id uuid.UUID) (int, error)
+	// Sin filtrar por expires_at: un PIN verificado puede haber expirado y
+	// tener todavía un token de reset vivo, que también hay que cancelar.
 	CancelPINByUserID(ctx context.Context, userID uuid.UUID) error
+	// Cierra el token de reset; 0 filas si ya se usó, se canceló o expiró.
+	ConsumeResetByID(ctx context.Context, id uuid.UUID) (int64, error)
 	CountPINsLastHourByUserID(ctx context.Context, userID uuid.UUID) (int64, error)
 	// Cuántos de los tag_ids pedidos son del catálogo del incidente: si no son
 	// todos, alguno es de otro incidente o no existe.
@@ -51,10 +55,12 @@ type Querier interface {
 	DeleteUsedOrExpiredPINByUserID(ctx context.Context, userID uuid.UUID) error
 	// users_reports solo se llena al crear el reporte, así que hoy equivale al creador.
 	EsCreadorDeReporte(ctx context.Context, arg EsCreadorDeReporteParams) (bool, error)
+	GetActiveResetByTokenHash(ctx context.Context, resetTokenHash []byte) (GetActiveResetByTokenHashRow, error)
 	GetCentroById(ctx context.Context, id uuid.UUID) (GetCentroByIdRow, error)
 	GetCorteMantenimiento(ctx context.Context, nombre string) (time.Time, error)
 	GetDefaultRole(ctx context.Context) (Role, error)
 	GetEstadoReporteForUpdate(ctx context.Context, id uuid.UUID) (Estado, error)
+	GetHistoricoReporteForUpdate(ctx context.Context, id uuid.UUID) (bool, error)
 	GetIncidenteById(ctx context.Context, id int) (Incidente, error)
 	GetIncidenteByIdForUpdate(ctx context.Context, id int) (Incidente, error)
 	GetIncidenteIdByReporteId(ctx context.Context, id uuid.UUID) (int, error)
@@ -68,8 +74,27 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
 	GetUserWithRolByID(ctx context.Context, id uuid.UUID) (GetUserWithRolByIDRow, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
+	// Todas las consultas leen la vista reporte_historico_peso (migración 002):
+	// solo reportes históricos válidos, con su peso. Ver backend/GUIA_RIESGO.md.
+	//
+	// sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
+	// cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
+	// incidente y de periodo son opcionales: NULL = sin filtro.
+	// Agrupa en metros reales: geom pasa a la proyección métrica de a_metros (UTM
+	// 11N, la zona de Tijuana) y ST_SnapToGrid lleva cada punto al nodo de su
+	// celda, que solo sirve de clave (celda_x, celda_y, en metros). El punto de la
+	// celda es el promedio de la posición de sus reportes, no el nodo: el tamaño
+	// de la celda cambia con el zoom, y con el nodo el punto saltaba de lugar al
+	// acercarse o alejarse (un reporte solo quedaba hasta a 2 km de su sitio en
+	// zoom 10). && sobre geography usa el índice GiST de puntos_origen.geom.
+	ListCeldasCalor(ctx context.Context, arg ListCeldasCalorParams) ([]ListCeldasCalorRow, error)
 	ListCentros(ctx context.Context, incluirInactivos bool) ([]ListCentrosRow, error)
+	// Pestaña Histórico: colonias con más peso en el periodo. Los reportes sin
+	// colonia no entran en esta lista, pero sí en el mapa, las zonas y los totales.
+	ListColoniasHistorico(ctx context.Context, arg ListColoniasHistoricoParams) ([]ListColoniasHistoricoRow, error)
 	ListComentariosByReporteId(ctx context.Context, reporteID uuid.UUID) ([]ListComentariosByReporteIdRow, error)
+	// Barras de "Incidentes por categoría". La suma de total es total_historicos.
+	ListConteoCategorias(ctx context.Context, arg ListConteoCategoriasParams) ([]ListConteoCategoriasRow, error)
 	ListHistorialPorEntidad(ctx context.Context, arg ListHistorialPorEntidadParams) ([]Historial, error)
 	// Los inactivos solo se incluyen si se piden (p. ej. para una pantalla de
 	// administración).
@@ -95,6 +120,13 @@ type Querier interface {
 	ListTagsByIncidenteIds(ctx context.Context, incidenteIds []int) ([]Tag, error)
 	ListTagsByReporteId(ctx context.Context, reporteID uuid.UUID) ([]ListTagsByReporteIdRow, error)
 	ListTiposCentro(ctx context.Context) ([]TiposCentro, error)
+	// Zonas = grupos de reportes históricos cercanos entre sí (DBSCAN). Un reporte
+	// forma zona si tiene al menos min_puntos reportes a menos de eps_m metros
+	// (contándose a sí mismo); los demás quedan como ruido (zona NULL) y no se
+	// devuelven. ST_ClusterDBSCAN solo acepta geometry: se trabaja en UTM 11N
+	// (proyección métrica de a_metros) para que eps_m y radio_m sean metros reales. Los argumentos van
+	// por posición porque sqlc no entiende la notación eps := ...
+	ListZonasRiesgo(ctx context.Context, arg ListZonasRiesgoParams) ([]ListZonasRiesgoRow, error)
 	// Serializa los reemplazos de tags de un mismo usuario en un mismo reporte:
 	// sin esto, dos PUT simultáneos pueden dejar una mezcla de ambos conjuntos.
 	// Es un lock de transacción (se suelta en el commit o rollback) y no bloquea
@@ -104,8 +136,11 @@ type Querier interface {
 	LockUserByID(ctx context.Context, id uuid.UUID) error
 	SetCorteMantenimiento(ctx context.Context, arg SetCorteMantenimientoParams) error
 	SetNewPasswordByUserID(ctx context.Context, arg SetNewPasswordByUserIDParams) error
-	SetPinAsUsedByID(ctx context.Context, id uuid.UUID) (int64, error)
+	// Condicional para que de dos verificaciones concurrentes del mismo PIN solo
+	// una emita token.
+	SetPinAsVerifiedByID(ctx context.Context, arg SetPinAsVerifiedByIDParams) (int64, error)
 	UpdateEstadoReporte(ctx context.Context, arg UpdateEstadoReporteParams) (Reporte, error)
+	UpdateHistoricoReporte(ctx context.Context, arg UpdateHistoricoReporteParams) error
 	UpdateIncidente(ctx context.Context, arg UpdateIncidenteParams) (Incidente, error)
 }
 

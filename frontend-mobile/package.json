@@ -1,8 +1,9 @@
 {
   "main": "expo-router/entry",
-  "name": "@tijuana-reporta/frontend-mobile",
+  "name": "@cimalert/frontend-mobile",
   "version": "1.0.0",
   "dependencies": {
+    "@cimalert/shared": "workspace:*",
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo/metro-runtime": "~57.0.15",
     "@expo/vector-icons": "^15.0.2",
@@ -10,8 +11,8 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/netinfo": "12.0.1",
     "@react-native-community/slider": "5.2.0",
+    "@react-native-google-signin/google-signin": "^17.0.0",
     "@tanstack/react-query": "^5.103.1",
-    "@tijuana-reporta/shared": "workspace:*",
     "expo": "~57.0.23",
     "expo-auth-session": "~57.0.12",
     "expo-constants": "~57.0.18",

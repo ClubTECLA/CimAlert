@@ -11,12 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ClubTECLA/tijuana-reporta/backend/internal/httpapi"
+	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 )
 
 const (
 	rutaRecovery  = "/v1/auth/recovery"
 	rutaVerify    = "/v1/auth/recovery/verify"
+	rutaReset     = "/v1/auth/recovery/reset"
 	passwordNuevo = "otro-password-456"
 )
 
@@ -41,12 +42,35 @@ func (c *testClient) pedirPin(email string, n int) string {
 	return c.mailer.esperarPin(c.t, email, n)
 }
 
-// verificar manda el PIN con passwordNuevo y devuelve la respuesta.
+// verificar manda el PIN y devuelve la respuesta.
 func (c *testClient) verificar(email, pin string) *httptest.ResponseRecorder {
 	c.t.Helper()
 
-	return c.do(http.MethodPost, rutaVerify, map[string]any{
-		"email": email, "pin": pin, "new_password": passwordNuevo,
+	return c.do(http.MethodPost, rutaVerify, map[string]any{"email": email, "pin": pin})
+}
+
+// tokenDeReset verifica el PIN, exige 200 y devuelve el reset_token.
+func (c *testClient) tokenDeReset(email, pin string) string {
+	c.t.Helper()
+
+	return decode[httpapi.VerifyRecoveryResponse](c.t, c.expect(http.StatusOK, http.MethodPost, rutaVerify, map[string]any{
+		"email": email, "pin": pin,
+	})).ResetToken
+}
+
+// restablecer manda el token con passwordNuevo y devuelve la respuesta.
+func (c *testClient) restablecer(token string) *httptest.ResponseRecorder {
+	c.t.Helper()
+
+	return c.do(http.MethodPost, rutaReset, map[string]any{"reset_token": token, "new_password": passwordNuevo})
+}
+
+// recuperar hace el flujo completo con el PIN dado y exige 204 al final.
+func (c *testClient) recuperar(email, pin string) {
+	c.t.Helper()
+
+	c.expect(http.StatusNoContent, http.MethodPost, rutaReset, map[string]any{
+		"reset_token": c.tokenDeReset(email, pin), "new_password": passwordNuevo,
 	})
 }
 
@@ -69,9 +93,12 @@ func TestRecovery_CambiaElPassword(t *testing.T) {
 	c := newTestClient(t)
 	email, viejo := c.registrar()
 
-	pin := c.pedirPin(email, 1)
-	if rec := c.verificar(email, pin); rec.Code != http.StatusNoContent {
-		t.Fatalf("verify: status = %d, quería 204; body: %s", rec.Code, rec.Body)
+	token := c.tokenDeReset(email, c.pedirPin(email, 1))
+	if !c.puedeEntrar(email, viejo) {
+		t.Error("verificar el PIN ya cambió el password")
+	}
+	if rec := c.restablecer(token); rec.Code != http.StatusNoContent {
+		t.Fatalf("reset: status = %d, quería 204; body: %s", rec.Code, rec.Body)
 	}
 
 	if c.puedeEntrar(email, viejo) {
@@ -93,9 +120,7 @@ func TestRecovery_InvalidaLosTokensAnteriores(t *testing.T) {
 	// El iat tiene precisión de segundos y un token del mismo segundo que el
 	// cambio sigue valiendo (ver la spec); se espera para que quede antes.
 	time.Sleep(time.Second)
-	c.expect(http.StatusNoContent, http.MethodPost, rutaVerify, map[string]any{
-		"email": email, "pin": c.pedirPin(email, 1), "new_password": passwordNuevo,
-	})
+	c.recuperar(email, c.pedirPin(email, 1))
 
 	c.token = viejo
 	c.expect(http.StatusUnauthorized, http.MethodGet, "/v1/auth/me", nil)
@@ -166,9 +191,13 @@ func TestRecovery_TodoFalloDeVerifyEsIgual(t *testing.T) {
 		"PIN ya usado": func(c *testClient) (string, string) {
 			email, _ := c.registrar()
 			pin := c.pedirPin(email, 1)
-			c.expect(http.StatusNoContent, http.MethodPost, rutaVerify, map[string]any{
-				"email": email, "pin": pin, "new_password": passwordNuevo,
-			})
+			c.recuperar(email, pin)
+			return email, pin
+		},
+		"PIN ya verificado": func(c *testClient) (string, string) {
+			email, _ := c.registrar()
+			pin := c.pedirPin(email, 1)
+			c.tokenDeReset(email, pin)
 			return email, pin
 		},
 		"PIN bloqueado": func(c *testClient) (string, string) {
@@ -217,14 +246,82 @@ func TestRecovery_SeBloqueaTras5Intentos(t *testing.T) {
 	}
 }
 
+func TestRecovery_TodoFalloDeResetEsIgual(t *testing.T) {
+	// Cada caso deja la cuenta en un estado y devuelve el token a mandar.
+	casos := map[string]func(c *testClient) string{
+		"token inventado": func(c *testClient) string {
+			return "no-es-un-token"
+		},
+		"sin verificar el PIN": func(c *testClient) string {
+			email, _ := c.registrar()
+			// El PIN no sirve como token: hay que pasar por verify.
+			return c.pedirPin(email, 1)
+		},
+		"token ya usado": func(c *testClient) string {
+			email, _ := c.registrar()
+			token := c.tokenDeReset(email, c.pedirPin(email, 1))
+			c.expect(http.StatusNoContent, http.MethodPost, rutaReset, map[string]any{
+				"reset_token": token, "new_password": passwordNuevo,
+			})
+			return token
+		},
+		"token expirado": func(c *testClient) string {
+			email, _ := c.registrar()
+			token := c.tokenDeReset(email, c.pedirPin(email, 1))
+			if _, err := testPool(c.t).Exec(c.t.Context(),
+				`UPDATE recovery_pins SET reset_expires_at = now() - interval '1 minute'
+				 WHERE user_id = (SELECT id FROM users WHERE email = $1)`, email); err != nil {
+				c.t.Fatalf("expirando token: %v", err)
+			}
+			return token
+		},
+		"cancelado por una nueva solicitud": func(c *testClient) string {
+			email, _ := c.registrar()
+			token := c.tokenDeReset(email, c.pedirPin(email, 1))
+			c.pedirPin(email, 2)
+			return token
+		},
+	}
+
+	var base *httptest.ResponseRecorder
+	for nombre, preparar := range casos {
+		c := newTestClient(t) // un límite por IP nuevo por caso
+		rec := c.restablecer(preparar(c))
+
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: status = %d, quería 400; body: %s", nombre, rec.Code, rec.Body)
+			continue
+		}
+		if base == nil {
+			base = rec
+		} else if rec.Body.String() != base.Body.String() {
+			t.Errorf("%s: body %q, distinto de %q", nombre, rec.Body, base.Body)
+		}
+	}
+}
+
+func TestRecovery_TokenSobreviveAlVencimientoDelPin(t *testing.T) {
+	c := newTestClient(t)
+	email, _ := c.registrar()
+	token := c.tokenDeReset(email, c.pedirPin(email, 1))
+
+	// El token tiene sus propios 15 minutos, contados desde la verificación.
+	if _, err := testPool(t).Exec(t.Context(),
+		`UPDATE recovery_pins SET expires_at = now() - interval '1 minute'
+		 WHERE user_id = (SELECT id FROM users WHERE email = $1)`, email); err != nil {
+		t.Fatalf("expirando PIN: %v", err)
+	}
+	if rec := c.restablecer(token); rec.Code != http.StatusNoContent {
+		t.Errorf("reset: status = %d, quería 204; body: %s", rec.Code, rec.Body)
+	}
+}
+
 func TestRecovery_PinDeUnSoloUso(t *testing.T) {
 	c := newTestClient(t)
 	email, _ := c.registrar()
 	pin := c.pedirPin(email, 1)
 
-	c.expect(http.StatusNoContent, http.MethodPost, rutaVerify, map[string]any{
-		"email": email, "pin": pin, "new_password": passwordNuevo,
-	})
+	c.recuperar(email, pin)
 	if rec := c.verificar(email, pin); rec.Code != http.StatusBadRequest {
 		t.Errorf("segundo uso: status = %d, quería 400", rec.Code)
 	}
@@ -241,8 +338,8 @@ func TestRecovery_NuevaSolicitudCancelaLaAnterior(t *testing.T) {
 			t.Errorf("primer PIN: status = %d, quería 400", rec.Code)
 		}
 	}
-	if rec := c.verificar(email, segundo); rec.Code != http.StatusNoContent {
-		t.Errorf("segundo PIN: status = %d, quería 204; body: %s", rec.Code, rec.Body)
+	if rec := c.verificar(email, segundo); rec.Code != http.StatusOK {
+		t.Errorf("segundo PIN: status = %d, quería 200; body: %s", rec.Code, rec.Body)
 	}
 }
 
@@ -274,17 +371,32 @@ func TestRecovery_LimitePorIP(t *testing.T) {
 	t.Error("30 verify seguidos desde la misma IP nunca respondieron 429")
 }
 
+func TestRecovery_LimitePorIPEnReset(t *testing.T) {
+	c := newTestClient(t)
+
+	for range 30 {
+		if rec := c.restablecer("no-es-un-token"); rec.Code == http.StatusTooManyRequests {
+			return
+		}
+	}
+	t.Error("30 reset seguidos desde la misma IP nunca respondieron 429")
+}
+
 func TestRecovery_ReglasDelPassword(t *testing.T) {
 	c := newTestClient(t)
 	email, password := c.registrar()
-	pin := c.pedirPin(email, 1)
+	token := c.tokenDeReset(email, c.pedirPin(email, 1))
 
 	for _, invalido := range []string{"corto", strings.Repeat("a", 73)} { // mínimo del contrato, máximo de bcrypt
-		c.expect(http.StatusBadRequest, http.MethodPost, rutaVerify, map[string]any{
-			"email": email, "pin": pin, "new_password": invalido,
+		c.expect(http.StatusBadRequest, http.MethodPost, rutaReset, map[string]any{
+			"reset_token": token, "new_password": invalido,
 		})
 	}
 	if !c.puedeEntrar(email, password) {
 		t.Error("el password cambió con un new_password inválido")
+	}
+	// Un new_password inválido no gasta el token.
+	if rec := c.restablecer(token); rec.Code != http.StatusNoContent {
+		t.Errorf("reset válido después: status = %d, quería 204; body: %s", rec.Code, rec.Body)
 	}
 }

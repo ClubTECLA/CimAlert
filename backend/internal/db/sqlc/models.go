@@ -218,13 +218,16 @@ type PuntosOrigen struct {
 }
 
 type RecoveryPin struct {
-	ID        uuid.UUID  `json:"id"`
-	UserID    uuid.UUID  `json:"user_id"`
-	PinHash   []byte     `json:"pin_hash"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	Attempts  int        `json:"attempts"`
-	UsedAt    *time.Time `json:"used_at"`
+	ID             uuid.UUID  `json:"id"`
+	UserID         uuid.UUID  `json:"user_id"`
+	PinHash        []byte     `json:"pin_hash"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	Attempts       int        `json:"attempts"`
+	UsedAt         *time.Time `json:"used_at"`
+	VerifiedAt     *time.Time `json:"verified_at"`
+	ResetTokenHash []byte     `json:"reset_token_hash"`
+	ResetExpiresAt *time.Time `json:"reset_expires_at"`
 }
 
 type RefreshToken struct {
@@ -246,6 +249,15 @@ type Reporte struct {
 	EstadoActual  Estado    `json:"estado_actual"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+type ReporteHistoricoPeso struct {
+	ReporteID   uuid.UUID   `json:"reporte_id"`
+	IncidenteID int         `json:"incidente_id"`
+	CreatedAt   time.Time   `json:"created_at"`
+	Geom        interface{} `json:"geom"`
+	Colonia     string      `json:"colonia"`
+	Peso        float64     `json:"peso"`
 }
 
 type ReporteTagCount struct {

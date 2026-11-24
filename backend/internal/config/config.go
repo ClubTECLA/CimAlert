@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
 	"github.com/joho/godotenv"
 )
 
@@ -71,8 +74,14 @@ type Config struct {
 	LogLevel  string
 	LogFormat string
 
+	// DocsEnabled publica /v1/docs y /v1/openapi.json. Apagado por defecto.
+	DocsEnabled bool
+
 	RecoverySecret string
 	MailDriver     string
+
+	// ReportePoligono es la zona donde se permite crear reportes.
+	ReportePoligono reporte.Poligono
 }
 
 func Load() (Config, error) {
@@ -118,6 +127,13 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	if raw := os.Getenv("DOCS_ENABLED"); raw != "" {
+		cfg.DocsEnabled, err = strconv.ParseBool(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid DOCS_ENABLED: %w", err)
+		}
+	}
+
 	cfg.JWTTTL = defaultJWTTTL
 	if raw := os.Getenv("JWT_TTL"); raw != "" {
 		ttl, err := time.ParseDuration(raw)
@@ -154,6 +170,14 @@ func Load() (Config, error) {
 
 	if err := cfg.cargarMantenimiento(); err != nil {
 		return Config{}, err
+	}
+
+	// Copia: así nadie modifica el default del paquete a través de cfg.
+	cfg.ReportePoligono = slices.Clone(reporte.PoligonoBC)
+	if raw := os.Getenv("REPORTE_POLIGONO"); strings.TrimSpace(raw) != "" {
+		if cfg.ReportePoligono, err = reporte.ParsePoligono(raw); err != nil {
+			return Config{}, fmt.Errorf("invalid REPORTE_POLIGONO: %w", err)
+		}
 	}
 
 	return cfg, nil

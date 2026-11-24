@@ -1,0 +1,7 @@
+type: object
+description: Token de un solo uso que permite establecer la nueva contraseña.
+required: [reset_token]
+properties:
+  reset_token:
+    type: string
+    description: Token opaco; vence a los 15 minutos y se invalida al usarse o al pedir un PIN nuevo.
