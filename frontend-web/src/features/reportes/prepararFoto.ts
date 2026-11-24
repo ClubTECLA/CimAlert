@@ -6,8 +6,9 @@ const MAX_INPUT_BYTES = 20 * 1024 * 1024
 /** Límite del servidor para la foto ya preparada. */
 const MAX_UPLOAD_BYTES = 3 * 1024 * 1024
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
-/** Valor del atributo accept del input. HEIC va también por extensión: en Windows el navegador no siempre conoce su tipo. */
-export const ACCEPT_ATTRIBUTE = [...ACCEPTED_TYPES, '.heic', '.heif'].join(',')
+/** Valor del atributo accept del input (fotos y el video MP4 de prepararVideo). HEIC y MP4 van también por extensión:
+ *  en Windows el navegador no siempre conoce su tipo. */
+export const ACCEPT_ATTRIBUTE = [...ACCEPTED_TYPES, '.heic', '.heif', 'video/mp4', '.mp4'].join(',')
 
 // HEIC (iPhone): el servidor lo rechaza, así que se convierte a JPEG aquí. Safari sabe abrirlo; Chrome y Firefox no.
 const isHeic = (file: File) => /^image\/hei[cf]$/.test(file.type) || /\.hei[cf]$/i.test(file.name)
@@ -17,7 +18,8 @@ const MAX_SIDE = 1920
 const TARGET_BYTES = 2 * 1024 * 1024
 const QUALITIES = [0.8, 0.7, 0.6, 0.5]
 
-export type PreparedPhoto = { blob: Blob; preview: string }
+/** Foto o video listo para subir; preview es una data URL (foto) o una URL de objeto (video). */
+export type PreparedMedia = { blob: Blob; preview: string }
 
 const toBlob = (canvas: HTMLCanvasElement, quality: number) =>
     new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
@@ -31,7 +33,7 @@ const toDataUrl = (blob: Blob) =>
     })
 
 /** Reduce, orienta y convierte a JPEG la foto elegida; lanza un error con el motivo si no se puede usar. */
-export async function prepararFoto(file: File): Promise<PreparedPhoto> {
+export async function prepararFoto(file: File): Promise<PreparedMedia> {
     if (!ACCEPTED_TYPES.includes(file.type) && !isHeic(file)) {
         throw new Error('Formato no soportado. Usa una foto JPG, PNG, WebP o HEIC.')
     }
