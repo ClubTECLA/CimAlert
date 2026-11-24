@@ -212,7 +212,7 @@ export default function ModalChrome({ fullFocus }: ModalChromeProps) {
       {shouldFullFocus && (
         <div
           aria-hidden="true"
-          className="fixed inset-0 z-[59] bg-black/20 backdrop-blur-sm"
+          className="fixed inset-0 z-59 bg-black/20 backdrop-blur-sm"
         />
       )}
       <section
@@ -224,7 +224,7 @@ export default function ModalChrome({ fullFocus }: ModalChromeProps) {
             : { transform: `translate3d(${position.x}px, ${position.y}px, 0)` }
         }
         className={`
-    fixed z-[60] w-fit pointer-events-auto
+    fixed z-60 w-fit pointer-events-auto
     flex flex-col items-center
     rounded-xl bg-white shadow-float
     ${
