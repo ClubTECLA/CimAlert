@@ -1,6 +1,7 @@
 import { createElement, useState, type SubmitEvent } from "react";
 import { LuArchive, LuArchiveRestore, LuBell, LuCheck, LuClock, LuDownload, LuImage, LuInfo, LuMapPin, LuPencil, LuSend, LuShare, LuTrash2, LuUser, LuUsers } from "react-icons/lu";
 import DetailHero from "@/features/reportes/components/DetailHero";
+import MediaViewer from "@/features/reportes/components/MediaViewer";
 import IncidentAction from "@/features/reportes/components/IncidentAction";
 import IncidentMoreActions from "@/features/reportes/components/IncidentMoreActions";
 import DetailRow from "@/features/reportes/components/DetailRow";
@@ -14,7 +15,7 @@ import { useReporteDetalle } from "@/features/reportes/useReporteDetalle";
 import { useSysMessage } from "@/components/ui/SysMessageContext";
 import type { ApiComentario, ApiEstadoReporte } from "@/types/api-types";
 import { categoryIcon } from "@/features/categorias/categories";
-import { folio, formatDateTime, fotoUrl, incidentBorderColor, incidentColor, incidentIconColor, PENDING_ICON_STYLE, pinOfficialFirst } from "@/features/reportes/reportFormat";
+import { esVideoPath, folio, formatDateTime, fotoUrl, incidentBorderColor, incidentColor, incidentIconColor, multimediaLabel, PENDING_ICON_STYLE, pinOfficialFirst } from "@/features/reportes/reportFormat";
 import { isOfficialRole, rolLabel } from "@/features/sesion/users";
 import { esEstadoFinal, estadosSiguientes } from "@/features/reportes/estadoTransiciones";
 
@@ -55,6 +56,9 @@ export default function IncidentDetailView({ reporteId }: IncidentDetailViewProp
     const color = base ? incidentColor(base.estado_actual, category?.color) : "var(--color-ink-muted)";
     const icon = createElement(categoryIcon(category?.nombre ?? ""), { "aria-hidden": true });
     const photo = reporte?.multimedia[0];
+    // Archivo abierto en el visor (null: cerrado). Se comprueba contra la lista por si cambió al recargar el detalle.
+    const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+    const viewerOpen = viewerIndex !== null && !!reporte?.multimedia[viewerIndex];
     // Misma regla que el backend (PATCH /reportes/{id}/estado): cualquier rol menos ciudadano.
     const canChangeState = isOfficialRole(user?.rol_name);
     // Mismas transiciones que el backend: solo se ofrecen los cambios que va a aceptar.
@@ -123,7 +127,8 @@ export default function IncidentDetailView({ reporteId }: IncidentDetailViewProp
     const confirmations = base?.avistamientos ?? 0;
     const commentCount = reporte?.comentarios.length;
 
-    // El backend devuelve el autor y su rol en cada comentario; sin ellos (respuestas antiguas) se muestra "Usuario".
+    // El backend devuelve el autor y su rol en cada comentario. CommentItem solo muestra el de los oficiales; los
+    // ciudadanos y los de autor desconocido (respuestas antiguas) salen como "Anónimo".
     const authorOf = (item: ApiComentario): CommentAuthor | undefined =>
         item.username ? { name: item.username, rol: item.rol_name } : undefined;
     const isOfficial = (item: ApiComentario) => isOfficialRole(authorOf(item)?.rol);
@@ -132,11 +137,17 @@ export default function IncidentDetailView({ reporteId }: IncidentDetailViewProp
     return (
         // Ancho fijo del Figma (440 px aprox.): con w-fit, un comentario largo ensancharía el panel.
         <div className="flex h-full min-h-0 w-full flex-col gap-2 font-ui sm:w-[max(25rem,calc(25vw-2rem))]">
-            <DetailHero color={color} icon={icon} photo={photo && fotoUrl(photo.path)}>
+            <DetailHero
+                color={color}
+                icon={icon}
+                photo={photo && fotoUrl(photo.path)}
+                video={!!photo && esVideoPath(photo.path)}
+                onOpen={() => setViewerIndex(0)}
+            >
                 {!!reporte?.multimedia.length &&
                     <span className="flex items-center gap-1.5 rounded-full bg-black/55 px-2.5 py-1.25 text-xs font-semibold text-white">
                         <LuImage className="size-3.5" aria-hidden />
-                        {reporte.multimedia.length === 1 ? "1 foto" : `${reporte.multimedia.length} fotos`}
+                        {multimediaLabel(reporte.multimedia.map((item) => item.path))}
                     </span>
                 }
                 {base &&
@@ -150,6 +161,15 @@ export default function IncidentDetailView({ reporteId }: IncidentDetailViewProp
                     </span>
                 }
             </DetailHero>
+            {viewerOpen &&
+                <MediaViewer
+                    items={reporte.multimedia}
+                    index={viewerIndex}
+                    onIndexChange={setViewerIndex}
+                    onClose={() => setViewerIndex(null)}
+                    place={reporte.direccion}
+                />
+            }
 
             <div className="flex flex-col gap-2.5 pt-2">
                 <div className="flex items-center gap-3">
