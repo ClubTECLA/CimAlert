@@ -33,6 +33,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
@@ -82,7 +83,7 @@ func newTestClient(t *testing.T) *testClient {
 
 	gin.SetMode(gin.TestMode)
 	router := server.NewRouter(server.Handlers{
-		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(testPool(t)), almacen, reporte.PoligonoBC)),
+		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(testPool(t)), almacen, geo.PoligonoBC)),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(testPool(t)))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(testPool(t)))),
 		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), usuario.NewRecuperacion(usuarios, mailer, []byte(testJWTSecret))),

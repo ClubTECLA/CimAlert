@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 )
 
 // entornoMinimo define las variables obligatorias y deja sin valor las de multimedia.
@@ -226,7 +226,7 @@ func TestLoad_ReportePoligono(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil", err)
 	}
-	if !slices.Equal(cfg.ReportePoligono, reporte.PoligonoBC) {
+	if !slices.Equal(cfg.ReportePoligono, geo.PoligonoBC) {
 		t.Errorf("ReportePoligono = %v, want PoligonoBC por defecto", cfg.ReportePoligono)
 	}
 
@@ -236,7 +236,7 @@ func TestLoad_ReportePoligono(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() con REPORTE_POLIGONO en blanco: error = %v, want nil", err)
 	}
-	if !slices.Equal(cfg.ReportePoligono, reporte.PoligonoBC) {
+	if !slices.Equal(cfg.ReportePoligono, geo.PoligonoBC) {
 		t.Errorf("ReportePoligono = %v, want PoligonoBC por defecto", cfg.ReportePoligono)
 	}
 

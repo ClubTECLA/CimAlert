@@ -10,6 +10,7 @@ import (
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 	"github.com/google/uuid"
 )
 
@@ -46,12 +47,12 @@ const tiempoLimpieza = 10 * time.Second
 type Service struct {
 	store    store
 	archivos Archivos
-	zona     Poligono
+	zona     geo.Poligono
 }
 
 // NewService crea un servicio de reportes con la store, el cliente de
 // archivos y la zona donde se permite crear reportes.
-func NewService(store store, archivos Archivos, zona Poligono) *Service {
+func NewService(store store, archivos Archivos, zona geo.Poligono) *Service {
 	return &Service{store: store, archivos: archivos, zona: zona}
 }
 
