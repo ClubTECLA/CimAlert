@@ -10,6 +10,10 @@ export interface CommonPanelContextType {
     backView: () => void;
     hasPrevView: boolean;
     closePanel: () => void;
+    /** Registra el guard de salida de la vista con borrador (null al desmontarla). */
+    registerLeaveGuard: (guard: ((action: () => void) => void) | null) => void;
+    /** Ejecuta una navegación solo después de pasar el guard de salida. */
+    requestLeave: (action: () => void) => void;
 }
 
 export const CommonPanelContext = createContext<CommonPanelContextType | undefined>(undefined);

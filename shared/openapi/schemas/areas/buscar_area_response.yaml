@@ -1,0 +1,12 @@
+type: object
+description: Reportes y centros activos cuyo centroide cae dentro del polígono. Los filtros de categoría, estado o capacidad se siguen aplicando en el cliente sobre este subconjunto.
+required: [reportes, centros]
+properties:
+  reportes:
+    type: array
+    items:
+      $ref: '../../openapi.yaml#/components/schemas/ReporteResumen'
+  centros:
+    type: array
+    items:
+      $ref: '../../openapi.yaml#/components/schemas/Centro'

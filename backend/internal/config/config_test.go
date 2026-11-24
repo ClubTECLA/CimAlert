@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ClubTECLA/cimalert/backend/internal/reporte"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 )
 
 // entornoMinimo define las variables obligatorias y deja sin valor las de multimedia.
@@ -17,6 +17,7 @@ func entornoMinimo(t *testing.T) {
 	t.Setenv("MULTIMEDIA_URL", "")
 	t.Setenv("MAX_MULTIMEDIA_BYTES", "")
 	t.Setenv("REPORTE_POLIGONO", "")
+	t.Setenv("DOCS_ENABLED", "")
 	for _, v := range variablesFoto {
 		t.Setenv(v, "")
 	}
@@ -226,7 +227,7 @@ func TestLoad_ReportePoligono(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil", err)
 	}
-	if !slices.Equal(cfg.ReportePoligono, reporte.PoligonoBC) {
+	if !slices.Equal(cfg.ReportePoligono, geo.PoligonoBC) {
 		t.Errorf("ReportePoligono = %v, want PoligonoBC por defecto", cfg.ReportePoligono)
 	}
 
@@ -236,7 +237,7 @@ func TestLoad_ReportePoligono(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() con REPORTE_POLIGONO en blanco: error = %v, want nil", err)
 	}
-	if !slices.Equal(cfg.ReportePoligono, reporte.PoligonoBC) {
+	if !slices.Equal(cfg.ReportePoligono, geo.PoligonoBC) {
 		t.Errorf("ReportePoligono = %v, want PoligonoBC por defecto", cfg.ReportePoligono)
 	}
 
@@ -252,5 +253,47 @@ func TestLoad_ReportePoligono(t *testing.T) {
 	t.Setenv("REPORTE_POLIGONO", "0,0;0,1")
 	if _, err := Load(); err == nil {
 		t.Error("Load() con REPORTE_POLIGONO inválido: error = nil, want error")
+	}
+}
+
+func TestLoad_DocsApagadasPorDefecto(t *testing.T) {
+	entornoMinimo(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v, want nil", err)
+	}
+	if cfg.DocsEnabled {
+		t.Error("DocsEnabled = true sin DOCS_ENABLED, want false")
+	}
+}
+
+func TestLoad_DocsEnabledDelEntorno(t *testing.T) {
+	for valor, want := range map[string]bool{"true": true, "1": true, "false": false, "0": false} {
+		t.Run(valor, func(t *testing.T) {
+			entornoMinimo(t)
+			t.Setenv("DOCS_ENABLED", valor)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v, want nil", err)
+			}
+			if cfg.DocsEnabled != want {
+				t.Errorf("DocsEnabled = %v, want %v", cfg.DocsEnabled, want)
+			}
+		})
+	}
+}
+
+func TestLoad_DocsEnabledInvalido(t *testing.T) {
+	for _, valor := range []string{"si", "activado", "2"} {
+		t.Run(valor, func(t *testing.T) {
+			entornoMinimo(t)
+			t.Setenv("DOCS_ENABLED", valor)
+
+			if _, err := Load(); err == nil {
+				t.Errorf("Load() con DOCS_ENABLED=%q: error = nil, want error", valor)
+			}
+		})
 	}
 }

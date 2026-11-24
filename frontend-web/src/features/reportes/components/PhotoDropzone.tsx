@@ -5,18 +5,20 @@ import { useSysMessage } from "@/components/ui/SysMessageContext";
 import LoadingIcon from "@/components/ui/LoadingIcon";
 
 interface PhotoDropzoneProps {
-    /** Vista previa de la foto ya preparada (data URL); sin ella se muestra la zona para elegir. */
+    /** Vista previa de la foto o del video ya preparado; sin ella se muestra la zona para elegir. */
     preview?: string | null
-    /** Se está reduciendo la foto elegida. */
+    /** La vista previa es un video. */
+    video?: boolean
+    /** Se está preparando el archivo elegido. */
     busy?: boolean
     disabled?: boolean
     onSelect: (file: File) => void
     onRemove: () => void
 }
 
-// "Subir fotos" del Figma, con una sola foto: el backend admite una por usuario por reporte.
-// Los límites reales (formato y peso) los valida prepararFoto al elegirla; aquí solo se recoge el archivo.
-export default function PhotoDropzone({ preview, busy = false, disabled = false, onSelect, onRemove }: PhotoDropzoneProps) {
+// "Subir fotos" del Figma, con una foto o un video: el backend admite uno (uno u otro) por usuario por reporte.
+// Los límites reales (formato, peso y duración) los validan prepararFoto y prepararVideo; aquí solo se recoge el archivo.
+export default function PhotoDropzone({ preview, video = false, busy = false, disabled = false, onSelect, onRemove }: PhotoDropzoneProps) {
     const [dragging, setDragging] = useState(false);
     const { showMessage } = useSysMessage();
 
@@ -25,10 +27,12 @@ export default function PhotoDropzone({ preview, busy = false, disabled = false,
             // shrink-0: dentro de la columna con scroll del formulario, un elemento con overflow-hidden tiene altura
             // mínima 0 y se encoge (hasta desaparecer) cuando el contenido no cabe, en vez de hacer scroll.
             <div className="relative h-40 w-full shrink-0 overflow-hidden rounded-2xl border border-line bg-subtle">
-                <img src={preview} alt="Foto del incidente" className="size-full object-cover" />
+                {video
+                    ? <video src={preview} controls muted playsInline preload="metadata" aria-label="Video del incidente" className="size-full bg-black object-contain" />
+                    : <img src={preview} alt="Foto del incidente" className="size-full object-cover" />}
                 <button
                     type="button"
-                    aria-label="Quitar foto"
+                    aria-label={video ? "Quitar video" : "Quitar foto"}
                     onClick={onRemove}
                     disabled={disabled}
                     className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-full bg-surface text-icon shadow-raised transition hover:brightness-95 disabled:opacity-60"
@@ -47,7 +51,7 @@ export default function PhotoDropzone({ preview, busy = false, disabled = false,
         if (!files[0] || inactive) return;
         // Al hacer clic el selector solo deja elegir una; al arrastrar pueden llegar varias.
         if (files.length > 1) {
-            showMessage("Solo se puede subir una foto: se usa la primera y las demás se ignoran.", { color: "yellow", type: "float", title: "Foto" });
+            showMessage("Solo se puede subir una foto o un video: se usa el primero y los demás se ignoran.", { color: "yellow", type: "float", title: "Multimedia" });
         }
         onSelect(files[0]);
     };
@@ -77,12 +81,12 @@ export default function PhotoDropzone({ preview, busy = false, disabled = false,
                 }}
             />
             {busy
-                ? <LoadingIcon label="Preparando foto" />
+                ? <LoadingIcon label="Preparando archivo" />
                 : <LuImage className="size-6 text-brand-text" />}
             <span className="text-sm font-semibold text-brand-text">
-                {busy ? "Preparando foto…" : "Arrastra una foto o haz clic para subir"}
+                {busy ? "Preparando archivo…" : "Arrastra una foto o un video, o haz clic para subir"}
             </span>
-            <span className="text-xs text-ink-muted">JPG, PNG, WebP o HEIC · se reduce al subirla (máx. 20 MB)</span>
+            <span className="text-xs text-ink-muted">Foto JPG, PNG, WebP o HEIC (máx. 20 MB) · video MP4 de hasta 6 s y 8 MB</span>
         </label>
     );
 }

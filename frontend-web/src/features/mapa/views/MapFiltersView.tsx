@@ -152,13 +152,14 @@ export default function MapFiltersView() {
 
                 {/* flex-wrap: en los teléfonos más estrechos los dos botones no caben en una fila y cada uno pasa a la suya. */}
                 <div className="flex flex-wrap gap-2.5 border-t border-line pt-3.5">
+                    {/* El área dibujada no es una opción de este panel: se conserva al restablecer los demás filtros. */}
                     <Button
                         variant="subtle"
                         size="lg"
                         title="Restablecer"
                         onClick={() => {
-                            setDraft(DEFAULT_FILTERS);
-                            setCentroDraft(DEFAULT_CENTRO_FILTERS);
+                            setDraft({ ...DEFAULT_FILTERS, polygon: draft.polygon });
+                            setCentroDraft({ ...DEFAULT_CENTRO_FILTERS, polygon: centroDraft.polygon });
                         }}
                         className="flex-1 max-sm:px-4"
                     />

@@ -145,3 +145,8 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   display: none !important;
   pointer-events: none;
 }
+
+/* Al dibujar un área los pines no capturan el puntero: esos clics son vértices del polígono. */
+.dibujando-area .maplibregl-marker {
+  pointer-events: none;
+}

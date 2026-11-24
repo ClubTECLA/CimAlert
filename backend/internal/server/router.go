@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
@@ -39,6 +40,7 @@ const rutaMultimedia = "/v1/reportes/:reporteId/multimedia"
 type routerConfig struct {
 	maxMultimediaBytes int64
 	rateLimitRafaga    int
+	docs               bool
 }
 
 // RouterOption ajusta NewRouter.
@@ -56,6 +58,13 @@ func WithRateLimitRafaga(n int) RouterOption {
 	return func(c *routerConfig) { c.rateLimitRafaga = n }
 }
 
+// WithDocs publica el contrato (/v1/openapi.json) y la documentación
+// interactiva (/v1/docs). Sin esta opción no se montan, para que producción no
+// exponga la API completa.
+func WithDocs(habilitar bool) RouterOption {
+	return func(c *routerConfig) { c.docs = habilitar }
+}
+
 // Handlers son los handlers de cada funcionalidad que sirve el router.
 type Handlers struct {
 	Reportes    *reporte.Handler
@@ -64,6 +73,7 @@ type Handlers struct {
 	Usuarios    *usuario.Handler
 	Multimedia  *multimedia.Handler
 	Centros     *centro.Handler
+	Areas       *area.Handler
 	Riesgo      *riesgo.Handler
 }
 
@@ -77,6 +87,7 @@ type (
 	usuarios    = usuario.Handler
 	multimedias = multimedia.Handler
 	centros     = centro.Handler
+	areas       = area.Handler
 	riesgos     = riesgo.Handler
 )
 
@@ -90,6 +101,7 @@ type api struct {
 	*usuarios
 	*multimedias
 	*centros
+	*areas
 	*riesgos
 }
 
@@ -114,7 +126,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 
 	// Una sola tabla con las reglas de todos los errores que pueden devolver
 	// los handlers.
-	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP)
+	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP, area.ReglasHTTP)
 
 	// Registra acciones con el RequestLogger
 	// El logger debe ser lo primero en utilizarse para que se registren los panics con su request_id
@@ -160,7 +172,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 	// Los manejadores de error por defecto de oapi-codegen responden {"msg": ...};
 	// se reemplazan para que coincidan con ErrorResponse ({"message": ...}).
 	strict := httpapi.NewStrictHandlerWithOptions(
-		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros, riesgos: h.Riesgo},
+		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros, areas: h.Areas, riesgos: h.Riesgo},
 		nil,
 		httpapi.StrictGinServerOptions{
 			RequestErrorHandlerFunc: func(c *gin.Context, err error) {
@@ -211,22 +223,24 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 		},
 	})
 
-	// El contrato, servido desde el propio binario, para que web y móvil puedan
-	// generar sus tipos contra la API que de verdad está corriendo.
-	r.GET("/v1/openapi.json", func(c *gin.Context) {
-		spec, err := httpapi.GetSpec()
-		if err != nil {
-			tabla.Responder(c, err)
-			return
-		}
-		// Relativo a la URL del contrato (/v1/ o /api/v1/ tras nginx), para
-		// que "Try it out" de Swagger UI llegue a las rutas reales.
-		spec.Servers = openapi3.Servers{{URL: "."}}
-		c.JSON(http.StatusOK, spec)
-	})
+	if cfg.docs {
+		// El contrato, servido desde el propio binario, para que web y móvil puedan
+		// generar sus tipos contra la API que de verdad está corriendo.
+		r.GET("/v1/openapi.json", func(c *gin.Context) {
+			spec, err := httpapi.GetSpec()
+			if err != nil {
+				tabla.Responder(c, err)
+				return
+			}
+			// Relativo a la URL del contrato (/v1/ o /api/v1/ tras nginx), para
+			// que "Try it out" de Swagger UI llegue a las rutas reales.
+			spec.Servers = openapi3.Servers{{URL: "."}}
+			c.JSON(http.StatusOK, spec)
+		})
 
-	// Documentación interactiva del contrato; carga /v1/openapi.json.
-	r.GET("/v1/docs", httpapi.ServeDocs)
+		// Documentación interactiva del contrato; carga /v1/openapi.json.
+		r.GET("/v1/docs", httpapi.ServeDocs)
+	}
 
 	return r
 }
