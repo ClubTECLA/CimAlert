@@ -11,12 +11,15 @@ export const VIDEO_TYPE = 'video/mp4'
 export const isVideoFile = (file: File) => file.type.startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(file.name)
 const isMp4 = (file: File) => file.type === VIDEO_TYPE || (!file.type && /\.mp4$/i.test(file.name))
 
-// Lee la duración y el tamaño con el propio reproductor: si este navegador no puede abrirlo (p. ej. HEVC), lo rechaza.
+// Lee la duración y el tamaño con el propio reproductor y espera al primer fotograma decodificado (loadeddata): un
+// códec que este navegador no sabe decodificar (p. ej. HEVC) puede dar metadatos y fallar después, y eso lo rechaza.
 const readVideo = (url: string) =>
     new Promise<{ duration: number; width: number }>((resolve, reject) => {
         const video = document.createElement('video')
-        video.preload = 'metadata'
-        video.onloadedmetadata = () => resolve({ duration: video.duration, width: video.videoWidth })
+        video.muted = true
+        video.playsInline = true
+        video.preload = 'auto'
+        video.onloadeddata = () => resolve({ duration: video.duration, width: video.videoWidth })
         video.onerror = () => reject(new Error('No se pudo abrir el video. Exporta un MP4 en H.264 y vuelve a elegirlo.'))
         video.src = url
     })
