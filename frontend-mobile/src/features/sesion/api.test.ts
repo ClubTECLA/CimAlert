@@ -1,10 +1,41 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/session', () => ({ useSessionStore: { getState: () => ({ token: null }) } }));
 vi.mock('@/lib/env', () => ({ env: { apiUrl: 'http://localhost', useMocks: false } }));
 
 import { ApiError, ErrorRed } from '@/lib/http';
-import { esErrorDeCodigo, mensajeErrorAuth } from './api';
+import { esErrorDeCodigo, mensajeErrorAuth, sesionApi } from './api';
+
+describe('recuperación de contraseña', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const responder = (status: number, body?: unknown) => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(body === undefined ? null : JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+
+  it('verificar manda solo el correo y el PIN y devuelve el token de reset', async () => {
+    const fetchMock = responder(200, { reset_token: 'tok' });
+    await expect(sesionApi.verificarRecuperacion('a@b.mx', '123456')).resolves.toEqual({ reset_token: 'tok' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/auth\/recovery\/verify$/);
+    expect(JSON.parse(init.body)).toEqual({ email: 'a@b.mx', pin: '123456' });
+  });
+
+  it('restablecer manda el token y la nueva contraseña a /recovery/reset', async () => {
+    const fetchMock = responder(204);
+    await sesionApi.restablecerContrasena('tok', 'nueva-clave');
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toMatch(/\/auth\/recovery\/reset$/);
+    expect(JSON.parse(init.body)).toEqual({ reset_token: 'tok', new_password: 'nueva-clave' });
+  });
+});
 
 describe('esErrorDeCodigo', () => {
   it('es el 400 del PIN', () => {

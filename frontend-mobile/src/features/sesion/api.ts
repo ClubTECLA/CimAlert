@@ -26,19 +26,35 @@ export const sesionApi = {
   /** Manda un PIN de 6 dígitos al correo. Responde 202 exista o no la cuenta, para no revelar cuáles existen. */
   solicitarRecuperacion: (email: string) =>
     http<void>('/auth/recovery', { method: 'POST', body: JSON.stringify({ email }) }, publica),
-  /** Valida el PIN y cambia la contraseña en una sola llamada (204). No devuelve token: hay que iniciar sesión. */
-  verificarRecuperacion: (email: string, pin: string, newPassword: string) =>
-    http<void>(
+  /** Valida el PIN y devuelve un token de un solo uso para cambiar la contraseña. Un PIN correcto ya no
+   * vuelve a servir: si se pierde el token, hay que pedir otro código. */
+  verificarRecuperacion: (email: string, pin: string) =>
+    http<VerifyRecoveryResponseApi>(
       '/auth/recovery/verify',
-      { method: 'POST', body: JSON.stringify({ email, pin, new_password: newPassword }) },
+      { method: 'POST', body: JSON.stringify({ email, pin }) },
+      publica,
+    ),
+  /** Cambia la contraseña con el token de verificarRecuperacion (204). No devuelve token de sesión: hay que
+   * iniciar sesión. */
+  restablecerContrasena: (resetToken: string, newPassword: string) =>
+    http<void>(
+      '/auth/recovery/reset',
+      { method: 'POST', body: JSON.stringify({ reset_token: resetToken, new_password: newPassword }) },
       publica,
     ),
 };
 
-/** Lo que vence y cuánto se puede intentar (backend/internal/usuario/recovery.go). */
+/** Respuesta de POST /auth/recovery/verify (shared/openapi/schemas/auth/verify_recovery_response.yaml). */
+export interface VerifyRecoveryResponseApi {
+  reset_token: string;
+}
+
+/** Lo que vence y cuánto se puede intentar (backend/internal/usuario/recovery.go). El token de reset
+ * también vence a los 15 minutos, contados desde que se verifica el código. */
 export const RECUPERACION = { minutosVigencia: 15, intentosPin: 5, codigosPorHora: 3 } as const;
 
-/** El 400 de POST /auth/recovery/verify por PIN incorrecto, vencido o sin intentos (el backend no distingue). */
+/** El 400 de la recuperación por PIN incorrecto, vencido o sin intentos (en /verify) o por token de reset
+ * inválido o vencido (en /reset). El backend no distingue y responde lo mismo en ambos. */
 export function esErrorDeCodigo(error: unknown): boolean {
   // El otro 400 posible es el de la contraseña (8 a 72 bytes); ese menciona "password".
   return error instanceof ApiError && error.status === 400 && !/password/i.test(error.message);

@@ -12,15 +12,15 @@ import { useVigenciaDePantalla } from '@/hooks/useVigenciaDePantalla';
 import { colors } from '@/theme/colors';
 import { fontFamily } from '@/theme/typography';
 
-/** Paso 3 de recuperar contraseña: aquí se manda el código del paso 2 junto con la nueva contraseña. */
+/** Paso 3 de recuperar contraseña: cambia la contraseña con el token que devolvió la verificación del paso 2. */
 export default function NuevaContrasenaScreen() {
   const router = useRouter();
-  const { email = '', pin = '' } = useLocalSearchParams<{ email?: string; pin?: string }>();
+  const { email = '', resetToken = '' } = useLocalSearchParams<{ email?: string; resetToken?: string }>();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [enviando, setEnviando] = useState(false);
   // Si se sale de la pantalla mientras se cambia la contraseña, su respuesta ya no muestra alertas: el
-  // "Revisar código" de un error tardío llevaría a otra pantalla.
+  // "Pedir código nuevo" de un error tardío llevaría a otra pantalla.
   const vigencia = useVigenciaDePantalla(() => setEnviando(false));
 
   const canSubmit = password.length >= PASSWORD_MIN && password === confirmPassword && !enviando;
@@ -33,25 +33,27 @@ export default function NuevaContrasenaScreen() {
     const marca = vigencia.iniciar();
     try {
       // Con mocks no hay backend: se recorre el diseño sin cambiar nada.
-      if (!puedeSimularSesion) await sesionApi.verificarRecuperacion(email, pin, password);
+      if (!puedeSimularSesion) await sesionApi.restablecerContrasena(resetToken, password);
       if (!vigencia.vigente(marca)) return;
       Alert.alert('Contraseña actualizada', 'Ya puedes iniciar sesión con tu nueva contraseña.', [
         { text: 'Iniciar sesión', onPress: irAlLogin },
       ]);
     } catch (error) {
       if (!vigencia.vigente(marca)) return;
-      const mensaje = mensajeErrorAuth(error, 'recuperacion');
-      Alert.alert(
-        'No se pudo cambiar la contraseña',
-        mensaje,
-        // Si el código está mal, se vuelve al paso 2 (que conserva lo que se escribió ahí) para corregirlo.
-        esErrorDeCodigo(error)
-          ? [
-              { text: 'Cancelar', style: 'cancel' },
-              { text: 'Revisar código', onPress: () => router.back() },
-            ]
-          : undefined
-      );
+      // El token vence a los 15 minutos de verificar el código, o dejó de valer porque se pidió otro código.
+      // El código ya se usó, así que no sirve volver al paso 2: se vuelve al 1 (con el correo escrito).
+      if (esErrorDeCodigo(error)) {
+        Alert.alert(
+          'No se pudo cambiar la contraseña',
+          'Se acabó el tiempo para cambiar la contraseña. Pide un código nuevo.',
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { text: 'Pedir código nuevo', onPress: () => router.dismissTo('/(auth)/recuperar') },
+          ]
+        );
+        return;
+      }
+      Alert.alert('No se pudo cambiar la contraseña', mensajeErrorAuth(error, 'recuperacion'));
     } finally {
       if (vigencia.vigente(marca)) setEnviando(false);
     }
