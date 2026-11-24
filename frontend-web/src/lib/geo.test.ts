@@ -100,7 +100,8 @@ describe("polygonFromPoints", () => {
         expect(polygonFromPoints([[0, 0], [2, 2], [0, 3], [1, 0]])).toBeNull();
     });
 
-    it("rechaza un vértice repetido no consecutivo", () => {
-        expect(polygonFromPoints([[0, 0], [3, 0], [0, 3], [3, 3]])).toBeNull();
+    it("rechaza un vértice repetido no consecutivo aunque tenga área", () => {
+        // [2, 1] se visita dos veces y el área firmada es 9: pasa el shoelace y lo detiene anilloSeCruza.
+        expect(polygonFromPoints([[0, 0], [3, 0], [2, 1], [3, 3], [0, 3], [2, 1]])).toBeNull();
     });
 });
