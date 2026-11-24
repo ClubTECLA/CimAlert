@@ -486,6 +486,64 @@ func (q *Queries) ListReportesByUserId(ctx context.Context, arg ListReportesByUs
 	return items, nil
 }
 
+const listReportesEnArea = `-- name: ListReportesEnArea :many
+SELECT r.id, r.incidente_id, r.estado_actual, r.avistamientos, r.es_oficial, p.latitude, p.longitude,
+       r.direccion, i.etiqueta AS incidente_etiqueta, r.created_at
+FROM reporte r
+JOIN puntos_origen p ON p.reporte_id = r.id
+JOIN incidentes i ON i.id = r.incidente_id
+WHERE NOT r.es_historico
+AND ST_Covers(ST_GeomFromGeoJSON($1::text)::geography, p.geom)
+ORDER BY r.created_at
+`
+
+type ListReportesEnAreaRow struct {
+	ID                uuid.UUID `json:"id"`
+	IncidenteID       int       `json:"incidente_id"`
+	EstadoActual      Estado    `json:"estado_actual"`
+	Avistamientos     int       `json:"avistamientos"`
+	EsOficial         bool      `json:"es_oficial"`
+	Latitude          float64   `json:"latitude"`
+	Longitude         float64   `json:"longitude"`
+	Direccion         *string   `json:"direccion"`
+	IncidenteEtiqueta string    `json:"incidente_etiqueta"`
+	CreatedAt         time.Time `json:"created_at"`
+}
+
+// sqlc no conoce PostGIS: el polígono viaja como texto GeoJSON y se convierte en el servidor.
+// ST_Covers sobre geography aprovecha el índice GiST de puntos_origen.geom.
+// Mismas columnas que ListReportesResumen para reutilizar el resumen del mapa.
+func (q *Queries) ListReportesEnArea(ctx context.Context, poligono string) ([]ListReportesEnAreaRow, error) {
+	rows, err := q.db.Query(ctx, listReportesEnArea, poligono)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReportesEnAreaRow
+	for rows.Next() {
+		var i ListReportesEnAreaRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IncidenteID,
+			&i.EstadoActual,
+			&i.Avistamientos,
+			&i.EsOficial,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Direccion,
+			&i.IncidenteEtiqueta,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listReportesPorUbicacion = `-- name: ListReportesPorUbicacion :many
 SELECT r.id, r.incidente_id, r.estado_actual, r.avistamientos, r.es_oficial,
        p.latitude, p.longitude, r.direccion, i.etiqueta AS incidente_etiqueta,
