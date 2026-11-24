@@ -61,7 +61,7 @@ Authorization: Bearer <token>   (en ambas)
 
 | Código | Significado | Qué hacer |
 |---|---|---|
-| `201` | Guardada | Mostrar la foto con el `path` devuelto |
+| `201` | Guardada | Mostrar el archivo con el `url` firmado devuelto (vence; no lo guardes) |
 | `400` | Formato no soportado (solo JPEG o MP4), `.mov`, falta `file` o multipart mal armado | Avisar al usuario |
 | `401` | Sin sesión o token inválido | Volver a iniciar sesión |
 | `404` | El reporte no existe o el usuario no es su creador | No ofrecer subir foto a reportes ajenos |

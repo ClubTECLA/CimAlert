@@ -58,6 +58,16 @@ export function fotoUrl(path: string) {
     return `/multimedia/${path.split("/").map(encodeURIComponent).join("/")}`;
 }
 
+/** El servicio multimedia guarda los videos como .mp4 y las fotos como .jpg. */
+export const esVideoPath = (path: string) => /\.mp4$/i.test(path);
+
+/** Píldora de la cabecera: "1 foto", "1 video" o, con varios, "1 / 6 fotos" ("videos" o "archivos" si los hay). */
+export function multimediaLabel(paths: string[]) {
+    const videos = paths.filter(esVideoPath).length;
+    if (paths.length === 1) return videos ? "1 video" : "1 foto";
+    return `1 / ${paths.length} ${videos === paths.length ? "videos" : videos ? "archivos" : "fotos"}`;
+}
+
 // Las fechas se muestran en la hora de Tijuana aunque el navegador tenga otra zona horaria.
 export const TIME_ZONE = "America/Tijuana";
 const dateTimeFormat = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: TIME_ZONE });

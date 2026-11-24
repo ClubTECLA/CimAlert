@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { confirmaciones, folio, formatDateTime, fotoUrl, incidentBorderColor, incidentColor, incidentIconColor, pinOfficialFirst, shortDate, timeAgo } from "./reportFormat";
+import { confirmaciones, folio, formatDateTime, fotoUrl, multimediaLabel, incidentBorderColor, incidentColor, incidentIconColor, pinOfficialFirst, shortDate, timeAgo } from "./reportFormat";
 import type { ApiEstadoReporte } from "@/types/api-types";
 
 const now = Date.parse("2026-10-26T12:00:00Z");
@@ -31,6 +31,14 @@ describe("reportFormat", () => {
         expect(confirmaciones(0)).toBe("0 confirmaciones");
         expect(confirmaciones(1)).toBe("1 confirmación");
         expect(confirmaciones(2)).toBe("2 confirmaciones");
+    });
+
+    it("multimediaLabel cuenta las fotos y videos como la píldora del Figma", () => {
+        expect(multimediaLabel(["a.jpg"])).toBe("1 foto");
+        expect(multimediaLabel(["a.mp4"])).toBe("1 video");
+        expect(multimediaLabel(["a.jpg", "b.jpg", "c.jpg"])).toBe("1 / 3 fotos");
+        expect(multimediaLabel(["a.mp4", "b.MP4"])).toBe("1 / 2 videos");
+        expect(multimediaLabel(["a.jpg", "b.mp4"])).toBe("1 / 2 archivos");
     });
 
     it("fotoUrl apunta a /multimedia y codifica cada tramo sin tocar las barras", () => {
