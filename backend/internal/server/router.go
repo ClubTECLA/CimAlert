@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
@@ -40,6 +41,8 @@ const rutaMultimedia = "/v1/reportes/:reporteId/multimedia"
 type routerConfig struct {
 	maxMultimediaBytes int64
 	rateLimitRafaga    int
+	sesionRafaga       int
+	sesionIntervalo    time.Duration
 	docs               bool
 }
 
@@ -56,6 +59,17 @@ func WithMaxMultimediaBytes(n int64) RouterOption {
 // integración la suben porque cada uno hace varias peticiones desde la misma IP.
 func WithRateLimitRafaga(n int) RouterOption {
 	return func(c *routerConfig) { c.rateLimitRafaga = n }
+}
+
+// WithRateLimitSesion cambia el límite por IP de /v1/auth/login y
+// /v1/auth/google (por defecto middleware.RateLimitSesionRafaga y
+// middleware.RateLimitSesionIntervalo). Los tests de integración lo suben
+// porque muchos inician sesión desde la misma IP.
+func WithRateLimitSesion(rafaga int, intervalo time.Duration) RouterOption {
+	return func(c *routerConfig) {
+		c.sesionRafaga = rafaga
+		c.sesionIntervalo = intervalo
+	}
 }
 
 // WithDocs publica el contrato (/v1/openapi.json) y la documentación
@@ -119,7 +133,12 @@ var _ httpapi.StrictServerInterface = api{}
 // passwordChangedAt deja que middleware.Auth rechace los tokens emitidos
 // antes del último cambio de contraseña del usuario.
 func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.PasswordChangedAtFunc, opts ...RouterOption) *gin.Engine {
-	cfg := routerConfig{maxMultimediaBytes: defaultMaxMultimediaBytes, rateLimitRafaga: middleware.RateLimitRafaga}
+	cfg := routerConfig{
+		maxMultimediaBytes: defaultMaxMultimediaBytes,
+		rateLimitRafaga:    middleware.RateLimitRafaga,
+		sesionRafaga:       middleware.RateLimitSesionRafaga,
+		sesionIntervalo:    middleware.RateLimitSesionIntervalo,
+	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -210,8 +229,11 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 		Middlewares: []httpapi.MiddlewareFunc{
 			middleware.Auth(jwtSecret, string(httpapi.BearerAuthScopes), passwordChangedAt),
 			middleware.RequireRole(string(httpapi.BearerAuthScopes)),
-			// Solo en las rutas de recuperación, para frenar la fuerza bruta de PINs entre cuentas.
-			middleware.RateLimitPorIP(cfg.rateLimitRafaga, "/v1/auth/recovery", "/v1/auth/recovery/verify", "/v1/auth/recovery/reset"),
+			// Límite por IP de recuperación de contraseña, para frenar la fuerza bruta de PINs entre cuentas.
+			middleware.RateLimitPorIP(cfg.rateLimitRafaga, middleware.RateLimitIntervalo, "/v1/auth/recovery", "/v1/auth/recovery/verify", "/v1/auth/recovery/reset"),
+			// Límite por IP de inicio de sesión (login y google), cada ruta con su propio contador.
+			middleware.RateLimitPorIP(cfg.sesionRafaga, cfg.sesionIntervalo, "/v1/auth/google"),
+			middleware.RateLimitPorIP(cfg.sesionRafaga, cfg.sesionIntervalo, "/v1/auth/login"),
 			// Antes del validador, que lee el body completo para validarlo.
 			middleware.BodyLimitFunc(func(c *gin.Context) int64 {
 				if c.FullPath() == rutaMultimedia {

@@ -55,6 +55,8 @@ paths:
     $ref: './paths/auth.yaml#/register'
   /auth/login:
     $ref: './paths/auth.yaml#/login'
+  /auth/google:
+    $ref: './paths/auth.yaml#/google'
   /auth/me:
     $ref: './paths/auth.yaml#/me'
   /auth/logout:
@@ -138,6 +140,10 @@ components:
       $ref: './schemas/auth/login_request.yaml'
     AuthResponse:
       $ref: './schemas/auth/auth_response.yaml'
+    GoogleLoginRequest:
+      $ref: './schemas/auth/google_login_request.yaml'
+    GoogleAuthResponse:
+      $ref: './schemas/auth/google_auth_response.yaml'
     Usuario:
       $ref: './schemas/auth/usuario.yaml'
     UsuarioMeResponse:

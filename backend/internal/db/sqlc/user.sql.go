@@ -84,6 +84,23 @@ func (q *Queries) CountPINsLastHourByUserID(ctx context.Context, userID uuid.UUI
 	return count, err
 }
 
+const createGoogleAuthProvider = `-- name: CreateGoogleAuthProvider :exec
+INSERT INTO
+    auth_providers (user_id, provider, provider_id)
+VALUES
+    ($1, 'google', $2)
+`
+
+type CreateGoogleAuthProviderParams struct {
+	UserID     uuid.UUID `json:"user_id"`
+	ProviderID *string   `json:"provider_id"`
+}
+
+func (q *Queries) CreateGoogleAuthProvider(ctx context.Context, arg CreateGoogleAuthProviderParams) error {
+	_, err := q.db.Exec(ctx, createGoogleAuthProvider, arg.UserID, arg.ProviderID)
+	return err
+}
+
 const createLocalAuthProvider = `-- name: CreateLocalAuthProvider :exec
 INSERT INTO
     auth_providers (user_id, provider)
@@ -154,6 +171,19 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const deleteLocalAuthProviderByUserID = `-- name: DeleteLocalAuthProviderByUserID :exec
+DELETE FROM
+    auth_providers
+WHERE
+    user_id = $1
+    AND provider = 'local'
+`
+
+func (q *Queries) DeleteLocalAuthProviderByUserID(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteLocalAuthProviderByUserID, userID)
+	return err
+}
+
 const deleteUsedOrExpiredPINByUserID = `-- name: DeleteUsedOrExpiredPINByUserID :exec
 DELETE FROM
     recovery_pins
@@ -190,6 +220,24 @@ func (q *Queries) GetActiveResetByTokenHash(ctx context.Context, resetTokenHash 
 	var i GetActiveResetByTokenHashRow
 	err := row.Scan(&i.ID, &i.UserID)
 	return i, err
+}
+
+const getGoogleProviderIDByUserID = `-- name: GetGoogleProviderIDByUserID :one
+SELECT
+    provider_id
+FROM
+    auth_providers
+WHERE
+    user_id = $1
+    AND provider = 'google'
+`
+
+// Sin filas: el usuario no está vinculado con Google.
+func (q *Queries) GetGoogleProviderIDByUserID(ctx context.Context, userID uuid.UUID) (*string, error) {
+	row := q.db.QueryRow(ctx, getGoogleProviderIDByUserID, userID)
+	var provider_id *string
+	err := row.Scan(&provider_id)
+	return provider_id, err
 }
 
 const getLatestActivePINByUserID = `-- name: GetLatestActivePINByUserID :one
@@ -291,6 +339,80 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 		&i.PasswordChangedAt,
 		&i.State,
+	)
+	return i, err
+}
+
+const getUserWithRolByEmailForUpdate = `-- name: GetUserWithRolByEmailForUpdate :one
+SELECT
+    u.id, u.email, u.phone, u.username, u.rol_id, u.password_hash, u.created_at, u.updated_at, u.password_changed_at, u.state,
+    r.nombre AS rol_name
+FROM
+    users u
+    JOIN roles r ON r.id = u.rol_id
+WHERE
+    u.email = $1
+FOR UPDATE OF u
+`
+
+type GetUserWithRolByEmailForUpdateRow struct {
+	User    User   `json:"user"`
+	RolName string `json:"rol_name"`
+}
+
+// El bloqueo serializa los intentos concurrentes de vincular la misma cuenta.
+func (q *Queries) GetUserWithRolByEmailForUpdate(ctx context.Context, email *string) (GetUserWithRolByEmailForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithRolByEmailForUpdate, email)
+	var i GetUserWithRolByEmailForUpdateRow
+	err := row.Scan(
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.Phone,
+		&i.User.Username,
+		&i.User.RolID,
+		&i.User.PasswordHash,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.User.PasswordChangedAt,
+		&i.User.State,
+		&i.RolName,
+	)
+	return i, err
+}
+
+const getUserWithRolByGoogleSub = `-- name: GetUserWithRolByGoogleSub :one
+SELECT
+    u.id, u.email, u.phone, u.username, u.rol_id, u.password_hash, u.created_at, u.updated_at, u.password_changed_at, u.state,
+    r.nombre AS rol_name
+FROM
+    users u
+    JOIN auth_providers ap ON ap.user_id = u.id
+    JOIN roles r ON r.id = u.rol_id
+WHERE
+    ap.provider = 'google'
+    AND ap.provider_id = $1
+`
+
+type GetUserWithRolByGoogleSubRow struct {
+	User    User   `json:"user"`
+	RolName string `json:"rol_name"`
+}
+
+func (q *Queries) GetUserWithRolByGoogleSub(ctx context.Context, providerID *string) (GetUserWithRolByGoogleSubRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithRolByGoogleSub, providerID)
+	var i GetUserWithRolByGoogleSubRow
+	err := row.Scan(
+		&i.User.ID,
+		&i.User.Email,
+		&i.User.Phone,
+		&i.User.Username,
+		&i.User.RolID,
+		&i.User.PasswordHash,
+		&i.User.CreatedAt,
+		&i.User.UpdatedAt,
+		&i.User.PasswordChangedAt,
+		&i.User.State,
+		&i.RolName,
 	)
 	return i, err
 }
@@ -407,6 +529,44 @@ func (q *Queries) LockUserByID(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const removePasswordByUserID = `-- name: RemovePasswordByUserID :one
+UPDATE
+    users
+SET
+    password_hash = NULL,
+    password_changed_at = $2,
+    updated_at = now()
+WHERE
+    id = $1
+RETURNING id, email, phone, username, rol_id, password_hash, created_at, updated_at, password_changed_at, state
+`
+
+type RemovePasswordByUserIDParams struct {
+	ID                uuid.UUID  `json:"id"`
+	PasswordChangedAt *time.Time `json:"password_changed_at"`
+}
+
+// password_changed_at solo se escribe en dos lugares: un flujo que probó el
+// control del buzón (recuperación) y este vínculo con Google. Como en
+// SetNewPasswordByUserID, $2 viene del reloj de la API.
+func (q *Queries) RemovePasswordByUserID(ctx context.Context, arg RemovePasswordByUserIDParams) (User, error) {
+	row := q.db.QueryRow(ctx, removePasswordByUserID, arg.ID, arg.PasswordChangedAt)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.Phone,
+		&i.Username,
+		&i.RolID,
+		&i.PasswordHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PasswordChangedAt,
+		&i.State,
+	)
+	return i, err
+}
+
 const setNewPasswordByUserID = `-- name: SetNewPasswordByUserID :exec
 UPDATE
     users
@@ -425,6 +585,10 @@ type SetNewPasswordByUserIDParams struct {
 	ID                uuid.UUID  `json:"id"`
 }
 
+// password_changed_at solo se escribe en dos lugares: un flujo que probó el
+// control del buzón (recuperación) y el vínculo con Google que quita el
+// password (RemovePasswordByUserID). El vínculo con Google cuenta con que NULL
+// signifique "nunca probado".
 func (q *Queries) SetNewPasswordByUserID(ctx context.Context, arg SetNewPasswordByUserIDParams) error {
 	_, err := q.db.Exec(ctx, setNewPasswordByUserID, arg.PasswordHash, arg.PasswordChangedAt, arg.ID)
 	return err

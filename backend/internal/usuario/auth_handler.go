@@ -49,6 +49,25 @@ func (h *Handler) Login(ctx context.Context, request httpapi.LoginRequestObject)
 	return httpapi.Login200JSONResponse(toAuthResponse(user, token, ttl)), nil
 }
 
+// LoginGoogle inicia sesión con un ID token de Google. Responde 200 también
+// cuando crea la cuenta; created distingue los dos casos.
+func (h *Handler) LoginGoogle(ctx context.Context, request httpapi.LoginGoogleRequestObject) (httpapi.LoginGoogleResponseObject, error) {
+	user, token, ttl, created, err := h.auth.LoginGoogle(ctx, request.Body.IdToken)
+	if err != nil {
+		return nil, err
+	}
+
+	// oapi-codegen genera un struct plano para el allOf de GoogleAuthResponse.
+	a := toAuthResponse(user, token, ttl)
+	return httpapi.LoginGoogle200JSONResponse{
+		AccessToken: a.AccessToken,
+		TokenType:   a.TokenType,
+		ExpiresIn:   a.ExpiresIn,
+		User:        a.User,
+		Created:     created,
+	}, nil
+}
+
 // Retorna el usuario autenticado según el token de la cabecera Authorization.
 func (h *Handler) Me(ctx context.Context, request httpapi.MeRequestObject) (httpapi.MeResponseObject, error) {
 	userID, ok := middleware.UserIDFromContext(ctx)

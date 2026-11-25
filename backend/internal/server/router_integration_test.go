@@ -14,6 +14,7 @@ package server_test
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +35,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
 	"github.com/ClubTECLA/cimalert/backend/internal/geo"
+	"github.com/ClubTECLA/cimalert/backend/internal/googleid"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
@@ -55,11 +57,32 @@ const incidenteSocavon = 2
 // testClient manda peticiones al router en memoria, con el token del usuario
 // autenticado si lo hay.
 type testClient struct {
-	t          *testing.T
-	router     http.Handler
-	token      string
-	multimedia *multimediaFalso
-	mailer     *mailerFalso
+	t           *testing.T
+	router      http.Handler
+	token       string
+	multimedia  *multimediaFalso
+	mailer      *mailerFalso
+	verificador *verificadorFalso
+}
+
+// verificadorFalso reemplaza al verificador de Google: devuelve los claims o
+// el error que el test le pone con poner.
+type verificadorFalso struct {
+	mu     sync.Mutex
+	claims googleid.Claims
+	err    error
+}
+
+func (v *verificadorFalso) poner(c googleid.Claims, err error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.claims, v.err = c, err
+}
+
+func (v *verificadorFalso) Verificar(context.Context, string) (googleid.Claims, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.claims, v.err
 }
 
 // testRateLimitRafaga es la ráfaga por IP de los tests: el caso más largo
@@ -67,19 +90,67 @@ type testClient struct {
 // que la ráfaga de producción.
 const testRateLimitRafaga = 10
 
+// configTest son las variantes de newTestClient.
+type configTest struct {
+	sinGoogle        bool
+	limiteSesionReal bool
+	router           []server.RouterOption
+}
+
+// opcionTest ajusta newTestClient.
+type opcionTest func(*configTest)
+
+// sinGoogle arma el cliente sin verificador de Google, como un despliegue sin
+// GOOGLE_CLIENT_IDS.
+func sinGoogle() opcionTest {
+	return func(c *configTest) { c.sinGoogle = true }
+}
+
+// limiteSesionReal deja el límite por IP de inicio de sesión con los valores
+// de producción en vez del de los tests.
+func limiteSesionReal() opcionTest {
+	return func(c *configTest) { c.limiteSesionReal = true }
+}
+
+// conRouter agrega opciones al router, después de las de por defecto, así que
+// las reemplazan.
+func conRouter(opts ...server.RouterOption) opcionTest {
+	return func(c *configTest) { c.router = append(c.router, opts...) }
+}
+
 // newTestClient arma el router con los servicios reales sobre la base de los
 // tests, igual que cmd/api.
-func newTestClient(t *testing.T) *testClient {
+func newTestClient(t *testing.T, opts ...opcionTest) *testClient {
 	t.Helper()
 
+	var cfg configTest
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	// Se arman antes que NewAuth, que recibe los dos con WithGoogle.
+	almacen := &multimediaFalso{}
+	mailer := &mailerFalso{}
+	verificador := &verificadorFalso{}
+
+	var authOpts []usuario.AuthOption
+	if !cfg.sinGoogle {
+		authOpts = append(authOpts, usuario.WithGoogle(verificador, mailer))
+	}
+
 	usuarios := usuario.NewStore(testPool(t))
-	auth, err := usuario.NewAuth(t.Context(), usuarios, []byte(testJWTSecret), time.Hour)
+	auth, err := usuario.NewAuth(t.Context(), usuarios, []byte(testJWTSecret), time.Hour, authOpts...)
 	if err != nil {
 		t.Fatalf("creando AuthService: %v", err)
 	}
 
-	almacen := &multimediaFalso{}
-	mailer := &mailerFalso{}
+	routerOpts := []server.RouterOption{server.WithRateLimitRafaga(testRateLimitRafaga), server.WithDocs(true)}
+	if !cfg.limiteSesionReal {
+		// Muchos tests inician sesión desde la misma IP; con el límite de
+		// producción recibirían 429.
+		routerOpts = append(routerOpts, server.WithRateLimitSesion(1000, time.Millisecond))
+	}
+	routerOpts = append(routerOpts, cfg.router...)
 
 	reportes := reporte.NewService(reporte.NewStore(testPool(t)), almacen, geo.PoligonoBC)
 	centros := centro.NewService(centro.NewStore(testPool(t)))
@@ -100,9 +171,9 @@ func newTestClient(t *testing.T) *testClient {
 		Centros: centro.NewHandler(centros),
 		Areas:   area.NewHandler(area.NewService(reportes, centros)),
 		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)))),
-	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga), server.WithDocs(true))
+	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, routerOpts...)
 
-	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer}
+	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer, verificador: verificador}
 }
 
 // do manda la petición y devuelve la respuesta grabada. body se serializa a
@@ -159,6 +230,24 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 // choquen entre sí ni con corridas anteriores.
 func credenciales() (email, password string) {
 	return fmt.Sprintf("test-%s@example.com", uuid.NewString()), "password123"
+}
+
+// credencialesGmail es como credenciales pero con un email @gmail.com, del
+// que Google es la autoridad, para los tests de vínculo con Google.
+func credencialesGmail() (email, password string) {
+	return fmt.Sprintf("test-%s@gmail.com", uuid.NewString()), "password123"
+}
+
+// registrarGmail crea un usuario local con un email @gmail.com y devuelve sus
+// credenciales, sin dejar el token en el cliente.
+func (c *testClient) registrarGmail() (email, password string) {
+	c.t.Helper()
+
+	email, password = credencialesGmail()
+	c.expect(http.StatusCreated, http.MethodPost, "/v1/auth/register", map[string]any{
+		"email": email, "username": "tester", "password": password,
+	})
+	return email, password
 }
 
 // login registra un usuario nuevo e inicia sesión con él, dejando el token

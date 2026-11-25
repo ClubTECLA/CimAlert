@@ -50,6 +50,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_IDS: ${GOOGLE_CLIENT_IDS:-}
       API_PORT: ${API_PORT}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-Administrador}
