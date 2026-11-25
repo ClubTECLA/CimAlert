@@ -92,9 +92,6 @@ func (m *SMTPMailer) enviar(ctx context.Context, destino, asunto, cuerpo string)
 	body.WriteString("MIME-Version: 1.0\r\n")
 	body.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	body.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
-	body.WriteString("MIME-Version: 1.0\r\n")
-	body.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
-	body.WriteString("Content-Transfer-Encoding: quoted-printable\r\n\r\n")
 	qp := quotedprintable.NewWriter(&body)
 	if _, err := qp.Write([]byte(cuerpo)); err != nil {
 		return err
