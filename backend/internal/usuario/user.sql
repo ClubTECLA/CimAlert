@@ -150,6 +150,10 @@ WHERE
     AND (used_at IS NOT NULL OR expires_at < now());
 
 -- name: SetNewPasswordByUserID :exec
+-- password_changed_at solo se escribe en dos lugares: un flujo que probó el
+-- control del buzón (recuperación) y el vínculo con Google que quita el
+-- password (RemovePasswordByUserID). El vínculo con Google cuenta con que NULL
+-- signifique "nunca probado".
 UPDATE
     users
 SET
@@ -179,3 +183,64 @@ FROM
     users
 WHERE
     id = $1;
+
+-- name: GetUserWithRolByGoogleSub :one
+SELECT
+    sqlc.embed(u),
+    r.nombre AS rol_name
+FROM
+    users u
+    JOIN auth_providers ap ON ap.user_id = u.id
+    JOIN roles r ON r.id = u.rol_id
+WHERE
+    ap.provider = 'google'
+    AND ap.provider_id = $1;
+
+-- name: GetUserWithRolByEmailForUpdate :one
+-- El bloqueo serializa los intentos concurrentes de vincular la misma cuenta.
+SELECT
+    sqlc.embed(u),
+    r.nombre AS rol_name
+FROM
+    users u
+    JOIN roles r ON r.id = u.rol_id
+WHERE
+    u.email = $1
+FOR UPDATE OF u;
+
+-- name: GetGoogleProviderIDByUserID :one
+-- Sin filas: el usuario no está vinculado con Google.
+SELECT
+    provider_id
+FROM
+    auth_providers
+WHERE
+    user_id = $1
+    AND provider = 'google';
+
+-- name: CreateGoogleAuthProvider :exec
+INSERT INTO
+    auth_providers (user_id, provider, provider_id)
+VALUES
+    ($1, 'google', $2);
+
+-- name: RemovePasswordByUserID :one
+-- password_changed_at solo se escribe en dos lugares: un flujo que probó el
+-- control del buzón (recuperación) y este vínculo con Google. Como en
+-- SetNewPasswordByUserID, $2 viene del reloj de la API.
+UPDATE
+    users
+SET
+    password_hash = NULL,
+    password_changed_at = $2,
+    updated_at = now()
+WHERE
+    id = $1
+RETURNING *;
+
+-- name: DeleteLocalAuthProviderByUserID :exec
+DELETE FROM
+    auth_providers
+WHERE
+    user_id = $1
+    AND provider = 'local';
