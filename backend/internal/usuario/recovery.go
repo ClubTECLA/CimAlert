@@ -179,7 +179,7 @@ func (r *Recuperacion) Restablecer(ctx context.Context, resetToken, newPassword 
 
 	if user.Email != nil {
 		email := *user.Email
-		enviarEnSegundoPlano(ctx, user.ID, "recuperación de contraseña en segundo plano", func(ctx context.Context) error {
+		enviarEnSegundoPlano(ctx, user.ID, "aviso de password cambiado", func(ctx context.Context) error {
 			return r.mailer.EnviarAvisoPasswordCambiado(ctx, user.ID, email)
 		})
 	}
