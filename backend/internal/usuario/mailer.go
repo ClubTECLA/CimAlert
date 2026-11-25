@@ -17,7 +17,7 @@ type Mailer interface {
 	EnviarAvisoPasswordCambiado(ctx context.Context, userID uuid.UUID, email string) error
 }
 
-// NewMailer construye el Mailer según MAIL_DRIVER: "log" -> LogMailer,
+// NewMailer construye el Mailer según MAIL_DRIVER: "log" -> LogMailer, "smtp" -> NewSMTPMailer
 // "" -> NoopMailer; cualquier otro valor es error.
 func NewMailer(driver string) (Mailer, error) {
 	switch driver {
@@ -25,6 +25,12 @@ func NewMailer(driver string) (Mailer, error) {
 		return NoopMailer{}, nil
 	case "log":
 		return LogMailer{}, nil
+	case "smtp":
+		cfg, err := SMTPConfigFromEnv()
+		if err != nil {
+			return nil, err
+		}
+		return NewSMTPMailer(cfg), nil
 	default:
 		return nil, fmt.Errorf("MAIL_DRIVER desconocido: %q", driver)
 	}
