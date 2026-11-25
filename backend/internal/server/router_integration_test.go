@@ -133,8 +133,13 @@ func newTestClient(t *testing.T, opts ...opcionTest) *testClient {
 	mailer := &mailerFalso{}
 	verificador := &verificadorFalso{}
 
+	var authOpts []usuario.AuthOption
+	if !cfg.sinGoogle {
+		authOpts = append(authOpts, usuario.WithGoogle(verificador, mailer))
+	}
+
 	usuarios := usuario.NewStore(testPool(t))
-	auth, err := usuario.NewAuth(t.Context(), usuarios, []byte(testJWTSecret), time.Hour)
+	auth, err := usuario.NewAuth(t.Context(), usuarios, []byte(testJWTSecret), time.Hour, authOpts...)
 	if err != nil {
 		t.Fatalf("creando AuthService: %v", err)
 	}

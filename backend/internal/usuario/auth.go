@@ -2,12 +2,15 @@ package usuario
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/googleid"
 	"github.com/ClubTECLA/cimalert/backend/internal/middleware"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -32,6 +35,13 @@ type authStore interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (sqlc.User, error)
 	GetDefaultRole(ctx context.Context) (sqlc.Role, error)
 	GetUserWithRolByID(ctx context.Context, id uuid.UUID) (sqlc.GetUserWithRolByIDRow, error)
+	LoginGoogleTx(ctx context.Context, p GoogleLoginParams) (GoogleLoginResult, error)
+}
+
+// googleVerifier verifica el ID token de Google; lo cumple googleid.Verificador
+// y, en los tests, un falso.
+type googleVerifier interface {
+	Verificar(ctx context.Context, raw string) (googleid.Claims, error)
 }
 
 type Auth struct {
@@ -40,16 +50,36 @@ type Auth struct {
 	ttl             time.Duration
 	defaultRoleID   int
 	defaultRoleName string
+
+	// google es nil cuando no hay GOOGLE_CLIENT_IDS: LoginGoogle responde 503.
+	google googleVerifier
+	// mailer manda el aviso de vínculo con Google.
+	mailer Mailer
+}
+
+// AuthOption ajusta NewAuth.
+type AuthOption func(*Auth)
+
+// WithGoogle habilita el inicio de sesión con Google.
+func WithGoogle(v googleVerifier, m Mailer) AuthOption {
+	return func(a *Auth) {
+		a.google = v
+		a.mailer = m
+	}
 }
 
 // NewAuth resuelve el id del rol "ciudadano" contra la base una sola
 // vez, en vez de asumir un id fijo.
-func NewAuth(ctx context.Context, store authStore, secret []byte, ttl time.Duration) (*Auth, error) {
+func NewAuth(ctx context.Context, store authStore, secret []byte, ttl time.Duration, opts ...AuthOption) (*Auth, error) {
 	defaultRole, err := store.GetDefaultRole(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving default role: %w", err)
 	}
-	return &Auth{store: store, secret: secret, ttl: ttl, defaultRoleID: defaultRole.ID, defaultRoleName: defaultRole.Nombre}, nil
+	a := &Auth{store: store, secret: secret, ttl: ttl, defaultRoleID: defaultRole.ID, defaultRoleName: defaultRole.Nombre}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a, nil
 }
 
 // Register crea el usuario con password local y devuelve el token de acceso
@@ -106,6 +136,10 @@ func (s *Auth) Login(ctx context.Context, email, password string) (sqlc.User, st
 	if notFound {
 		return sqlc.User{}, "", 0, ErrInvalidCredentials
 	}
+	// Después de bcrypt: solo quien sabe el password se entera de la suspensión.
+	if estaSuspendido(user.State) {
+		return sqlc.User{}, "", 0, ErrUsuarioSuspendido
+	}
 
 	row, err := s.store.GetUserWithRolByID(ctx, user.ID)
 	if err != nil {
@@ -117,6 +151,105 @@ func (s *Auth) Login(ctx context.Context, email, password string) (sqlc.User, st
 		return sqlc.User{}, "", 0, err
 	}
 	return user, token, s.ttl, nil
+}
+
+// razonesGoogle es el campo reason del log de LoginGoogle para cada error.
+var razonesGoogle = []struct {
+	err    error
+	reason string
+}{
+	{ErrGoogleNoConfigurado, "google_no_configurado"},
+	{ErrTokenGoogleInvalido, "token_invalido"},
+	{ErrGoogleNoDisponible, "claves_no_disponibles"},
+	{ErrEmailGoogleNoVerificado, "email_no_verificado"},
+	{ErrGoogleEmailNoAdmitido, "email_no_autoritativo"},
+	{ErrUsuarioSuspendido, "suspendido"},
+	{ErrGoogleCuentaDistinta, "cuenta_distinta"},
+	{ErrGoogleVinculoNoPermitido, "vinculo_no_permitido"},
+}
+
+func razonGoogle(err error) string {
+	for _, r := range razonesGoogle {
+		if errors.Is(err, r.err) {
+			return r.reason
+		}
+	}
+	return "interno"
+}
+
+// LoginGoogle inicia sesión con un ID token de Google: lo verifica, busca,
+// vincula o crea la cuenta y devuelve el token de acceso. El bool es true si
+// creó la cuenta. Escribe un solo registro de log por llamada.
+func (s *Auth) LoginGoogle(ctx context.Context, idToken string) (_ sqlc.User, _ string, _ time.Duration, _ bool, err error) {
+	var (
+		claims googleid.Claims
+		res    GoogleLoginResult
+	)
+	defer func() {
+		attrs := []slog.Attr{slog.String("aud", claims.Aud)}
+		level := slog.LevelInfo
+		switch {
+		case err != nil:
+			reason := razonGoogle(err)
+			attrs = append(attrs, slog.String("outcome", "rejected"), slog.String("reason", reason))
+			if reason == "claves_no_disponibles" {
+				level = slog.LevelWarn
+			}
+		case res.Created:
+			attrs = append(attrs, slog.String("outcome", "registered"))
+		case res.Linked:
+			// WARN: un vínculo puede ser una toma de cuenta; conviene verlo.
+			attrs = append(attrs, slog.String("outcome", "linked"), slog.Bool("password_removed", res.PasswordRemoved))
+			level = slog.LevelWarn
+		default:
+			attrs = append(attrs, slog.String("outcome", "logged_in"))
+		}
+		slog.LogAttrs(ctx, level, "login google", attrs...)
+	}()
+
+	if s.google == nil {
+		return sqlc.User{}, "", 0, false, ErrGoogleNoConfigurado
+	}
+
+	claims, err = s.google.Verificar(ctx, idToken)
+	if err != nil {
+		claims = googleid.Claims{}
+		if errors.Is(err, googleid.ErrClavesNoDisponibles) {
+			return sqlc.User{}, "", 0, false, ErrGoogleNoDisponible
+		}
+		return sqlc.User{}, "", 0, false, ErrTokenGoogleInvalido
+	}
+	if !claims.EmailVerified || claims.Email == "" {
+		return sqlc.User{}, "", 0, false, ErrEmailGoogleNoVerificado
+	}
+
+	email := normalizeEmail(claims.Email)
+	res, err = s.store.LoginGoogleTx(ctx, GoogleLoginParams{
+		Sub:             claims.Sub,
+		Email:           email,
+		Username:        usernameDesdeGoogle(claims.Name, email),
+		HD:              claims.HD,
+		DefaultRoleID:   s.defaultRoleID,
+		DefaultRoleName: s.defaultRoleName,
+	})
+	if err != nil {
+		return sqlc.User{}, "", 0, false, err
+	}
+
+	// Siempre de la fila que devolvió el store: si se quitó el password, su
+	// password_changed_at nuevo va en el pwd_at del token.
+	token, err := s.issueToken(res.User, res.RolNombre)
+	if err != nil {
+		return sqlc.User{}, "", 0, false, err
+	}
+
+	if res.PasswordRemoved {
+		userID := res.User.ID
+		enviarEnSegundoPlano(ctx, userID, "aviso de vínculo con Google", func(ctx context.Context) error {
+			return s.mailer.EnviarAvisoCuentaVinculadaGoogle(ctx, userID, email)
+		})
+	}
+	return res.User, token, s.ttl, res.Created, nil
 }
 
 // GetUser devuelve el usuario con su rol según el id.

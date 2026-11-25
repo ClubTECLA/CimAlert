@@ -1,0 +1,7 @@
+type: object
+required: [id_token]
+properties:
+  id_token:
+    type: string
+    minLength: 1
+    description: ID token de Google obtenido con el SDK de inicio de sesión del cliente.

@@ -73,7 +73,7 @@ func (r *Recuperacion) Solicitar(ctx context.Context, email string) error {
 		return nil
 	}
 
-	enviarEnSegundoPlano(ctx, user.ID, func(ctx context.Context) error {
+	enviarEnSegundoPlano(ctx, user.ID, "recuperación de contraseña en segundo plano", func(ctx context.Context) error {
 		pin, err := generarPin()
 		if err != nil {
 			return err
@@ -179,7 +179,7 @@ func (r *Recuperacion) Restablecer(ctx context.Context, resetToken, newPassword 
 
 	if user.Email != nil {
 		email := *user.Email
-		enviarEnSegundoPlano(ctx, user.ID, func(ctx context.Context) error {
+		enviarEnSegundoPlano(ctx, user.ID, "recuperación de contraseña en segundo plano", func(ctx context.Context) error {
 			return r.mailer.EnviarAvisoPasswordCambiado(ctx, user.ID, email)
 		})
 	}
@@ -219,18 +219,18 @@ func (r *Recuperacion) hashPin(pin string) []byte {
 const segundoPlanoTimeout = 30 * time.Second
 
 // enviarEnSegundoPlano corre send sin bloquear la respuesta. Loguea el error
-// con el userID, nunca con el PIN.
+// con el userID y descripcion, nunca con el PIN.
 //
 // El ctx de la petición es el *gin.Context, que gin recicla al responder, así
 // que la goroutine no puede usarlo (ni envuelto en WithoutCancel): arranca de
 // un contexto nuevo y solo se lleva el request_id para el log.
-func enviarEnSegundoPlano(ctx context.Context, userID uuid.UUID, send func(context.Context) error) {
+func enviarEnSegundoPlano(ctx context.Context, userID uuid.UUID, descripcion string, send func(context.Context) error) {
 	bg := logging.ContextWithRequestID(context.Background(), logging.RequestIDFromContext(ctx))
 	ctx, cancel := context.WithTimeout(bg, segundoPlanoTimeout)
 	go func() {
 		defer cancel()
 		if err := send(ctx); err != nil {
-			slog.ErrorContext(ctx, "recuperación de contraseña en segundo plano", "user_id", userID, "error", err)
+			slog.ErrorContext(ctx, descripcion, "user_id", userID, "error", err)
 		}
 	}()
 }
