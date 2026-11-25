@@ -26,7 +26,6 @@ const avisoVinculoGoogle = "Tu cuenta ahora está vinculada con tu cuenta de Goo
 	"Desactivamos el inicio de sesión con contraseña. " +
 	"De ahora en adelante, inicia sesión con Google."
 
-// NewMailer construye el Mailer según MAIL_DRIVER: "log" -> LogMailer,
 // NewMailer construye el Mailer según MAIL_DRIVER: "log" -> LogMailer, "smtp" -> NewSMTPMailer
 // "" -> NoopMailer; cualquier otro valor es error.
 func NewMailer(driver string) (Mailer, error) {

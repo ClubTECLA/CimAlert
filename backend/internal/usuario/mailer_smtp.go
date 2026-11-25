@@ -73,6 +73,12 @@ func (m *SMTPMailer) EnviarAvisoPasswordCambiado(ctx context.Context, _ uuid.UUI
 	return m.enviar(ctx, email, "Tu contraseña fue cambiada", cuerpo)
 }
 
+func (m *SMTPMailer) EnviarAvisoCuentaVinculadaGoogle(ctx context.Context, _ uuid.UUID, email string) error {
+	cuerpo := avisoVinculoGoogle + "\r\n\r\n" +
+		"Si no fuiste tú, contacta al administrador lo antes posible.\r\n"
+	return m.enviar(ctx, email, "Tu cuenta fue vinculada con Google", cuerpo)
+}
+
 func (m *SMTPMailer) enviar(ctx context.Context, destino, asunto, cuerpo string) error {
 	// Evita inyección de cabeceras: el destino debe ser una sola dirección válida.
 	if strings.ContainsAny(destino, "\r\n") {
