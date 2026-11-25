@@ -318,9 +318,27 @@ Para autenticarte en la página, haz `POST /auth/login`, copia el `access_token`
 
 Ver `.env.example` para la lista completa. Algunas notas:
 
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`: necesarias solo si vas a probar login con Google.
+- `GOOGLE_CLIENT_IDS`: opcional. Los OAuth client IDs de Google que el backend acepta como `aud` del ID token, separados por `;`: el de web y, si hay app, los de Android e iOS (`web-id;android-id;ios-id`). Vacío apaga el inicio de sesión con Google (`POST /v1/auth/google` responde 503). En Expo y Android, el token trae el client ID de web como `aud` solo si configuras `webClientId` en el SDK; si no, trae el de Android, así que lista los dos.
 - `VITE_MAPLIBRE_STYLE_URL`: necesaria solo si vas a probar el mapa.
 - `JWT_SECRET`: cualquier valor sirve en desarrollo local.
+
+### Inicio de sesión con Google
+
+`POST /v1/auth/google` recibe `{"id_token": "..."}`, el ID token que da el SDK de Google en el cliente. Responde 200 con lo mismo que `/v1/auth/login` más `created`, que es `true` si la petición creó la cuenta. Si ya hay una cuenta local con el mismo email y Google es la autoridad de ese email (`@gmail.com` o una cuenta de Workspace), la vincula. Los mensajes de error son fijos:
+
+| Status | Mensaje | Cuándo |
+|---|---|---|
+| 401 | `token de Google inválido` | El token no es de Google, no es para esta app o venció |
+| 401 | `email de Google no verificado` | Google no verificó el email |
+| 403 | `este email de Google no se puede usar aquí; regístrate o inicia sesión con email y contraseña` | Google no es la autoridad del email |
+| 403 | `usuario suspendido` | La cuenta está suspendida |
+| 409 | `la cuenta ya está vinculada a otra cuenta de Google` | El email ya está vinculado a otra identidad de Google |
+| 409 | `esta cuenta no puede vincularse con Google; inicia sesión con tu contraseña` | La cuenta no es de ciudadano |
+| 429 | `demasiadas solicitudes` | Límite por IP |
+| 503 | `login con Google no configurado` | `GOOGLE_CLIENT_IDS` está vacío |
+| 503 | `login con Google no disponible` | No se pudieron obtener las claves de Google |
+
+`/v1/auth/login` y `/v1/auth/google` tienen un límite por IP: ráfaga de 10 peticiones y después 1 por segundo, cada ruta con su propio contador.
 
 ## Multimedia (fotos de reportes)
 

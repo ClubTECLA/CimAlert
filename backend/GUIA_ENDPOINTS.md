@@ -58,10 +58,11 @@ tipos. La única excepción es `historial`, que todas usan dentro de sus transac
 |---|---|
 | `internal/httpapi/` | Solo el código que genera **oapi-codegen** (`generated.go`) y la página de docs. |
 | `internal/server/` | El único que conoce a todas las funcionalidades: arma el router, junta sus `Handler` en la interfaz del contrato, junta sus `ReglasHTTP` en la tabla de errores y construye los servicios (`server.New`). |
-| `internal/db/` | Conexión, migraciones (`migrations/`), `ExecTx` y los helpers de errores de Postgres (`IsNotFound`, `IsUniqueViolation`, `IsForeignKeyViolation`). |
+| `internal/db/` | Conexión, migraciones (`migrations/`), `ExecTx` y los helpers de errores de Postgres (`IsNotFound`, `IsUniqueViolation`, `IsUniqueViolationOn`, `IsForeignKeyViolation`). |
 | `internal/db/sqlc/` | Las consultas y modelos que genera **sqlc**, en un solo paquete. |
 | `internal/httperr/` | La tabla de errores (`Regla`, `Tabla`) y los errores de transporte (`ErrNoAutenticado`, …). No importa a ninguna funcionalidad. |
 | `internal/historial/` | `Registrar`, para guardar quién hizo qué dentro de una transacción. |
+| `internal/googleid/` | Verifica ID tokens de Google; único paquete que importa go-oidc. |
 | `internal/almacen/` | El cliente HTTP del servicio multimedia, que guarda y borra archivos. |
 
 ### Archivos generados
