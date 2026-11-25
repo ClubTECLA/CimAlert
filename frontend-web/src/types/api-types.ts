@@ -24,6 +24,9 @@ export type ApiActualizarIncidenteRequest = components['schemas']['actualizar_in
 export type ApiCentro = components['schemas']['centro']
 export type ApiTipoCentro = components['schemas']['tipos_centro']
 export type ApiCrearCentroRequest = components['schemas']['crear_centro_request']
+export type ApiPoligono = components['schemas']['poligono']
+export type ApiBuscarAreaRequest = components['schemas']['buscar_area_request']
+export type ApiBuscarAreaResponse = components['schemas']['buscar_area_response']
 
 // Report endpoint query, path, and response types
 export type ApiListarReportesQuery = operations['listarReportes']['parameters']['query']
@@ -53,6 +56,14 @@ export type ApiSubirMultimediaResponse =
 export type LoginResponse = operations['login']['responses'][200]['content']['application/json']
 export type RegisterResponse = operations['register']['responses'][201]['content']['application/json']
 export type MeResponse = operations['me']['responses'][200]['content']['application/json']
+export type ApiRecoveryRequest =
+    operations['solicitarRecuperacion']['requestBody']['content']['application/json']
+export type ApiVerifyRecoveryRequest =
+    operations['verificarRecuperacion']['requestBody']['content']['application/json']
+export type ApiVerifyRecoveryResponse =
+    operations['verificarRecuperacion']['responses'][200]['content']['application/json']
+export type ApiResetPasswordRequest =
+    operations['restablecerContrasena']['requestBody']['content']['application/json']
 export type AuthResponse = LoginResponse | RegisterResponse
 export type AuthEndpoint = 'login' | 'register'
 export type AuthRequest<T extends AuthEndpoint> =

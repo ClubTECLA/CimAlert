@@ -15,6 +15,7 @@ import SearchView from "@/features/busqueda/views/SearchView";
 import CentrosView from "@/features/centros/views/CentrosView";
 import CentroDetailView from "@/features/centros/views/CentroDetailView";
 import NewCentroView from "@/features/centros/views/NewCentroView";
+import AreaSelectionView from "@/features/mapa/views/AreaSelectionView";
 
 // Punto de composición visual: los tipos y el router no importan este registro.
 type PanelRegistry = {
@@ -37,4 +38,5 @@ export const panelRegistry = {
     "Centros": CentrosView,
     "Detalle Centro": CentroDetailView,
     "Nuevo Centro": NewCentroView,
+    "Área seleccionada": AreaSelectionView,
 } satisfies PanelRegistry;

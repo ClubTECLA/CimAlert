@@ -19,29 +19,34 @@ import {
 } from '../lib/alertasCercanas';
 import { Feather } from '@expo/vector-icons';
 import { CategoryToggleChip } from '../components/CategoryToggleChip';
-import { CATEGORIAS, CategoriaAlerta } from '../types/alertas';
+import { useCategorias } from '@/features/reportes/hooks';
+import { useFiltrosStore } from '@/features/mapa/filtros/filtrosStore';
+import { alternarCategoria, categoriaActiva } from '@/features/mapa/filtros/seleccionCategorias';
+import type { CategoriaFiltro } from '@/features/mapa/filtros/types';
 import { perfilColors, perfilRadius } from '../theme/perfilTokens';
 
 const TOP_INSET = Platform.OS === 'android' ? (RNStatusBar.currentHeight ?? 24) : 54;
 
-// Datos de ejemplo: todavía no existe el endpoint de preferencias de alertas en el contrato OpenAPI.
+// Rango del radio de aviso (km).
 const RADIO_MIN = 0.5;
 const RADIO_MAX = 3;
 
 interface AlertasScreenProps {
   onBack?: () => void;
-  onGuardar?: (preferencias: { radioKm: number; categorias: CategoriaAlerta[] }) => void;
+  /** `categorias`: `null` = todas; una lista = solo esas (misma convención que el filtro del mapa). */
+  onGuardar?: (preferencias: { radioKm: number; categorias: CategoriaFiltro[] | null }) => void;
 }
 
 export const AlertasScreen = ({ onBack, onGuardar }: AlertasScreenProps) => {
   const [radioKm, setRadioKm] = useState(RADIO_ALERTA_KM_DEFECTO);
-  const [seleccionadas, setSeleccionadas] = useState<CategoriaAlerta[]>([
-    'inundacion',
-    'deslave',
-    'drenaje',
-    'arbol',
-    'socavon',
-  ]);
+
+  // Las categorías salen del catálogo del backend, igual que en la hoja de filtros del mapa.
+  const catalogo = useCategorias();
+  // Borrador local: parte de lo que ya está aplicado al mapa y solo llega al filtro con "Guardar cambios".
+  const [categoriasSel, setCategoriasSel] = useState<CategoriaFiltro[] | null>(() => {
+    const actuales = useFiltrosStore.getState().filtros.categorias;
+    return actuales && [...actuales];
+  });
 
   // Hasta leer el radio guardado no se puede mover ni guardar: así la lectura nunca pisa una elección.
   const [radioCargado, setRadioCargado] = useState(false);
@@ -71,13 +76,16 @@ export const AlertasScreen = ({ onBack, onGuardar }: AlertasScreenProps) => {
     return () => sub.remove();
   }, []);
 
-  const toggleCategoria = (id: CategoriaAlerta) => {
-    setSeleccionadas((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
+  const toggleCategoria = (slug: CategoriaFiltro) =>
+    setCategoriasSel((prev) =>
+      alternarCategoria(
+        prev,
+        slug,
+        catalogo.map((c) => c.slug),
+      ),
     );
-  };
 
-  const guardar = () => onGuardar?.({ radioKm, categorias: seleccionadas });
+  const guardar = () => onGuardar?.({ radioKm, categorias: categoriasSel });
 
   return (
     <View style={styles.screen}>
@@ -112,15 +120,15 @@ export const AlertasScreen = ({ onBack, onGuardar }: AlertasScreenProps) => {
           <Text style={styles.rangoText}>3 km</Text>
         </View>
 
-        <Text style={styles.section}>Qué quiero recibir</Text>
+        <Text style={styles.section}>Qué quiero ver en el mapa</Text>
         <View style={styles.chipsWrap}>
-          {CATEGORIAS.map((cat) => (
+          {catalogo.map((cat) => (
             <CategoryToggleChip
-              key={cat.id}
-              label={cat.label}
+              key={cat.slug}
+              label={cat.etiqueta}
               color={cat.color}
-              activo={seleccionadas.includes(cat.id)}
-              onPress={() => toggleCategoria(cat.id)}
+              activo={categoriaActiva(categoriasSel, cat.slug)}
+              onPress={() => toggleCategoria(cat.slug)}
             />
           ))}
         </View>

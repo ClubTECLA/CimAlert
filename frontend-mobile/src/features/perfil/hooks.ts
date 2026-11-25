@@ -14,16 +14,16 @@ export const perfilKeys = {
 const MOCK_ME: UsuarioMeApi = {
   id: 'mock',
   email: 'bruce.cervantes@test.com',
-  username: 'bruce_cervantes',
+  username: 'bruce_cervantes (usuario mock)',
   rol_name: 'ciudadano',
 };
 
 const MOCK_MIS_REPORTES: ReporteMioApi[] = [
-  { id: '1', titulo: 'Inundación en 3ra y Constitución', direccion: 'Se unió a INC-2471', estado_actual: 'Verificado' },
-  { id: '2', titulo: 'Árbol caído en Blvd. Agua Caliente', direccion: 'Hoy 14:33', estado_actual: 'Probable' },
-  { id: '3', titulo: 'Socavón en Col. Libertad', direccion: 'Enviando...', estado_actual: 'Pendiente' },
-  { id: '4', titulo: 'Drenaje tapado en Col. Obrera', direccion: '28 ago', estado_actual: 'Resuelto' },
-  { id: '5', titulo: 'Luz intermitente en Otay', direccion: 'Duplicado de INC-2464', estado_actual: 'Descartado' },
+  { id: '1', titulo: 'Inundación en 3ra y Constitución (reporte mock)', direccion: 'Se unió a INC-2471', estado_actual: 'Verificado' },
+  { id: '2', titulo: 'Árbol caído en Blvd. Agua Caliente (reporte mock)', direccion: 'Hoy 14:33', estado_actual: 'Probable' },
+  { id: '3', titulo: 'Socavón en Col. Libertad (reporte mock)', direccion: 'Enviando...', estado_actual: 'Pendiente' },
+  { id: '4', titulo: 'Drenaje tapado en Col. Obrera (reporte mock)', direccion: '28 ago', estado_actual: 'Resuelto' },
+  { id: '5', titulo: 'Luz intermitente en Otay (reporte mock)', direccion: 'Duplicado de INC-2464', estado_actual: 'Descartado' },
 ];
 
 /** Usuario de la sesión. Un invitado no tiene token (daría 401), así que no se pide. */
@@ -50,7 +50,7 @@ export function useMisReportes() {
 
 const MOCK_DETALLE: ReporteDetalleMioApi = {
   id: '1',
-  titulo: 'Inundación en 3ra y Constitución',
+  titulo: 'Inundación en 3ra y Constitución (reporte mock)',
   direccion: '3ra y Constitución, Tijuana',
   estado_actual: 'Verificado',
   created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),

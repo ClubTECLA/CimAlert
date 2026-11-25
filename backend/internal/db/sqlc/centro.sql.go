@@ -200,6 +200,62 @@ func (q *Queries) ListCentros(ctx context.Context, incluirInactivos bool) ([]Lis
 	return items, nil
 }
 
+const listCentrosEnArea = `-- name: ListCentrosEnArea :many
+SELECT id, tipo_centro, nombre, descripcion, image_path,
+       latitude, longitude, capacidad, cantidad, activo, created_at
+FROM centros
+WHERE activo
+AND ST_Covers(ST_GeomFromGeoJSON($1::text)::geography, geom)
+ORDER BY nombre
+`
+
+type ListCentrosEnAreaRow struct {
+	ID          uuid.UUID `json:"id"`
+	TipoCentro  int       `json:"tipo_centro"`
+	Nombre      string    `json:"nombre"`
+	Descripcion *string   `json:"descripcion"`
+	ImagePath   *string   `json:"image_path"`
+	Latitude    float64   `json:"latitude"`
+	Longitude   float64   `json:"longitude"`
+	Capacidad   *int      `json:"capacidad"`
+	Cantidad    *int      `json:"cantidad"`
+	Activo      bool      `json:"activo"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Solo activos, igual que la lista del mapa. Mismas columnas que ListCentros.
+func (q *Queries) ListCentrosEnArea(ctx context.Context, poligono string) ([]ListCentrosEnAreaRow, error) {
+	rows, err := q.db.Query(ctx, listCentrosEnArea, poligono)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCentrosEnAreaRow
+	for rows.Next() {
+		var i ListCentrosEnAreaRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TipoCentro,
+			&i.Nombre,
+			&i.Descripcion,
+			&i.ImagePath,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Capacidad,
+			&i.Cantidad,
+			&i.Activo,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTiposCentro = `-- name: ListTiposCentro :many
 SELECT id, nombre FROM tipos_centro
 ORDER BY nombre

@@ -11,7 +11,8 @@ import { useCommonPanel } from "@/panels/useCommonPanel";
 import { useSysMessage } from "@/components/ui/SysMessageContext";
 import { useReportes } from "@/features/reportes/useReportes";
 import { useLocationPicker } from "@/features/mapa/useLocationPicker";
-import { prepararFoto, type PreparedPhoto } from "@/features/reportes/prepararFoto";
+import { prepararFoto, type PreparedMedia } from "@/features/reportes/prepararFoto";
+import { isVideoFile, prepararVideo, VIDEO_TYPE } from "@/features/reportes/prepararVideo";
 
 // Tarjetas visibles antes de "Ver las N categorías activas" (Figma: 2 filas de 3).
 const VISIBLE_CATEGORIES = 6;
@@ -41,7 +42,9 @@ function NewIncidentForm() {
     const [categoryId, setCategoryId] = useState<number | null>(null);
     const [tagIds, setTagIds] = useState<number[]>([]);
     const [description, setDescription] = useState("");
-    const [photo, setPhoto] = useState<PreparedPhoto | null>(null);
+    const [photo, setPhoto] = useState<PreparedMedia | null>(null);
+    const isVideo = photo?.blob.type === VIDEO_TYPE;
+    const mediaNoun = isVideo ? "video" : "foto";
     const [preparingPhoto, setPreparingPhoto] = useState(false);
     const [publishing, setPublishing] = useState(false);
     // El reporte ya se publicó pero su foto falló y se puede reintentar: el formulario queda solo para eso.
@@ -61,6 +64,11 @@ function NewIncidentForm() {
     useEffect(() => {
         reset();
     }, [reset]);
+
+    // La vista previa de un video es una URL de objeto: se libera al cambiarlo, quitarlo o cerrar el formulario.
+    useEffect(() => () => {
+        if (photo?.preview.startsWith("blob:")) URL.revokeObjectURL(photo.preview);
+    }, [photo]);
 
     // Las etiquetas son del catálogo de cada categoría: al cambiarla, el backend rechazaría las elegidas antes.
     const selectCategory = (id: number) => {
@@ -89,13 +97,14 @@ function NewIncidentForm() {
     };
 
     const handlePhotoSelect = async (file: File) => {
+        const video = isVideoFile(file);
         setPreparingPhoto(true);
         try {
-            setPhoto(await prepararFoto(file));
+            setPhoto(await (video ? prepararVideo(file) : prepararFoto(file)));
         } catch (error) {
             showMessage(
-                error instanceof Error ? error.message : "No se pudo usar esa foto.",
-                { color: "red", type: "float", title: "Foto" },
+                error instanceof Error ? error.message : "No se pudo usar ese archivo.",
+                { color: "red", type: "float", title: video ? "Video" : "Foto" },
             );
         } finally {
             setPreparingPhoto(false);
@@ -221,6 +230,7 @@ function NewIncidentForm() {
 
                 <PhotoDropzone
                     preview={photo?.preview}
+                    video={isVideo}
                     busy={preparingPhoto}
                     disabled={publishing || !!photoRetry}
                     onSelect={(file) => { void handlePhotoSelect(file) }}
@@ -267,14 +277,14 @@ function NewIncidentForm() {
             {photoRetry
                 ? <div className="flex flex-col gap-3 border-t border-line pt-3.5">
                     <p role="alert" className="rounded-2xl bg-warning-subtle px-4 py-3 text-caption text-warning">
-                        El incidente se publicó, pero {photoRetry.motivo}. Puedes reintentar solo la foto; el incidente no se duplica.
+                        El incidente se publicó, pero {photoRetry.motivo}. Puedes reintentar solo {isVideo ? "el video" : "la foto"}; el incidente no se duplica.
                     </p>
                     {/* Igual que el pie de publicar: caben en una fila en el panel y en teléfono cada uno pasa a la suya. */}
                     <div className="flex flex-wrap gap-2.5">
                         <Button
                             variant="subtle"
                             size="lg"
-                            title="Continuar sin foto"
+                            title={`Continuar sin ${mediaNoun}`}
                             onClick={() => finish([...photoRetry.pendientes, photoRetry.motivo])}
                             disabled={publishing}
                             className="flex-1 px-4"
@@ -283,7 +293,7 @@ function NewIncidentForm() {
                             variant="report"
                             size="lg"
                             icon={<LuRotateCw />}
-                            title={publishing ? "Subiendo foto…" : "Reintentar foto"}
+                            title={publishing ? `Subiendo ${mediaNoun}…` : `Reintentar ${mediaNoun}`}
                             onClick={handleRetryPhoto}
                             disabled={publishing}
                             className="flex-1 px-4"

@@ -21,7 +21,7 @@ var catalogoPrueba = []Categoria{
 var ahoraPrueba = time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
 
 // cajaPrueba es una zona rectangular para los tests del paquete; la zona real
-// (reporte.PoligonoBC) se prueba en la integración.
+// (geo.PoligonoBC) se prueba en la integración.
 type cajaPrueba struct{ minLat, maxLat, minLng, maxLng float64 }
 
 func (c cajaPrueba) Contiene(lat, lon float64) bool {

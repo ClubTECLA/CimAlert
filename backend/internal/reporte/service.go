@@ -10,6 +10,7 @@ import (
 
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 	"github.com/google/uuid"
 )
 
@@ -27,6 +28,7 @@ type store interface {
 	AddAvistamientoById(ctx context.Context, id uuid.UUID) (sqlc.AddAvistamientoByIdRow, error)
 	ListReportesPorUbicacion(ctx context.Context, arg sqlc.ListReportesPorUbicacionParams) ([]sqlc.ListReportesPorUbicacionRow, error)
 	ListReportesByUserId(ctx context.Context, arg sqlc.ListReportesByUserIdParams) ([]sqlc.ListReportesByUserIdRow, error)
+	ListReportesEnArea(ctx context.Context, poligono string) ([]sqlc.ListReportesEnAreaRow, error)
 	CambiarEstadoReporte(ctx context.Context, arg CambiarEstadoTxParams) (sqlc.Reporte, error)
 	CambiarHistorico(ctx context.Context, arg CambiarHistoricoTxParams) error
 	ActualizarTags(ctx context.Context, arg ActualizarTagsTxParams) error
@@ -46,12 +48,12 @@ const tiempoLimpieza = 10 * time.Second
 type Service struct {
 	store    store
 	archivos Archivos
-	zona     Poligono
+	zona     geo.Poligono
 }
 
 // NewService crea un servicio de reportes con la store, el cliente de
 // archivos y la zona donde se permite crear reportes.
-func NewService(store store, archivos Archivos, zona Poligono) *Service {
+func NewService(store store, archivos Archivos, zona geo.Poligono) *Service {
 	return &Service{store: store, archivos: archivos, zona: zona}
 }
 
@@ -397,4 +399,18 @@ func (s *Service) borrarArchivo(ctx context.Context, path string) {
 	if err := s.archivos.Borrar(ctx, path); err != nil {
 		slog.WarnContext(ctx, "couldn't delete a deleted report's file", "path", path, "error", err)
 	}
+}
+
+// ListarEnArea devuelve los reportes cuyo punto cae dentro del polígono
+// (GeoJSON en texto).
+func (s *Service) ListarEnArea(ctx context.Context, p geo.Poligono) ([]Resumen, error) {
+	rows, err := s.store.ListReportesEnArea(ctx, p.GeoJSON())
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Resumen, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, toResumen(sqlc.ListReportesResumenRow(r)))
+	}
+	return out, nil
 }

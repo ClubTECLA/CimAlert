@@ -128,3 +128,21 @@ body {
     animation: none;
   }
 }
+
+/* Los campos de contraseña llevan nuestro propio botón de mostrar/ocultar. Se quitan los controles nativos
+   de mostrar/borrar de Edge para que no aparezcan dos superpuestos; el botón de autocompletado de WebKit
+   (::-webkit-credentials-auto-fill-button) se conserva para no quitar el acceso a credenciales guardadas. */
+input[type="password"]::-ms-reveal {
+  display: none !important;
+  pointer-events: none;
+}
+
+input[type="password"]::-ms-clear {
+  display: none !important;
+  pointer-events: none;
+}
+
+/* Al dibujar un área los pines no capturan el puntero: esos clics son vértices del polígono. */
+.dibujando-area .maplibregl-marker {
+  pointer-events: none;
+}

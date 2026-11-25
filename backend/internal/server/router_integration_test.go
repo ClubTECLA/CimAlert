@@ -28,10 +28,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/ClubTECLA/cimalert/backend/internal/geo"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/incidente"
 	"github.com/ClubTECLA/cimalert/backend/internal/multimedia"
@@ -79,9 +81,12 @@ func newTestClient(t *testing.T) *testClient {
 	almacen := &multimediaFalso{}
 	mailer := &mailerFalso{}
 
+	reportes := reporte.NewService(reporte.NewStore(testPool(t)), almacen, geo.PoligonoBC)
+	centros := centro.NewService(centro.NewStore(testPool(t)))
+
 	gin.SetMode(gin.TestMode)
 	router := server.NewRouter(server.Handlers{
-		Reportes:    reporte.NewHandler(reporte.NewService(reporte.NewStore(testPool(t)), almacen, reporte.PoligonoBC)),
+		Reportes:    reporte.NewHandler(reportes),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(testPool(t)))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(testPool(t)))),
 		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), usuario.NewRecuperacion(usuarios, mailer, []byte(testJWTSecret))),
@@ -92,8 +97,9 @@ func newTestClient(t *testing.T) *testClient {
 			MaxBytes:    8 << 20,
 			MaxDuracion: 6 * time.Second,
 		})),
-		Centros: centro.NewHandler(centro.NewService(centro.NewStore(testPool(t)))),
-		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)), reporte.PoligonoBC)),
+		Centros: centro.NewHandler(centros),
+		Areas:   area.NewHandler(area.NewService(reportes, centros)),
+		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)), geo.PoligonoBC)),
 	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, server.WithRateLimitRafaga(testRateLimitRafaga), server.WithDocs(true))
 
 	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer}

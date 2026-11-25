@@ -15,10 +15,12 @@ import (
 // fakeStore cumple la interfaz store con datos en memoria. Los campos
 // tipoErr y centroErr permiten forzar el error que devolvería Postgres.
 type fakeStore struct {
-	tipos     []sqlc.TiposCentro
-	centros   map[uuid.UUID]Centro
-	tipoErr   error // lo devuelve CreateTipoCentroTx
-	centroErr error // lo devuelve CreateCentroTx
+	tipos          []sqlc.TiposCentro
+	centros        map[uuid.UUID]Centro
+	tipoErr        error  // lo devuelve CreateTipoCentroTx
+	centroErr      error  // lo devuelve CreateCentroTx
+	areaErr        error  // lo devuelve ListCentrosEnArea
+	ultimoPoligono string // el GeoJSON que recibió ListCentrosEnArea
 }
 
 func newFakeStore() *fakeStore {
@@ -315,4 +317,18 @@ func TestService_ListarCentros_SinFilasDevuelveSliceVacio(t *testing.T) {
 	if got == nil || len(got) != 0 {
 		t.Errorf("ListarCentros() = %#v, want slice vacío no nil", got)
 	}
+}
+
+func (f *fakeStore) ListCentrosEnArea(ctx context.Context, poligono string) ([]sqlc.ListCentrosEnAreaRow, error) {
+	f.ultimoPoligono = poligono
+	if f.areaErr != nil {
+		return nil, f.areaErr
+	}
+	out := []sqlc.ListCentrosEnAreaRow{}
+	for _, c := range f.centros {
+		if c.Activo {
+			out = append(out, sqlc.ListCentrosEnAreaRow(c))
+		}
+	}
+	return out, nil
 }

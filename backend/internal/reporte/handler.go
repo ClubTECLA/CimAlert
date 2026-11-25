@@ -118,7 +118,7 @@ func (h *Handler) ObtenerReporte(ctx context.Context, request httpapi.ObtenerRep
 	return httpapi.ObtenerReporte200JSONResponse(toReporte(r)), nil
 }
 
-func toReporteResumen(r Resumen) httpapi.ReporteResumen {
+func ToReporteResumen(r Resumen) httpapi.ReporteResumen {
 	return httpapi.ReporteResumen{
 		Id:            r.ID,
 		IncidenteId:   r.IncidenteID,
@@ -142,7 +142,7 @@ func (h *Handler) ListarReportes(ctx context.Context, request httpapi.ListarRepo
 	}
 	res := make(httpapi.ListarReportes200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		res = append(res, toReporteResumen(row))
+		res = append(res, ToReporteResumen(row))
 	}
 	return res, nil
 }
@@ -215,7 +215,7 @@ func (h *Handler) ListarMisReportes(ctx context.Context, request httpapi.ListarM
 	}
 	res := make(httpapi.ListarMisReportes200JSONResponse, 0, len(rows))
 	for _, row := range rows {
-		res = append(res, toReporteResumen(row))
+		res = append(res, ToReporteResumen(row))
 	}
 	return res, nil
 }

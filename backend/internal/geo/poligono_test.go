@@ -1,4 +1,4 @@
-package reporte
+package geo
 
 import "testing"
 

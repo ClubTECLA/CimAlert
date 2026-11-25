@@ -17,10 +17,22 @@ export type SearchStorageType = {
     current_query: string;
 }
 
+/** 'auto' decide por el número de reportes; 'frontend' y 'backend' fuerzan el modo. */
+export type AreaFilterMode = 'auto' | 'frontend' | 'backend';
+
+export type AreaFilterPreferencesType = {
+    mode: AreaFilterMode;
+    /** Reportes a partir de los cuales 'auto' pasa a filtrar en el backend. */
+    threshold: number;
+}
+
+export const AREA_FILTER_STORAGE_KEY = 'Preferencias de filtrado por área';
+
 export type localStorageRegistryType = {
     "Preferencias generales": GeneralPreferencesType;
     "Preferencias de seguridad": SecurityPreferencesType;
     "Almacenamiento de Busqueda": SearchStorageType;
+    [AREA_FILTER_STORAGE_KEY]: AreaFilterPreferencesType;
 };
 
 export type localStorageKeys = keyof localStorageRegistryType;

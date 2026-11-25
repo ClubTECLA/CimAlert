@@ -13,6 +13,9 @@ const arrangementNormalize = {
 
 interface ColSectionProps extends SectionProps {
     arrangementSubsections?: keyof typeof arrangementNormalize;
+    /** Intercepta el cierre/regreso de la cabecera, p. ej. para confirmar cambios sin guardar. */
+    onClose?: () => void;
+    onBack?: () => void;
 }
 
 function propagateDebug(children: ReactNode, debug: boolean) {
@@ -54,6 +57,8 @@ export default function ColSection({
     className,
     footerElement,
     border,
+    onClose,
+    onBack,
 }: ColSectionProps) {
     const brd = border?.length
         ? `${border.map((b) => borders[b]).join(" ")} border-line`
@@ -96,7 +101,7 @@ export default function ColSection({
             )}
         >
             <div className={cn("w-fit flex-1 min-h-0 flex flex-col max-w-full", debug && "border-2 border-green-500")}>
-                <PanelHeader title={title} subtitle={subtitle} actions={headerActions} />
+                <PanelHeader title={title} subtitle={subtitle} actions={headerActions} onClose={onClose} onBack={onBack} />
                 <div
                     className={cn(
                         "max-w-full max-h-full min-h-0 mt-5 flex flex-col overflow-y-auto",

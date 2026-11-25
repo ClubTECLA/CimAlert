@@ -1,0 +1,6 @@
+type: object
+description: Área dibujada en el mapa. El backend devuelve solo lo que cae dentro, usando PostGIS en vez de filtrar en el cliente.
+required: [poligono]
+properties:
+  poligono:
+    $ref: '../../openapi.yaml#/components/schemas/Poligono'

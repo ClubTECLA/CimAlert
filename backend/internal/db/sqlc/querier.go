@@ -96,6 +96,8 @@ type Querier interface {
 	// zoom 10). && sobre geography usa el índice GiST de puntos_origen.geom.
 	ListCeldasCalor(ctx context.Context, arg ListCeldasCalorParams) ([]ListCeldasCalorRow, error)
 	ListCentros(ctx context.Context, incluirInactivos bool) ([]ListCentrosRow, error)
+	// Solo activos, igual que la lista del mapa. Mismas columnas que ListCentros.
+	ListCentrosEnArea(ctx context.Context, poligono string) ([]ListCentrosEnAreaRow, error)
 	// Pestaña Histórico: colonias con más peso en el periodo. Los reportes sin
 	// colonia no entran en esta lista, pero sí en el mapa, las zonas y los totales.
 	ListColoniasHistorico(ctx context.Context, arg ListColoniasHistoricoParams) ([]ListColoniasHistoricoRow, error)
@@ -118,6 +120,10 @@ type Querier interface {
 	ListMultimediaPathsExistentes(ctx context.Context, paths []string) ([]string, error)
 	// Incluye los históricos: es el historial del usuario, no el mapa.
 	ListReportesByUserId(ctx context.Context, arg ListReportesByUserIdParams) ([]ListReportesByUserIdRow, error)
+	// sqlc no conoce PostGIS: el polígono viaja como texto GeoJSON y se convierte en el servidor.
+	// ST_Covers sobre geography aprovecha el índice GiST de puntos_origen.geom.
+	// Mismas columnas que ListReportesResumen para reutilizar el resumen del mapa.
+	ListReportesEnArea(ctx context.Context, poligono string) ([]ListReportesEnAreaRow, error)
 	// sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 	// cast explícito; sin él se generaría como interface{}.
 	// ST_DWithin usa el índice GiST de puntos_origen.geom.

@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime/debug"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/area"
 	"github.com/ClubTECLA/cimalert/backend/internal/centro"
 	"github.com/ClubTECLA/cimalert/backend/internal/comentario"
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
@@ -72,6 +73,7 @@ type Handlers struct {
 	Usuarios    *usuario.Handler
 	Multimedia  *multimedia.Handler
 	Centros     *centro.Handler
+	Areas       *area.Handler
 	Riesgo      *riesgo.Handler
 }
 
@@ -85,6 +87,7 @@ type (
 	usuarios    = usuario.Handler
 	multimedias = multimedia.Handler
 	centros     = centro.Handler
+	areas       = area.Handler
 	riesgos     = riesgo.Handler
 )
 
@@ -98,6 +101,7 @@ type api struct {
 	*usuarios
 	*multimedias
 	*centros
+	*areas
 	*riesgos
 }
 
@@ -122,7 +126,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 
 	// Una sola tabla con las reglas de todos los errores que pueden devolver
 	// los handlers.
-	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP)
+	tabla := httperr.NewTabla(reporte.ReglasHTTP, incidente.ReglasHTTP, comentario.ReglasHTTP, usuario.ReglasHTTP, multimedia.ReglasHTTP, centro.ReglasHTTP, riesgo.ReglasHTTP, area.ReglasHTTP)
 
 	// Registra acciones con el RequestLogger
 	// El logger debe ser lo primero en utilizarse para que se registren los panics con su request_id
@@ -168,7 +172,7 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 	// Los manejadores de error por defecto de oapi-codegen responden {"msg": ...};
 	// se reemplazan para que coincidan con ErrorResponse ({"message": ...}).
 	strict := httpapi.NewStrictHandlerWithOptions(
-		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros, riesgos: h.Riesgo},
+		api{reportes: h.Reportes, incidentes: h.Incidentes, comentarios: h.Comentarios, usuarios: h.Usuarios, multimedias: h.Multimedia, centros: h.Centros, areas: h.Areas, riesgos: h.Riesgo},
 		nil,
 		httpapi.StrictGinServerOptions{
 			RequestErrorHandlerFunc: func(c *gin.Context, err error) {

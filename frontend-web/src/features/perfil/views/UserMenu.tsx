@@ -12,7 +12,7 @@ import UserCard from "@/features/perfil/components/UserCard";
 
 export default function UserMenu() {
     const { user, logout } = useAuth();
-    const { openPanel, closePanel } = useCommonPanel();
+    const { openPanel, closePanel, requestLeave } = useCommonPanel();
     const { closeModal } = useModals();
 
     return (
@@ -38,18 +38,20 @@ export default function UserMenu() {
                 <ListTile
                     tileName="Mi perfil y contraseña"
                     onClick={() => {
-                        openPanel("Mi perfil");
+                        // El menú se cierra antes: si el perfil tiene borrador, openPanel abre la confirmación y
+                        // cerrar el menú después la dejaría invisible.
                         closeModal();
+                        openPanel("Mi perfil");
                     }}
                     icon={<FiUser />}
                 />
                 <ListTile
                     tileName="Cerrar Sesion"
-                    onClick={() => {
+                    onClick={() => requestLeave(() => {
                         logout();
                         closeModal();
                         closePanel();
-                    }}
+                    })}
                     icon={<MdLogout />}
                     color='red'
                 />

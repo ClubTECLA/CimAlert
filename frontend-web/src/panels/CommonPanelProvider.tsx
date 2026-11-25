@@ -1,6 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { validateChildren } from "@/lib/validateChildren";
-import PanelChrome from "./PanelChrome";
 import {
     backPanel as navigateBack,
     closePanel as resetPanel,
@@ -9,22 +8,37 @@ import {
     openPanel as navigateToPanel,
 } from "./panelRouter";
 import { CommonPanelContext } from "./CommonPanelContext.ts";
+import { createLeaveGuardCoordinator, type LeaveGuard } from "./leaveGuard";
 import type { OpenPanel, PanelEntry } from "./panelTypes";
 
 export function CommonPanelProvider({ children }: { children: ReactNode }) {
     validateChildren(children, "CommonPanelProvider");
 
     const [routerState, setRouterState] = useState(createPanelRouterState);
+    // Guard de salida que registra la vista con borrador. Todas las navegaciones pasan por él, vengan de openPanel,
+    // de backView, de closePanel o de una acción como cerrar sesión que envuelva requestLeave.
+    const leaveGuard = useMemo(() => createLeaveGuardCoordinator(), []);
+
+    const registerLeaveGuard = useCallback((guard: LeaveGuard | null) => {
+        leaveGuard.register(guard);
+    }, [leaveGuard]);
+
+    const requestLeave = useCallback((action: () => void) => {
+        leaveGuard.request(action);
+    }, [leaveGuard]);
 
     // El Provider adapta la API pública al router puro; las decisiones de historial viven en panelRouter.
-    const openPanel: OpenPanel = (view, ...args) => {
+    // Identidad estable: AuthPage y otros efectos usan closePanel como dependencia; una identidad nueva en cada render
+    // provoca resuscripciones y, si el efecto cierra el panel, un bucle de actualizaciones. requestLeave también es
+    // estable porque el coordinador se crea una sola vez con useMemo.
+    const openPanel: OpenPanel = useCallback((view, ...args) => {
         const [props, options] = args;
         const entry = { view, props: props ?? {} } as PanelEntry;
-        setRouterState((state) => navigateToPanel(state, entry, options));
-    };
+        requestLeave(() => setRouterState((state) => navigateToPanel(state, entry, options)));
+    }, [requestLeave]);
 
-    const backView = () => setRouterState((state) => navigateBack(state));
-    const closePanel = () => setRouterState((state) => resetPanel(state));
+    const backView = useCallback(() => requestLeave(() => setRouterState((state) => navigateBack(state))), [requestLeave]);
+    const closePanel = useCallback(() => requestLeave(() => setRouterState((state) => resetPanel(state))), [requestLeave]);
 
     return (
         <CommonPanelContext.Provider
@@ -35,10 +49,12 @@ export function CommonPanelProvider({ children }: { children: ReactNode }) {
                 backView,
                 hasPrevView: hasPreviousPanel(routerState),
                 closePanel,
+                registerLeaveGuard,
+                requestLeave,
             }}
         >
+            {/* El chrome se monta en main.tsx (PanelChromeMount), dentro de todos los providers de vistas. */}
             {children}
-            {routerState.current && <PanelChrome entry={routerState.current} />}
         </CommonPanelContext.Provider>
     );
 }

@@ -1,3 +1,5 @@
+import type { Polygon } from "geojson";
+import { pointInPolygon } from "@/lib/geo";
 import type { ApiEstadoReporte, ApiReporteResumen } from "@/types/api-types";
 
 // Un solo filtro de incidentes para el mapa y la lista del panel "Incidentes": lo que muestra la lista es lo que hay
@@ -16,6 +18,8 @@ export interface ReportFilters {
     /** De los estados marcados, solo los avisos oficiales (publicados por autoridades). */
     onlyOfficial: boolean
     period: MapPeriod
+    /** Área dibujada en el mapa; se guarda aquí para que lista, mapa y filtros activos compartan un solo criterio. */
+    polygon?: Polygon | null
 }
 
 export const OPEN_STATUSES: ApiEstadoReporte[] = ["Pendiente", "Probable", "Verificado"];
@@ -61,13 +65,14 @@ function statusLabels(statuses: ApiEstadoReporte[]): string[] {
 }
 
 /** Nombres de lo que difiere de DEFAULT_FILTERS ("Resuelto", "2 categorías ocultas", "Oficiales"); vacío si no hay filtro. */
-export function activeFilterLabels({ hiddenCategories, statuses, onlyOfficial, period }: ReportFilters): string[] {
+export function activeFilterLabels({ hiddenCategories, statuses, onlyOfficial, period, polygon }: ReportFilters): string[] {
     const hidden = hiddenCategories.length;
     return [
         ...statusLabels(statuses),
         ...(hidden ? [`${hidden} ${hidden === 1 ? "categoría oculta" : "categorías ocultas"}`] : []),
         ...(onlyOfficial ? ["Oficiales"] : []),
         ...(period !== "ahora" ? [PERIOD_LABELS[period]] : []),
+        ...(polygon ? ["Área seleccionada"] : []),
     ];
 }
 
@@ -83,11 +88,12 @@ export function toggledStatus({ statuses, onlyOfficial }: ReportFilters, status:
 const PERIOD_MS: Record<Exclude<MapPeriod, "ahora">, number> = { "24h": 86_400_000, "7d": 604_800_000 };
 
 /** Reportes que pasan el filtro. Con un periodo, los que no traen created_at quedan fuera. */
-export function filterReportes(reportes: ApiReporteResumen[], { hiddenCategories, statuses, onlyOfficial, period }: ReportFilters, now = Date.now()) {
+export function filterReportes(reportes: ApiReporteResumen[], { hiddenCategories, statuses, onlyOfficial, period, polygon }: ReportFilters, now = Date.now()) {
     return reportes.filter((reporte) =>
         !hiddenCategories.includes(reporte.incidente_id)
         && statuses.includes(reporte.estado_actual)
         && (!onlyOfficial || reporte.es_oficial)
         && (period === "ahora" || Date.parse(reporte.created_at ?? "") >= now - PERIOD_MS[period])
+        && (!polygon || pointInPolygon([reporte.longitude, reporte.latitude], polygon))
     );
 }
