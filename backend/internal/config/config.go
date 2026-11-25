@@ -258,8 +258,8 @@ func validarRecuperacion(recoverySecret, mailDriver string) error {
 	if len(recoverySecret) < minJWTSecretLen {
 		return fmt.Errorf("RECOVERY_SECRET must be at least %d bytes long, got %d", minJWTSecretLen, len(recoverySecret))
 	}
-	if mailDriver != "" && mailDriver != "log" {
-		return fmt.Errorf("invalid MAIL_DRIVER %q: must be \"log\" or empty", mailDriver)
+	if mailDriver != "" && mailDriver != "log" && mailDriver != "smtp" {
+		return fmt.Errorf("invalid MAIL_DRIVER %q: must be \"log\", \"smtp\" or empty", mailDriver)
 	}
 	return nil
 }

@@ -28,8 +28,9 @@ export function CommonPanelProvider({ children }: { children: ReactNode }) {
     }, [leaveGuard]);
 
     // El Provider adapta la API pública al router puro; las decisiones de historial viven en panelRouter.
-    // Callbacks estables: varios efectos de las vistas los tienen como dependencia y una identidad nueva en cada render
-    // provoca que se vuelvan a suscribir (y, si el efecto cierra el panel, un bucle de actualizaciones).
+    // Identidad estable: AuthPage y otros efectos usan closePanel como dependencia; una identidad nueva en cada render
+    // provoca resuscripciones y, si el efecto cierra el panel, un bucle de actualizaciones. requestLeave también es
+    // estable porque el coordinador se crea una sola vez con useMemo.
     const openPanel: OpenPanel = useCallback((view, ...args) => {
         const [props, options] = args;
         const entry = { view, props: props ?? {} } as PanelEntry;

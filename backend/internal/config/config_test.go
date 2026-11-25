@@ -173,7 +173,7 @@ func TestLoad_RecoverySecretInvalido(t *testing.T) {
 }
 
 func TestLoad_MailDriver(t *testing.T) {
-	for _, driver := range []string{"", "log"} {
+	for _, driver := range []string{"", "log", "smtp"} {
 		entornoMinimo(t)
 		t.Setenv("MAIL_DRIVER", driver)
 
@@ -187,7 +187,7 @@ func TestLoad_MailDriver(t *testing.T) {
 	}
 
 	entornoMinimo(t)
-	t.Setenv("MAIL_DRIVER", "smtp")
+	t.Setenv("MAIL_DRIVER", "desconocido")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() con MAIL_DRIVER desconocido: error = nil, se esperaba error")
 	}
