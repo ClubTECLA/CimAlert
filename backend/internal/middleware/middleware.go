@@ -270,7 +270,14 @@ func tokenAnteriorAlCambio(pwdAt string, changedAt *time.Time) bool {
 // peticiones y después una cada 6 segundos (10 por minuto sostenido).
 const (
 	RateLimitRafaga    = 3
-	rateLimitIntervalo = 6 * time.Second
+	RateLimitIntervalo = 6 * time.Second
+)
+
+// Límite por IP de inicio de sesión, para /v1/auth/login y /v1/auth/google:
+// ráfaga de 10 peticiones y después una por segundo.
+const (
+	RateLimitSesionRafaga    = 10
+	RateLimitSesionIntervalo = time.Second
 )
 
 // claveRateLimit agrupa las IPv6 por su /64, porque una sola conexión suele
@@ -285,12 +292,13 @@ func claveRateLimit(ip string) string {
 }
 
 // RateLimitPorIP limita las peticiones por IP del cliente con un token bucket
-// en memoria (golang.org/x/time/rate) con una ráfaga de rafaga peticiones, solo en las rutas dadas (con el /v1, tal
-// como las da c.FullPath()). Responde 429. Cada llamada crea su propio estado,
+// en memoria (golang.org/x/time/rate): una ráfaga de rafaga peticiones y
+// después una cada intervalo, solo en las rutas dadas (con el /v1, tal como
+// las da c.FullPath()). Responde 429. Cada llamada crea su propio estado,
 // así que cada router (y cada cliente de test) tiene el suyo.
 // shortcut: en memoria, solo sirve con una instancia de la API; mover a Redis o Postgres al escalar.
 // shortcut: el mapa no se limpia y crece con cada IP distinta; agregar expiración si el tráfico lo pide.
-func RateLimitPorIP(rafaga int, rutas ...string) func(c *gin.Context) {
+func RateLimitPorIP(rafaga int, intervalo time.Duration, rutas ...string) func(c *gin.Context) {
 	var (
 		mu    sync.Mutex
 		porIP = map[string]*rate.Limiter{}
@@ -304,7 +312,7 @@ func RateLimitPorIP(rafaga int, rutas ...string) func(c *gin.Context) {
 		mu.Lock()
 		lim, ok := porIP[clave]
 		if !ok {
-			lim = rate.NewLimiter(rate.Every(rateLimitIntervalo), rafaga)
+			lim = rate.NewLimiter(rate.Every(intervalo), rafaga)
 			porIP[clave] = lim
 		}
 		mu.Unlock()
