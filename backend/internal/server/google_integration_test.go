@@ -441,16 +441,24 @@ func TestGoogle_LimitePorIP(t *testing.T) {
 		c := newTestClient(t, limiteSesionReal())
 
 		// Un body inválido: el límite corre antes que el validador, así que
-		// gasta un token sin llegar a bcrypt, que tardaría más que el intervalo.
-		for i := 1; i <= 11; i++ {
+		// gasta un token sin llegar a bcrypt.
+		const rafaga, intervalo = 10, time.Second
+		inicio := time.Now()
+		pasaron := 0 // peticiones antes del primer 429
+		for ; pasaron <= 2*rafaga; pasaron++ {
 			rec := c.do(http.MethodPost, "/v1/auth/login", map[string]any{})
-			want := http.StatusBadRequest
-			if i == 11 {
-				want = http.StatusTooManyRequests
+			if rec.Code == http.StatusTooManyRequests {
+				break
 			}
-			if rec.Code != want {
-				t.Fatalf("login %d: status = %d, quería %d; body: %s", i, rec.Code, want, rec.Body)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("login %d: status = %d, quería 400 o 429; body: %s", pasaron+1, rec.Code, rec.Body)
 			}
+		}
+		// El reloj del límite no se puede fijar desde aquí: cada intervalo que
+		// tarde el test rellena un token más, así que se toleran esos.
+		extra := int(time.Since(inicio) / intervalo)
+		if pasaron < rafaga || pasaron > rafaga+extra {
+			t.Errorf("pasaron %d peticiones antes del 429, quería %d (+%d por el tiempo transcurrido)", pasaron, rafaga, extra)
 		}
 	})
 }

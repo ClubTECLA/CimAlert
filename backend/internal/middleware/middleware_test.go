@@ -196,6 +196,12 @@ func TestRateLimitPorIP_LimitaSoloLasRutasDadasPorIP(t *testing.T) {
 func TestRateLimitPorIP_ElIntervaloRellena(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	// Reloj fijo: solo avanza cuando el test quiere que se rellene la ráfaga.
+	reloj := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	anterior := ahora
+	ahora = func() time.Time { return reloj }
+	t.Cleanup(func() { ahora = anterior })
+
 	r := gin.New()
 	r.POST("/limitada", RateLimitPorIP(1, 50*time.Millisecond, "/limitada"), func(c *gin.Context) { c.Status(http.StatusOK) })
 
@@ -213,7 +219,11 @@ func TestRateLimitPorIP_ElIntervaloRellena(t *testing.T) {
 	if got := post(); got != http.StatusTooManyRequests {
 		t.Fatalf("segunda petición sin esperar: status = %d, want 429", got)
 	}
-	time.Sleep(100 * time.Millisecond)
+	reloj = reloj.Add(49 * time.Millisecond)
+	if got := post(); got != http.StatusTooManyRequests {
+		t.Fatalf("petición antes de cumplirse el intervalo: status = %d, want 429", got)
+	}
+	reloj = reloj.Add(time.Millisecond)
 	if got := post(); got != http.StatusOK {
 		t.Errorf("petición después de esperar el intervalo: status = %d, want 200", got)
 	}

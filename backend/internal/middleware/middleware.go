@@ -280,6 +280,10 @@ const (
 	RateLimitSesionIntervalo = time.Second
 )
 
+// ahora es el reloj de RateLimitPorIP; los tests lo reemplazan para no
+// depender de cuánto tardan las peticiones.
+var ahora = time.Now
+
 // claveRateLimit agrupa las IPv6 por su /64, porque una sola conexión suele
 // controlar el bloque entero y podría cambiar de dirección en cada petición.
 // Las IPv4 (y las IPv4 mapeadas en IPv6) quedan tal cual.
@@ -317,7 +321,7 @@ func RateLimitPorIP(rafaga int, intervalo time.Duration, rutas ...string) func(c
 		}
 		mu.Unlock()
 
-		if !lim.Allow() {
+		if !lim.AllowN(ahora(), 1) {
 			httperr.ResponderConStatus(c, http.StatusTooManyRequests, "demasiadas solicitudes")
 		}
 	}
