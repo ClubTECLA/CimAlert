@@ -133,7 +133,7 @@ func (s *Auth) Login(ctx context.Context, email, password string) (sqlc.User, st
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
 		return sqlc.User{}, "", 0, ErrInvalidCredentials
 	}
-	if notFound {
+	if notFound || user.PasswordHash == nil {
 		return sqlc.User{}, "", 0, ErrInvalidCredentials
 	}
 	// Después de bcrypt: solo quien sabe el password se entera de la suspensión.
