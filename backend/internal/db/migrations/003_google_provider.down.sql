@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS public.auth_providers_provider_provider_id_key;

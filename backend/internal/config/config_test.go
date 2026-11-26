@@ -18,6 +18,7 @@ func entornoMinimo(t *testing.T) {
 	t.Setenv("MAX_MULTIMEDIA_BYTES", "")
 	t.Setenv("REPORTE_POLIGONO", "")
 	t.Setenv("DOCS_ENABLED", "")
+	t.Setenv("GOOGLE_CLIENT_IDS", "")
 	for _, v := range variablesFoto {
 		t.Setenv(v, "")
 	}
@@ -29,6 +30,40 @@ func entornoMinimo(t *testing.T) {
 var variablesMantenimiento = []string{"MANTENIMIENTO_HORA", "MANTENIMIENTO_MAX_ACCIONES", "CUARENTENA_DIAS"}
 
 var variablesFoto = []string{"MAX_FOTO_BYTES", "MAX_FOTO_PIXELES", "MAX_VIDEO_BYTES", "MAX_VIDEO_SEGUNDOS"}
+
+func TestLoad_GoogleClientIDs(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want []string
+	}{
+		{name: "sin definir", raw: "", want: nil},
+		{name: "uno", raw: "a", want: []string{"a"}},
+		{name: "con espacios y vacíos", raw: " a ; b ;; ", want: []string{"a", "b"}},
+		// Las comas no separan: son parte del valor.
+		{name: "con comas", raw: "a,b", want: []string{"a,b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entornoMinimo(t)
+			t.Setenv("GOOGLE_CLIENT_IDS", tt.raw)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() error = %v, want nil", err)
+			}
+			if tt.want == nil {
+				if len(cfg.GoogleClientIDs) != 0 {
+					t.Errorf("GoogleClientIDs = %q, want vacío", cfg.GoogleClientIDs)
+				}
+				return
+			}
+			if !slices.Equal(cfg.GoogleClientIDs, tt.want) {
+				t.Errorf("GoogleClientIDs = %q, want %q", cfg.GoogleClientIDs, tt.want)
+			}
+		})
+	}
+}
 
 func TestLoad_MultimediaPorDefecto(t *testing.T) {
 	entornoMinimo(t)
@@ -138,7 +173,7 @@ func TestLoad_RecoverySecretInvalido(t *testing.T) {
 }
 
 func TestLoad_MailDriver(t *testing.T) {
-	for _, driver := range []string{"", "log"} {
+	for _, driver := range []string{"", "log", "smtp"} {
 		entornoMinimo(t)
 		t.Setenv("MAIL_DRIVER", driver)
 
@@ -152,7 +187,7 @@ func TestLoad_MailDriver(t *testing.T) {
 	}
 
 	entornoMinimo(t)
-	t.Setenv("MAIL_DRIVER", "smtp")
+	t.Setenv("MAIL_DRIVER", "desconocido")
 	if _, err := Load(); err == nil {
 		t.Fatal("Load() con MAIL_DRIVER desconocido: error = nil, se esperaba error")
 	}

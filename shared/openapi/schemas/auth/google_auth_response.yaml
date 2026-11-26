@@ -1,0 +1,8 @@
+allOf:
+  - $ref: './auth_response.yaml'
+  - type: object
+    required: [created]
+    properties:
+      created:
+        type: boolean
+        description: true si esta petición creó la cuenta.

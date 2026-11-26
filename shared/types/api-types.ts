@@ -211,6 +211,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Inicia sesión con un ID token de Google. Si no existe una cuenta para esa identidad de Google, la vincula con la cuenta del mismo email (si Google es la autoridad del email) o crea una cuenta nueva. Responde 200 también cuando crea la cuenta; `created` distingue los dos casos. */
+        post: operations["loginGoogle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -592,6 +609,8 @@ export interface components {
         RegisterRequest: components["schemas"]["register_request"];
         LoginRequest: components["schemas"]["login_request"];
         AuthResponse: components["schemas"]["auth_response"];
+        GoogleLoginRequest: components["schemas"]["google_login_request"];
+        GoogleAuthResponse: components["schemas"]["google_auth_response"];
         Usuario: components["schemas"]["usuario"];
         UsuarioMeResponse: components["schemas"]["usuario_me_response"];
         RecoveryRequest: components["schemas"]["recovery_request"];
@@ -782,6 +801,14 @@ export interface components {
             /** Format: email */
             email: string;
             password: string;
+        };
+        google_login_request: {
+            /** @description ID token de Google obtenido con el SDK de inicio de sesión del cliente. */
+            id_token: string;
+        };
+        google_auth_response: components["schemas"]["auth_response"] & {
+            /** @description true si esta petición creó la cuenta. */
+            created: boolean;
         };
         usuario_me_response: {
             /** Format: uuid */
@@ -1978,8 +2005,122 @@ export interface operations {
                     "application/json": components["schemas"]["error_response"];
                 };
             };
+            /** @description `usuario suspendido` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `demasiadas solicitudes` (límite por IP) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
             /** @description Error interno del servidor */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    loginGoogle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["google_login_request"];
+            };
+        };
+        responses: {
+            /** @description Sesión iniciada (o cuenta creada, si `created` es true) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["google_auth_response"];
+                };
+            };
+            /** @description Datos inválidos (falta `id_token` o está vacío) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `token de Google inválido` o `email de Google no verificado` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `este email de Google no se puede usar aquí; regístrate o inicia sesión con email y contraseña` o `usuario suspendido` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `la cuenta ya está vinculada a otra cuenta de Google` o `esta cuenta no puede vincularse con Google; inicia sesión con tu contraseña` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El body es demasiado grande */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `demasiadas solicitudes` (límite por IP) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `login con Google no configurado` o `login con Google no disponible` */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

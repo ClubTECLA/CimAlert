@@ -26,6 +26,7 @@ type Querier interface {
 	CreateCentro(ctx context.Context, arg CreateCentroParams) (CreateCentroRow, error)
 	CreateComentario(ctx context.Context, arg CreateComentarioParams) (CreateComentarioRow, error)
 	CreateDatasetHistorico(ctx context.Context, arg CreateDatasetHistoricoParams) (DatasetHistorico, error)
+	CreateGoogleAuthProvider(ctx context.Context, arg CreateGoogleAuthProviderParams) error
 	CreateHistorialEvento(ctx context.Context, arg CreateHistorialEventoParams) error
 	CreateIncidente(ctx context.Context, arg CreateIncidenteParams) (Incidente, error)
 	CreateIncidentesHistoricos(ctx context.Context, arg []CreateIncidentesHistoricosParams) (int64, error)
@@ -47,6 +48,7 @@ type Querier interface {
 	CreateUserReporte(ctx context.Context, arg CreateUserReporteParams) (UsersReport, error)
 	// Sus filas se borran con él (ON DELETE CASCADE).
 	DeleteDatasetHistorico(ctx context.Context, id uuid.UUID) (DatasetHistorico, error)
+	DeleteLocalAuthProviderByUserID(ctx context.Context, userID uuid.UUID) error
 	DeleteMultimediaPorPaths(ctx context.Context, paths []string) (int64, error)
 	// Elimina el reporte; ON DELETE CASCADE borra comentarios, multimedia, tags,
 	// ubicaciones, puntos_origen, conteos, score y users_reports. Los archivos
@@ -64,6 +66,8 @@ type Querier interface {
 	GetCorteMantenimiento(ctx context.Context, nombre string) (time.Time, error)
 	GetDefaultRole(ctx context.Context) (Role, error)
 	GetEstadoReporteForUpdate(ctx context.Context, id uuid.UUID) (Estado, error)
+	// Sin filas: el usuario no está vinculado con Google.
+	GetGoogleProviderIDByUserID(ctx context.Context, userID uuid.UUID) (*string, error)
 	GetHistoricoReporteForUpdate(ctx context.Context, id uuid.UUID) (bool, error)
 	GetIncidenteById(ctx context.Context, id int) (Incidente, error)
 	GetIncidenteByIdForUpdate(ctx context.Context, id int) (Incidente, error)
@@ -76,11 +80,14 @@ type Querier interface {
 	GetTipoCentroById(ctx context.Context, id int) (TiposCentro, error)
 	GetUserByEmail(ctx context.Context, email *string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// El bloqueo serializa los intentos concurrentes de vincular la misma cuenta.
+	GetUserWithRolByEmailForUpdate(ctx context.Context, email *string) (GetUserWithRolByEmailForUpdateRow, error)
+	GetUserWithRolByGoogleSub(ctx context.Context, providerID *string) (GetUserWithRolByGoogleSubRow, error)
 	GetUserWithRolByID(ctx context.Context, id uuid.UUID) (GetUserWithRolByIDRow, error)
 	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
 	// Catálogo para reconocer la categoría de cada fila al importar un dataset.
 	ListCategoriasCatalogo(ctx context.Context) ([]ListCategoriasCatalogoRow, error)
-	// Las consultas del riesgo leen la vista riesgo_historico (migración 003): los
+	// Las consultas del riesgo leen la vista riesgo_historico (migración 004): los
 	// reportes históricos válidos y las filas de los datasets importados, con su
 	// peso. Ver backend/GUIA_RIESGO.md.
 	//
@@ -151,7 +158,15 @@ type Querier interface {
 	LockTagsUsuario(ctx context.Context, arg LockTagsUsuarioParams) error
 	// Serializa por cuenta la emisión de PIN: la segunda petición espera aquí hasta que la primera termine.
 	LockUserByID(ctx context.Context, id uuid.UUID) error
+	// password_changed_at solo se escribe en dos lugares: un flujo que probó el
+	// control del buzón (recuperación) y este vínculo con Google. Como en
+	// SetNewPasswordByUserID, $2 viene del reloj de la API.
+	RemovePasswordByUserID(ctx context.Context, arg RemovePasswordByUserIDParams) (User, error)
 	SetCorteMantenimiento(ctx context.Context, arg SetCorteMantenimientoParams) error
+	// password_changed_at solo se escribe en dos lugares: un flujo que probó el
+	// control del buzón (recuperación) y el vínculo con Google que quita el
+	// password (RemovePasswordByUserID). El vínculo con Google cuenta con que NULL
+	// signifique "nunca probado".
 	SetNewPasswordByUserID(ctx context.Context, arg SetNewPasswordByUserIDParams) error
 	// Condicional para que de dos verificaciones concurrentes del mismo PIN solo
 	// una emita token.

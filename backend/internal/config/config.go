@@ -80,6 +80,10 @@ type Config struct {
 	RecoverySecret string
 	MailDriver     string
 
+	// GoogleClientIDs son los OAuth client IDs (web, Android, iOS) aceptados
+	// como aud del ID token de Google. Vacío apaga el inicio de sesión con Google.
+	GoogleClientIDs []string
+
 	// ReportePoligono es la zona donde se permite crear reportes.
 	ReportePoligono geo.Poligono
 }
@@ -102,6 +106,8 @@ func Load() (Config, error) {
 		LogFormat:      getEnvOrDefault("LOG_FORMAT", "json"),
 		RecoverySecret: os.Getenv("RECOVERY_SECRET"),
 		MailDriver:     os.Getenv("MAIL_DRIVER"),
+		// Opcional: sin client IDs el endpoint de Google responde 503.
+		GoogleClientIDs: separarLista(os.Getenv("GOOGLE_CLIENT_IDS")),
 	}
 	var missing []string
 	if cfg.DatabaseURL == "" {
@@ -223,6 +229,18 @@ func enteroPositivo(nombre string, def int64) (int64, error) {
 	return n, nil
 }
 
+// separarLista parte raw en punto y comas, recorta los espacios de cada valor y
+// descarta los vacíos. "" da una lista vacía.
+func separarLista(raw string) []string {
+	var valores []string
+	for v := range strings.SplitSeq(raw, ";") {
+		if v = strings.TrimSpace(v); v != "" {
+			valores = append(valores, v)
+		}
+	}
+	return valores
+}
+
 func getEnvOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
@@ -240,8 +258,8 @@ func validarRecuperacion(recoverySecret, mailDriver string) error {
 	if len(recoverySecret) < minJWTSecretLen {
 		return fmt.Errorf("RECOVERY_SECRET must be at least %d bytes long, got %d", minJWTSecretLen, len(recoverySecret))
 	}
-	if mailDriver != "" && mailDriver != "log" {
-		return fmt.Errorf("invalid MAIL_DRIVER %q: must be \"log\" or empty", mailDriver)
+	if mailDriver != "" && mailDriver != "log" && mailDriver != "smtp" {
+		return fmt.Errorf("invalid MAIL_DRIVER %q: must be \"log\", \"smtp\" or empty", mailDriver)
 	}
 	return nil
 }

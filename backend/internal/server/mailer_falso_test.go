@@ -17,6 +17,23 @@ type mailerFalso struct {
 	mu     sync.Mutex
 	pines  map[string][]string // email -> PINs enviados, en orden
 	avisos []string            // emails a los que se avisó del cambio
+	// avisosGoogle va aparte de avisos: si no, el aviso de cambio de
+	// contraseña de la recuperación contaría como aviso de vínculo.
+	avisosGoogle []string
+}
+
+func (m *mailerFalso) EnviarAvisoCuentaVinculadaGoogle(_ context.Context, _ uuid.UUID, email string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.avisosGoogle = append(m.avisosGoogle, email)
+	return nil
+}
+
+// avisadoGoogle dice si se mandó el aviso de vínculo con Google a email.
+func (m *mailerFalso) avisadoGoogle(email string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Contains(m.avisosGoogle, email)
 }
 
 func (m *mailerFalso) EnviarPinRecuperacion(_ context.Context, _ uuid.UUID, email, pin string) error {

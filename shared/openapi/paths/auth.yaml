@@ -67,8 +67,92 @@ login:
           application/json:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: '`usuario suspendido`'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '429':
+        description: '`demasiadas solicitudes` (límite por IP)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
       '500':
         description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+google:
+  post:
+    operationId: loginGoogle
+    description: >-
+      Inicia sesión con un ID token de Google. Si no existe una cuenta para esa
+      identidad de Google, la vincula con la cuenta del mismo email (si Google es
+      la autoridad del email) o crea una cuenta nueva. Responde 200 también cuando
+      crea la cuenta; `created` distingue los dos casos.
+    tags: [Autenticación]
+    security: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GoogleLoginRequest'
+    responses:
+      '200':
+        description: Sesión iniciada (o cuenta creada, si `created` es true)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleAuthResponse'
+      '400':
+        description: Datos inválidos (falta `id_token` o está vacío)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: '`token de Google inválido` o `email de Google no verificado`'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: '`este email de Google no se puede usar aquí; regístrate o inicia sesión con email y contraseña` o `usuario suspendido`'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: '`la cuenta ya está vinculada a otra cuenta de Google` o `esta cuenta no puede vincularse con Google; inicia sesión con tu contraseña`'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '413':
+        description: El body es demasiado grande
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '429':
+        description: '`demasiadas solicitudes` (límite por IP)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '503':
+        description: '`login con Google no configurado` o `login con Google no disponible`'
         content:
           application/json:
             schema:
@@ -223,6 +307,10 @@ components:
       $ref: '../schemas/auth/login_request.yaml'
     AuthResponse:
       $ref: '../schemas/auth/auth_response.yaml'
+    GoogleLoginRequest:
+      $ref: '../schemas/auth/google_login_request.yaml'
+    GoogleAuthResponse:
+      $ref: '../schemas/auth/google_auth_response.yaml'
     Usuario:
       $ref: '../schemas/auth/usuario.yaml'
     UsuarioMeResponse:

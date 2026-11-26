@@ -12,7 +12,7 @@ import (
 // reporte_historico_peso, es una versión nueva del modelo: subir
 // VersionModelo.
 const (
-	// 2: entran los datasets importados (migración 003).
+	// 2: entran los datasets importados (migración 004).
 	VersionModelo = 2
 
 	// Zonas (DBSCAN): un reporte forma zona si tiene al menos MinPuntos

@@ -3,7 +3,7 @@
 Esta guía explica de dónde salen los datos de la funcionalidad de riesgo (pantalla
 "Riesgo e histórico" del panel web), cómo se calcula el peso de cada reporte y qué
 falta definir. El código vive en `internal/riesgo/`; los datos, en la vista
-`riesgo_historico` (migración `003_riesgo_datasets`, que reemplaza a la vista
+`riesgo_historico` (migración `004_riesgo_datasets`, que reemplaza a la vista
 `reporte_historico_peso` de la `002_riesgo`).
 
 **Versión del modelo:** 2 (la 1 solo leía reportes; la 2 agrega los datasets importados).
@@ -225,7 +225,7 @@ cualquier filtro; la contra es que siempre habrá algo en Alto aunque haya pocos
 ## Datasets históricos
 
 Un dataset es un archivo `.xlsx` o `.csv` de incidentes históricos (por ejemplo, la
-hoja "Formato para importación"). Tablas (migración `003`):
+hoja "Formato para importación"). Tablas (migración `004`):
 
 - `dataset_historico`: nombre, archivo original, SHA-256 del contenido (`UNIQUE`: el
   mismo archivo no se importa dos veces), filas, quién lo cargó y cuándo.
@@ -343,7 +343,7 @@ rescatista. Importar y borrar datasets también.
 ## Cómo cambiar el modelo
 
 - **La fórmula del peso** está en la vista: se cambia con una migración nueva
-  (`CREATE OR REPLACE VIEW riesgo_historico ...`), nunca editando la `002` ni la `003`.
+  (`CREATE OR REPLACE VIEW riesgo_historico ...`), nunca editando la `002` ni la `004`.
 - **Cualquier cambio** en pesos, umbrales o parámetros sube la versión del modelo
   (`version_modelo` en la respuesta) y se anota en esta guía.
 

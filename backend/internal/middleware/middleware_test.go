@@ -164,7 +164,7 @@ func TestRateLimitPorIP_LimitaSoloLasRutasDadasPorIP(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	r := gin.New()
-	limite := RateLimitPorIP(RateLimitRafaga, "/limitada")
+	limite := RateLimitPorIP(RateLimitRafaga, RateLimitIntervalo, "/limitada")
 	manejador := func(c *gin.Context) { c.Status(http.StatusOK) }
 	r.POST("/limitada", limite, manejador)
 	r.POST("/libre", limite, manejador)
@@ -190,6 +190,42 @@ func TestRateLimitPorIP_LimitaSoloLasRutasDadasPorIP(t *testing.T) {
 	}
 	if got := post("/libre", "10.0.0.1"); got != http.StatusOK {
 		t.Errorf("ruta sin límite: status = %d, want 200", got)
+	}
+}
+
+func TestRateLimitPorIP_ElIntervaloRellena(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	// Reloj fijo: solo avanza cuando el test quiere que se rellene la ráfaga.
+	reloj := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	anterior := ahora
+	ahora = func() time.Time { return reloj }
+	t.Cleanup(func() { ahora = anterior })
+
+	r := gin.New()
+	r.POST("/limitada", RateLimitPorIP(1, 50*time.Millisecond, "/limitada"), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	post := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/limitada", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if got := post(); got != http.StatusOK {
+		t.Fatalf("primera petición: status = %d, want 200", got)
+	}
+	if got := post(); got != http.StatusTooManyRequests {
+		t.Fatalf("segunda petición sin esperar: status = %d, want 429", got)
+	}
+	reloj = reloj.Add(49 * time.Millisecond)
+	if got := post(); got != http.StatusTooManyRequests {
+		t.Fatalf("petición antes de cumplirse el intervalo: status = %d, want 429", got)
+	}
+	reloj = reloj.Add(time.Millisecond)
+	if got := post(); got != http.StatusOK {
+		t.Errorf("petición después de esperar el intervalo: status = %d, want 200", got)
 	}
 }
 

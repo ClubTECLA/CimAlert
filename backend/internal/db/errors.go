@@ -22,6 +22,13 @@ func IsUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation
 }
 
+// IsUniqueViolationOn reporta si err viene de romper el UNIQUE (o el índice
+// único) con el nombre dado.
+func IsUniqueViolationOn(err error, constraint string) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolation && pgErr.ConstraintName == constraint
+}
+
 // IsForeignKeyViolation reporta si err viene de romper el FOREIGN KEY con el
 // nombre dado.
 func IsForeignKeyViolation(err error, constraint string) bool {

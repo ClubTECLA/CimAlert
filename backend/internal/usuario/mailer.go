@@ -15,9 +15,18 @@ type Mailer interface {
 	EnviarPinRecuperacion(ctx context.Context, userID uuid.UUID, email, pin string) error
 	// EnviarAvisoPasswordCambiado avisa a email que su contraseña cambió.
 	EnviarAvisoPasswordCambiado(ctx context.Context, userID uuid.UUID, email string) error
+	// EnviarAvisoCuentaVinculadaGoogle avisa a email que su cuenta quedó
+	// vinculada con Google y que se quitó su contraseña.
+	EnviarAvisoCuentaVinculadaGoogle(ctx context.Context, userID uuid.UUID, email string) error
 }
 
-// NewMailer construye el Mailer según MAIL_DRIVER: "log" -> LogMailer,
+// avisoVinculoGoogle es el texto del aviso de vínculo con Google. No menciona
+// soporte porque el proyecto no tiene un proceso de soporte.
+const avisoVinculoGoogle = "Tu cuenta ahora está vinculada con tu cuenta de Google. " +
+	"Desactivamos el inicio de sesión con contraseña. " +
+	"De ahora en adelante, inicia sesión con Google."
+
+// NewMailer construye el Mailer según MAIL_DRIVER: "log" -> LogMailer, "smtp" -> NewSMTPMailer
 // "" -> NoopMailer; cualquier otro valor es error.
 func NewMailer(driver string) (Mailer, error) {
 	switch driver {
@@ -25,6 +34,12 @@ func NewMailer(driver string) (Mailer, error) {
 		return NoopMailer{}, nil
 	case "log":
 		return LogMailer{}, nil
+	case "smtp":
+		cfg, err := SMTPConfigFromEnv()
+		if err != nil {
+			return nil, err
+		}
+		return NewSMTPMailer(cfg), nil
 	default:
 		return nil, fmt.Errorf("MAIL_DRIVER desconocido: %q", driver)
 	}
@@ -45,6 +60,12 @@ func (LogMailer) EnviarAvisoPasswordCambiado(ctx context.Context, userID uuid.UU
 	return nil
 }
 
+func (LogMailer) EnviarAvisoCuentaVinculadaGoogle(ctx context.Context, userID uuid.UUID, email string) error {
+	slog.InfoContext(ctx, "aviso de vínculo con Google (MAIL_DRIVER=log, solo desarrollo)",
+		"user_id", userID, "email", email, "texto", avisoVinculoGoogle)
+	return nil
+}
+
 // NoopMailer es el default: solo loguea el user id. Nunca el PIN ni el email.
 // shortcut: nadie recibe el PIN en producción; reemplazar por un proveedor real.
 type NoopMailer struct{}
@@ -56,5 +77,10 @@ func (NoopMailer) EnviarPinRecuperacion(ctx context.Context, userID uuid.UUID, _
 
 func (NoopMailer) EnviarAvisoPasswordCambiado(ctx context.Context, userID uuid.UUID, _ string) error {
 	slog.InfoContext(ctx, "password cambiado; sin MAIL_DRIVER, no se envió aviso", "user_id", userID)
+	return nil
+}
+
+func (NoopMailer) EnviarAvisoCuentaVinculadaGoogle(ctx context.Context, userID uuid.UUID, _ string) error {
+	slog.InfoContext(ctx, "cuenta vinculada con Google; sin MAIL_DRIVER, no se envió aviso", "user_id", userID)
 	return nil
 }

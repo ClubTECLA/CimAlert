@@ -65,6 +65,16 @@ Content-Type: application/json
     "password": "incorrecta123"
 }
 
+### Login con Google (200, o 401 con este token de ejemplo)
+# El id_token real lo da el SDK de Google en el cliente (web, Android o iOS);
+# su aud debe estar en GOOGLE_CLIENT_IDS. Sin GOOGLE_CLIENT_IDS responde 503.
+POST {{baseUrl}}/v1/auth/google
+Content-Type: application/json
+
+{
+    "id_token": "pega-aqui-un-id-token-de-google"
+}
+
 ### Usuario actual (200)
 GET {{baseUrl}}/v1/auth/me
 Authorization: Bearer {{token}}

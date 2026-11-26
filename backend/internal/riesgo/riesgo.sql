@@ -1,4 +1,4 @@
--- Las consultas del riesgo leen la vista riesgo_historico (migración 003): los
+-- Las consultas del riesgo leen la vista riesgo_historico (migración 004): los
 -- reportes históricos válidos y las filas de los datasets importados, con su
 -- peso. Ver backend/GUIA_RIESGO.md.
 --
