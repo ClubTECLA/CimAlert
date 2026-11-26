@@ -275,6 +275,43 @@ func TestLeerDataset_XLSXDemasiadasFilas(t *testing.T) {
 	}
 }
 
+// Un renglón que solo tiene algo en una columna de más (unas notas entre las
+// del formato) no cuenta para el límite, igual que en LeerDataset: 50,000
+// incidentes y una nota suelta se importan.
+func TestLeerDataset_XLSXNotaNoCuentaComoFila(t *testing.T) {
+	f := excelize.NewFile()
+	defer f.Close()
+	sw, err := f.NewStreamWriter("Sheet1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.SetRow("A1", []any{"Latitud", "Notas", "Longitud", "Fecha", "Categoria"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 2; i <= MaxFilasDataset+1; i++ {
+		celda, _ := excelize.CoordinatesToCellName(1, i)
+		if err := sw.SetRow(celda, []any{32.5, nil, -117.05, "2024-01", "Socavón"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	celda, _ := excelize.CoordinatesToCellName(1, MaxFilasDataset+2)
+	if err := sw.SetRow(celda, []any{nil, "revisar con protección civil"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filas, err := LeerDataset(buf.Bytes(), catalogoPrueba, zonaPrueba, ahoraPrueba)
+	if err != nil || len(filas) != MaxFilasDataset {
+		t.Fatalf("filas = %d, err = %v", len(filas), err)
+	}
+}
+
 func TestLeerDataset_DevuelveSoloLosPrimerosErrores(t *testing.T) {
 	var b bytes.Buffer
 	b.WriteString("Latitud,Longitud,Fecha,Categoria\n")

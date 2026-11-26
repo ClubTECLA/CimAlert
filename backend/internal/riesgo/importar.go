@@ -471,9 +471,12 @@ func leerHoja(f *excelize.File, hoja string) ([][]string, error) {
 	}
 	defer rows.Close()
 
-	var renglones [][]string
-	hasta := -1 // columnas que se guardan de cada renglón; -1 = aún sin encabezado
-	datos := 0
+	var (
+		renglones  [][]string
+		encabezado tabla // solo sus columnas, para filaVacia
+		hasta      = -1  // columnas que se guardan de cada renglón; -1 = aún sin encabezado
+		datos      int
+	)
 	for rows.Next() {
 		// RawCellValue: los números sin el formato de la celda (las fechas como
 		// número de serie y las coordenadas con todos sus decimales).
@@ -484,25 +487,26 @@ func leerHoja(f *excelize.File, hoja string) ([][]string, error) {
 		if len(r) > xlsxMaxColumnas {
 			return nil, formatoInvalido("la hoja %q tiene un renglón con más de %d columnas", hoja, xlsxMaxColumnas)
 		}
-		vacio := strings.TrimSpace(strings.Join(r, "")) == ""
 		if hasta < 0 {
 			renglones = append(renglones, r)
-			if vacio {
+			if strings.TrimSpace(strings.Join(r, "")) == "" {
 				continue
 			}
 			columnas, faltan := columnasDelEncabezado(r)
 			if faltan != nil {
 				break
 			}
+			encabezado.columnas = columnas
 			for _, i := range columnas {
 				hasta = max(hasta, i+1)
 			}
 			continue
 		}
 		r = slices.Clone(r[:min(len(r), hasta)])
-		if !vacio && strings.TrimSpace(strings.Join(r, "")) != "" {
-			// Mismo límite que LeerDataset, que solo cuenta los renglones con
-			// algo en las columnas del formato; aquí se corta antes de guardarlos.
+		// Mismo límite y misma regla que LeerDataset: solo cuenta un renglón
+		// con algo en las columnas del formato (no en una columna de más, como
+		// unas notas entre ellas). Aquí se corta antes de guardarlos.
+		if !filaVacia(encabezado, filaCruda{celdas: r}) {
 			if datos++; datos > MaxFilasDataset {
 				return nil, formatoInvalido("el archivo tiene más de %d filas", MaxFilasDataset)
 			}
