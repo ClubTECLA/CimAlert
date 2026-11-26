@@ -3,9 +3,10 @@
 Esta guía explica de dónde salen los datos de la funcionalidad de riesgo (pantalla
 "Riesgo e histórico" del panel web), cómo se calcula el peso de cada reporte y qué
 falta definir. El código vive en `internal/riesgo/`; los datos, en la vista
-`reporte_historico_peso` (migración `002_riesgo`).
+`riesgo_historico` (migración `004_riesgo_datasets`, que reemplaza a la vista
+`reporte_historico_peso` de la `002_riesgo`).
 
-**Versión del modelo:** 1.
+**Versión del modelo:** 2 (la 1 solo leía reportes; la 2 agrega los datasets importados).
 
 ---
 
@@ -18,31 +19,43 @@ F-4 (zonas más propensas a tener incidentes, basadas en la información histór
 
 | | Incidentes | Riesgo |
 |---|---|---|
-| Datos | Reportes activos (`NOT es_historico`) | Reportes históricos (`es_historico`) |
+| Datos | Reportes activos (`NOT es_historico`) | Reportes históricos (`es_historico`) y datasets importados |
 | Pregunta | ¿Qué está pasando ahora? | ¿Dónde y qué ha pasado más? |
 | Tiempo | En vivo (sondeo) | Periodo elegido (`desde` / `hasta`) |
 
 Por eso un reporte nunca aparece en las dos: mientras está activo es de Incidentes y,
-cuando se archiva como histórico, pasa a contar para el riesgo.
+cuando se archiva como histórico, pasa a contar para el riesgo. Las filas de un dataset
+importado solo existen en el riesgo: no son reportes.
 
 ---
 
 ## Fuente de datos
 
-Todas las consultas leen la vista `reporte_historico_peso`. Es la única puerta a los
-datos del riesgo, así que ninguna consulta puede mezclar por error reportes activos o
-descartados. Contiene un registro por reporte que cumple:
+Todas las consultas leen la vista `riesgo_historico`. Es la única puerta a los datos
+del riesgo, así que ninguna consulta puede mezclar por error reportes activos o
+descartados. Junta dos fuentes con las mismas columnas (`UNION ALL`):
 
-- `reporte.es_historico = true`, y
-- `estado_actual <> 'Descartado'`: el riesgo usa solo información válida
-  (requerimiento R-10).
+1. **Reportes de la app** (`origen = 'reporte'`): un registro por reporte que cumple
+   - `reporte.es_historico = true`, y
+   - `estado_actual <> 'Descartado'`: el riesgo usa solo información válida
+     (requerimiento R-10).
+2. **Datasets importados** (`origen = 'dataset'`): un registro por fila de
+   `incidente_historico`. Ver [Datasets históricos](#datasets-históricos).
 
-| Columna | De dónde sale |
-|---|---|
-| `reporte_id`, `incidente_id`, `created_at` | `reporte` |
-| `geom` | `puntos_origen.geom`: el centroide de las ubicaciones del reporte |
-| `colonia` | La parte después de ` · ` en `reporte.direccion` (`"calle · colonia"`); `NULL` si no hay |
-| `peso` | Ver [Peso de un reporte](#peso-de-un-reporte) |
+| Columna | Reporte | Dataset |
+|---|---|---|
+| `origen` | `'reporte'` | `'dataset'` |
+| `reporte_id` / `dataset_id` | el del reporte / `NULL` | `NULL` / el del dataset |
+| `incidente_id` | `reporte.incidente_id` | la categoría de la fila |
+| `created_at` | `reporte.created_at` | el día 1 del mes, a mediodía en Tijuana (así no cambia de mes al pasar a UTC) |
+| `geom` | `puntos_origen.geom`: el centroide de las ubicaciones del reporte | el punto de la fila |
+| `colonia` | La parte después de ` · ` en `reporte.direccion` (`"calle · colonia"`); `NULL` si no hay | la columna Colonia; `NULL` si va vacía |
+| `personas_afectadas`, `fallecidos` | `NULL` | las columnas del archivo; `NULL` si van vacías |
+| `peso` | Ver [Peso](#peso) | Ver [Peso](#peso) |
+
+Las dos fuentes funcionan a la vez: los reportes que un rol oficial pasa a histórico y
+los datasets que se importan cuentan igual en el mapa de calor, las zonas, el
+histórico por colonia, el conteo por categoría y la exportación.
 
 **Quién marca un reporte como histórico:** cualquier rol distinto de `ciudadano`, a
 mano, con `PUT /reportes/{id}/historico` (y `DELETE` para devolverlo a Incidentes).
@@ -53,11 +66,20 @@ y es la alternativa si se prefiere guardar una foto inmutable al archivar.
 
 ---
 
-## Peso de un reporte
+## Peso
 
 ```
-peso = credibilidad(estado) × (1 + ln(1 + avistamientos))
+reporte: peso = credibilidad(estado) × (1 + ln(1 + avistamientos))
+dataset: peso = 1.0 × (1 + ln(1 + personas_afectadas))      (vacío = 0)
 ```
+
+Las dos fórmulas tienen la misma forma para que las dos fuentes queden en la misma
+escala. Una fila importada es un dato oficial, así que tiene la credibilidad máxima
+(1.0, como un reporte verificado), y las personas afectadas hacen el papel de los
+avistamientos: una fila con 0 afectados pesa 1; con 2, ≈ 2.1; con 21, ≈ 4.1; con 160,
+≈ 6.1. Los fallecidos se guardan y se exportan, pero no entran al peso.
+
+Credibilidad de un reporte:
 
 | Estado | Credibilidad | Por qué |
 |---|---|---|
@@ -200,17 +222,136 @@ periodo y filtro elegidos siempre vale 1.
 cualquier filtro; la contra es que siempre habrá algo en Alto aunque haya pocos datos
 (por eso el panel muestra también el número de reportes).
 
+## Datasets históricos
+
+Un dataset es un archivo `.xlsx` o `.csv` de incidentes históricos (por ejemplo, la
+hoja "Formato para importación"). Tablas (migración `004`):
+
+- `dataset_historico`: nombre, archivo original, SHA-256 del contenido (`UNIQUE`: el
+  mismo archivo no se importa dos veces), filas, quién lo cargó y cuándo.
+- `incidente_historico`: una fila del archivo, con su renglón original (`fila`),
+  categoría, colonia, fecha (día 1 del mes), punto y personas afectadas / fallecidos.
+  Índice GiST en `geom`. Se borra con su dataset (`ON DELETE CASCADE`).
+
+| Endpoint | Qué hace |
+|---|---|
+| `POST /riesgo/datasets` | Importa un archivo (multipart: `file` y, opcional, `nombre`). 201 con el dataset. |
+| `GET /riesgo/datasets` | Lista los datasets, del más reciente al más antiguo. |
+| `DELETE /riesgo/datasets/{id}` | Borra el dataset y sus filas. 204. |
+| `GET /riesgo/exportar` | Descarga los históricos de las dos fuentes (ver [Exportar](#exportar)). |
+
+### Formato de importación
+
+Una fila de encabezados y un incidente por fila. No importan el orden, las
+mayúsculas ni los acentos, y las columnas de más se ignoran (así una hoja con un
+conteo con fórmulas a un lado se importa igual).
+
+| Columna | Obligatoria | Qué acepta |
+|---|---|---|
+| Latitud, Longitud | Sí | Número (punto o coma decimal), -90 a 90 y -180 a 180. El punto debe caer dentro de la zona permitida, la misma que para crear reportes (`REPORTE_POLIGONO`, por defecto Baja California); si no, el error va con la columna vacía, porque el problema es la pareja (suele ser la longitud sin el signo menos o un punto de otro estado) |
+| Mes/año del Incidente (o Fecha) | Sí | Fecha de Excel, `AAAA-MM`, `AAAA-MM-DD`, `MM/AAAA` o `DD/MM/AAAA`; desde 1900 y no posterior al mes actual. Solo se guarda el mes |
+| Categoria | Sí | Una categoría del catálogo, por nombre o etiqueta ("Inundación", "inundacion", "INUNDACION"). "Derrumbe" cuenta como deslave. Si el texto coincide con dos categorías (la etiqueta no es única en la base), la fila se rechaza |
+| Colonia | No | Texto, hasta 200 caracteres; vacía = sin colonia |
+| Personas afectadas (total), Fallecidos | No | Entero de 0 a 1,000,000; 0 es un dato y vacío = sin dato |
+
+- **.xlsx:** se lee la primera hoja que tenga los encabezados.
+- **.csv:** separador coma, punto y coma o tabulador (el que más aparezca en el
+  encabezado); UTF-8, con o sin BOM, o Windows-1252 (lo que guarda Excel en Windows).
+- El formato se reconoce por el contenido, no por la extensión.
+
+**Todo o nada:** primero se valida el archivo completo. Si alguna fila es inválida no se
+importa nada y la respuesta es 422 con cada error (`fila`, `columna`, `mensaje`; los
+primeros 100 y `total_errores`). Así no queda un dataset a medias que haya que
+limpiar. Los renglones vacíos se saltan.
+
+**Categorías:** el importador solo usa las que ya existen en el catálogo; no crea
+ninguna. Si un archivo trae una categoría nueva (como "Otro"), esa fila se rechaza; si
+se quiere usar, un admin la crea con `POST /incidentes` y el importador la reconoce sola.
+
+**Límites:** el body es de 1 MiB (el límite general de la API: ningún cambio en nginx ni
+en el router). Es la petición completa, no solo el archivo: el multipart suma sus
+encabezados y separadores, así que un archivo de casi 1 MiB recibe `413` y conviene dejar
+unos KB de margen. Además, hasta 50 000 filas, y un `.xlsx` puede ocupar hasta 64 MiB descomprimido.
+El archivo real de 72 filas pesa 53 KB.
+
+En un `.xlsx`, un renglón puede tener hasta 100 columnas (el formato usa 7 y los
+archivos reales llegan a 14); uno con más rechaza el archivo con `400`. La hoja se lee
+renglón por renglón y de cada uno solo se guardan las columnas del formato: Excel
+rellena un renglón con celdas vacías hasta su última celda con dato, y sin ese tope un
+`.xlsx` de pocos KB con un valor en la última columna (XFD) pedía más de 1 GB de
+memoria. Si un archivo real choca con el tope, se borran las celdas que sobran a la
+derecha de la tabla.
+
+Importar y borrar quedan en el `historial` (`riesgo.importar_dataset`,
+`riesgo.eliminar_dataset`, entidad `dataset_historico`) con el nombre, el archivo y
+las filas.
+
+## Exportar
+
+`GET /riesgo/exportar?formato=csv|xlsx` (CSV por defecto) con el mismo filtro que el
+resumen (`incidente_id`, `desde`, `hasta`). Devuelve las dos fuentes, ordenadas por
+fecha, con las columnas del formato de importación más **Origen** (`reporte` o
+`dataset`) y **Dataset** (su nombre). Así lo exportado se puede volver a importar:
+esas dos columnas se ignoran al importar.
+
+- La categoría va con su etiqueta del catálogo.
+- **CSV:** UTF-8 con BOM (para que Excel respete los acentos), fecha `AAAA-MM-DD`. Un
+  texto que empieza con `=`, `+`, `-` o `@` sale con `'` adelante, para que Excel no
+  lo tome como fórmula (la colonia sale de la dirección que escribe el ciudadano). Un
+  texto que ya empieza con `'` también lleva otro adelante (`'-Norte` sale como
+  `''-Norte`). Al importar un CSV se quita el primer `'` cuando lo sigue otro `'`, `=`,
+  `+`, `-` o `@`, así que el texto exportado vuelve igual. Esto también aplica a un CSV
+  escrito a mano: `'-Norte` se importa como `-Norte`, y para conservar el apóstrofo se
+  escribe doble (`''-Norte`). Con cualquier otro carácter después, como en `'Texto`, no
+  se toca. En el `.xlsx` no se agrega ni se quita nada.
+- **XLSX:** hoja "Formato para importación", fecha como fecha de Excel (`mm/aaaa`).
+  Excel guarda 15 dígitos significativos, así que las coordenadas pierden menos de un
+  micrómetro.
+- Nombre del archivo: `riesgo-historico-AAAA-MM-DD.csv` (o `.xlsx`), en
+  `Content-Disposition`.
+- La fecha va en hora de Tijuana con su horario de verano (la base de zonas horarias va
+  embebida en el binario, porque la imagen de Alpine no la trae).
+
+**Volver a importar lo exportado:**
+
+- Sigue los mismos límites que cualquier importación: 50,000 filas y 1 MiB por
+  petición (el archivo, con unos KB de margen para el multipart). Una exportación más
+  grande se parte por periodo o por categoría. Si con esos filtros no se cumple alguno
+  de los dos límites (por ejemplo, las filas de un mismo mes y categoría pasan de
+  50,000 o se acercan a 1 MiB), se parte el archivo por renglones: cada parte conserva
+  la fila de encabezado y queda dentro de ambos límites, con el mismo margen.
+- La categoría sale con su etiqueta. Si dos categorías del catálogo comparten etiqueta
+  (o el nombre de una es la etiqueta de otra), la importación rechaza esas filas por
+  ambiguas. Antes de reimportar, se corrige el catálogo o se cambia la columna
+  Categoria por un valor que solo coincida con una categoría (el nombre, si no choca
+  con otra etiqueta).
+- Se **suma** a lo que ya hay: si los datasets originales siguen cargados, sus filas
+  quedan duplicadas. El sha256 compara archivos, no incidentes, y Origen y Dataset no
+  identifican a un incidente ni reemplazan nada.
+- Para reemplazar un dataset:
+  1. La exportación trae todas las fuentes (reportes y todos los datasets) y no se
+     puede filtrar por dataset: en la hoja de cálculo se dejan solo las filas cuya
+     columna Dataset es la del dataset que se reemplaza. Si no, los reportes y los
+     demás datasets quedan duplicados. El nombre de un dataset no es único: si otro
+     dataset tiene el mismo nombre, la columna Dataset no los distingue y este
+     procedimiento no sirve, porque las filas del otro también quedarían duplicadas.
+  2. Se importa ese archivo y se comprueba que funcionó (responde `201` y el dataset
+     aparece en la lista con las filas esperadas).
+  3. Después se borra el dataset original. Así, si la importación falla, el original
+     sigue cargado.
+
 ## Quién lo ve
 
-`GET /riesgo/mapa-calor` y `GET /riesgo/resumen` son para todos los roles menos
-`ciudadano`: admin, moderador, analista, proteccion_civil y rescatista.
+Todos los endpoints de riesgo (`mapa-calor`, `resumen`, `datasets` y `exportar`) son
+para todos los roles menos `ciudadano`: admin, moderador, analista, proteccion_civil y
+rescatista. Importar y borrar datasets también.
 
 ---
 
 ## Cómo cambiar el modelo
 
 - **La fórmula del peso** está en la vista: se cambia con una migración nueva
-  (`CREATE OR REPLACE VIEW reporte_historico_peso ...`), nunca editando la `002`.
+  (`CREATE OR REPLACE VIEW riesgo_historico ...`), nunca editando la `002` ni la `004`.
 - **Cualquier cambio** en pesos, umbrales o parámetros sube la versión del modelo
   (`version_modelo` en la respuesta) y se anota en esta guía.
 
@@ -221,4 +362,6 @@ Lo muestra el Figma, pero no hay datos o no se ha definido:
 - Factores de lluvia, pendiente del terreno y estado del drenaje; personas en la zona.
 - Recalcular el modelo bajo demanda o con una frecuencia fija (hoy se calcula en cada
   consulta).
-- Ajustar pesos desde la web, exportar datos y alertar a Protección Civil.
+- Ajustar pesos desde la web y alertar a Protección Civil.
+- Filtrar el mapa y el resumen por origen (solo reportes o solo datasets) o por
+  dataset: la vista ya trae `origen` y `dataset_id`, solo falta el parámetro.

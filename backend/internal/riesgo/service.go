@@ -2,10 +2,15 @@ package riesgo
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"math"
 	"time"
 
+	"github.com/ClubTECLA/cimalert/backend/internal/db"
 	"github.com/ClubTECLA/cimalert/backend/internal/db/sqlc"
+	"github.com/google/uuid"
 )
 
 // consultas declara solo las consultas que usa el servicio, con las firmas
@@ -15,22 +20,31 @@ type consultas interface {
 	ListZonasRiesgo(ctx context.Context, arg sqlc.ListZonasRiesgoParams) ([]sqlc.ListZonasRiesgoRow, error)
 	ListColoniasHistorico(ctx context.Context, arg sqlc.ListColoniasHistoricoParams) ([]sqlc.ListColoniasHistoricoRow, error)
 	ListConteoCategorias(ctx context.Context, arg sqlc.ListConteoCategoriasParams) ([]sqlc.ListConteoCategoriasRow, error)
+	ListCategoriasCatalogo(ctx context.Context) ([]sqlc.ListCategoriasCatalogoRow, error)
+	ListDatasetsHistoricos(ctx context.Context) ([]sqlc.DatasetHistorico, error)
+	ListExportarHistorico(ctx context.Context, arg sqlc.ListExportarHistoricoParams) ([]sqlc.ListExportarHistoricoRow, error)
 }
 
 // store agrega a las consultas la lectura en una sola foto de la base (ver
-// Store.LeerMismaFoto).
+// Store.LeerMismaFoto) y las operaciones de datasets, que escriben en una
+// transacción.
 type store interface {
 	consultas
 	LeerMismaFoto(ctx context.Context, fn func(consultas) error) error
+	ImportarDataset(ctx context.Context, arg ImportarTxParams) (sqlc.DatasetHistorico, error)
+	EliminarDataset(ctx context.Context, id, actorID uuid.UUID) error
 }
 
 type Service struct {
 	store store
+	zona  Zona
 	ahora func() time.Time
 }
 
-func NewService(store store) *Service {
-	return &Service{store: store, ahora: time.Now}
+// NewService crea el servicio de riesgo con la store y la zona donde se
+// aceptan las filas de los datasets importados.
+func NewService(store store, zona Zona) *Service {
+	return &Service{store: store, zona: zona, ahora: time.Now}
 }
 
 // ObtenerMapaCalor agrupa el peso de los reportes históricos del área en
@@ -194,6 +208,120 @@ func (s *Service) ObtenerResumen(ctx context.Context, filtro Filtro) (Resumen, e
 		r.TotalHistoricos += c.Total
 	}
 	return r, nil
+}
+
+// ImportarDataset valida el archivo completo y, si todas sus filas son
+// válidas, lo guarda como un dataset nuevo. Si alguna fila es inválida
+// devuelve *FilasInvalidasError y no guarda nada.
+func (s *Service) ImportarDataset(ctx context.Context, actorID uuid.UUID, nombre, archivo string, contenido []byte) (Dataset, error) {
+	filasCatalogo, err := s.store.ListCategoriasCatalogo(ctx)
+	if err != nil {
+		return Dataset{}, err
+	}
+	catalogo := make([]Categoria, len(filasCatalogo))
+	for i, c := range filasCatalogo {
+		catalogo[i] = Categoria{ID: c.ID, Nombre: c.Nombre, Etiqueta: c.Etiqueta}
+	}
+
+	filas, err := LeerDataset(contenido, catalogo, s.zona, s.ahora())
+	if err != nil {
+		return Dataset{}, err
+	}
+
+	suma := sha256.Sum256(contenido)
+	d, err := s.store.ImportarDataset(ctx, ImportarTxParams{
+		Nombre:  NombreDataset(nombre, archivo),
+		Archivo: NombreDataset(archivo, ""),
+		Sha256:  hex.EncodeToString(suma[:]),
+		ActorID: actorID,
+		Filas:   filas,
+	})
+	if err != nil {
+		if db.IsUniqueViolation(err) {
+			return Dataset{}, ErrDatasetDuplicado
+		}
+		return Dataset{}, err
+	}
+	return toDataset(d), nil
+}
+
+// ListarDatasets devuelve los datasets importados, del más reciente al más antiguo.
+func (s *Service) ListarDatasets(ctx context.Context) ([]Dataset, error) {
+	filas, err := s.store.ListDatasetsHistoricos(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Dataset, len(filas))
+	for i, d := range filas {
+		out[i] = toDataset(d)
+	}
+	return out, nil
+}
+
+// EliminarDataset borra el dataset y todos sus incidentes.
+func (s *Service) EliminarDataset(ctx context.Context, id, actorID uuid.UUID) error {
+	if err := s.store.EliminarDataset(ctx, id, actorID); err != nil {
+		if db.IsNotFound(err) {
+			return ErrDatasetNoEncontrado
+		}
+		return err
+	}
+	return nil
+}
+
+// Exportar arma el archivo con los incidentes históricos de las dos fuentes
+// que cumplen el filtro.
+func (s *Service) Exportar(ctx context.Context, filtro Filtro, formato Formato) (Archivo, error) {
+	if err := validarFiltro(filtro); err != nil {
+		return Archivo{}, err
+	}
+	filas, err := s.store.ListExportarHistorico(ctx, sqlc.ListExportarHistoricoParams{
+		IncidenteIds: idsONil(filtro.IncidenteIDs),
+		Desde:        filtro.Desde,
+		Hasta:        filtro.Hasta,
+	})
+	if err != nil {
+		return Archivo{}, err
+	}
+	exportadas := make([]FilaExportada, len(filas))
+	for i, f := range filas {
+		exportadas[i] = FilaExportada{
+			Colonia:           f.Colonia,
+			Latitude:          f.Latitude,
+			Longitude:         f.Longitude,
+			Fecha:             f.CreatedAt,
+			Categoria:         f.Categoria,
+			PersonasAfectadas: f.PersonasAfectadas,
+			Fallecidos:        f.Fallecidos,
+			Origen:            f.Origen,
+			Dataset:           f.Dataset,
+		}
+	}
+
+	nombre := fmt.Sprintf("riesgo-historico-%s", s.ahora().In(zonaTijuana).Format("2006-01-02"))
+	if formato == FormatoXLSX {
+		contenido, err := EscribirXLSX(exportadas)
+		if err != nil {
+			return Archivo{}, err
+		}
+		return Archivo{Nombre: nombre + ".xlsx", ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", Contenido: contenido}, nil
+	}
+	contenido, err := EscribirCSV(exportadas)
+	if err != nil {
+		return Archivo{}, err
+	}
+	return Archivo{Nombre: nombre + ".csv", ContentType: "text/csv", Contenido: contenido}, nil
+}
+
+func toDataset(d sqlc.DatasetHistorico) Dataset {
+	return Dataset{
+		ID:         d.ID,
+		Nombre:     d.Nombre,
+		Archivo:    d.Archivo,
+		Filas:      d.Filas,
+		CargadoPor: d.CargadoPor,
+		CreatedAt:  d.CreatedAt,
+	}
 }
 
 func validarFiltro(f Filtro) error {

@@ -91,6 +91,12 @@ paths:
     $ref: './paths/riesgo.yaml#/obtenerMapaCalor'
   /riesgo/resumen:
     $ref: './paths/riesgo.yaml#/obtenerResumenRiesgo'
+  /riesgo/datasets:
+    $ref: './paths/riesgo.yaml#/datasetsHistoricos'
+  /riesgo/datasets/{datasetId}:
+    $ref: './paths/riesgo.yaml#/datasetHistoricoPorId'
+  /riesgo/exportar:
+    $ref: './paths/riesgo.yaml#/exportarRiesgo'
 
 components:
   schemas:
@@ -188,6 +194,14 @@ components:
       $ref: './schemas/riesgo/conteo_categoria.yaml'
     ResumenRiesgo:
       $ref: './schemas/riesgo/resumen_riesgo.yaml'
+    DatasetHistorico:
+      $ref: './schemas/riesgo/dataset_historico.yaml'
+    ImportarDatasetRequest:
+      $ref: './schemas/riesgo/importar_dataset_request.yaml'
+    ErrorFilaImportacion:
+      $ref: './schemas/riesgo/error_fila_importacion.yaml'
+    ErrorImportacion:
+      $ref: './schemas/riesgo/error_importacion.yaml'
   securitySchemes:
     bearerAuth:
       type: http

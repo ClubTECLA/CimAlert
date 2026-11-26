@@ -530,6 +530,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/riesgo/datasets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Datasets históricos importados, del más reciente al más antiguo. */
+        get: operations["listarDatasetsHistoricos"];
+        put?: never;
+        /** @description Importa un archivo .xlsx o .csv de incidentes históricos (formato en ImportarDatasetRequest). Valida todas las filas antes de guardar: si alguna es inválida no importa nada y responde 422 con los errores por fila. La categoría se busca en el catálogo por nombre o etiqueta, sin importar mayúsculas ni acentos ("Derrumbe" cuenta como deslave). El mismo archivo no se puede importar dos veces. Queda en el historial (riesgo.importar_dataset). El body es de máximo 1 MiB. */
+        post: operations["importarDatasetHistorico"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/riesgo/datasets/{datasetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** @description Borra el dataset y todos sus incidentes. Queda en el historial (riesgo.eliminar_dataset). */
+        delete: operations["eliminarDatasetHistorico"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/riesgo/exportar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Descarga los incidentes históricos (reportes marcados como históricos y filas de los datasets) con el mismo filtro que el resumen. Las columnas son las del formato de importación más Origen (reporte o dataset) y Dataset, así que el archivo se puede volver a importar (las dos últimas se ignoran al importar). El CSV va en UTF-8 con BOM para que Excel respete los acentos, y un texto que empieza con =, +, - o @ lleva ' adelante para que no se tome como fórmula (al importar se quita). Volver a importarlo sigue los límites de la importación (50,000 filas y 1 MiB; una exportación más grande se parte por periodo o categoría) y se suma a lo que ya hay: si los datasets originales siguen cargados, sus filas quedan duplicadas. Solo lectura: no registra nada en el historial. */
+        get: operations["exportarRiesgo"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -581,6 +633,10 @@ export interface components {
         ColoniaRiesgo: components["schemas"]["colonia_riesgo"];
         ConteoCategoria: components["schemas"]["conteo_categoria"];
         ResumenRiesgo: components["schemas"]["resumen_riesgo"];
+        DatasetHistorico: components["schemas"]["dataset_historico"];
+        ImportarDatasetRequest: components["schemas"]["importar_dataset_request"];
+        ErrorFilaImportacion: components["schemas"]["error_fila_importacion"];
+        ErrorImportacion: components["schemas"]["error_importacion"];
         /**
          * @description Derivado, no almacenado: etiqueta del incidente + " en " + direccion (p. ej. "Socavón en Calle Flores Magón 8267 · Zona Centro"). Sin dirección, solo la etiqueta.
          * @example Socavón en Calle Flores Magón 8267 · Zona Centro
@@ -999,6 +1055,58 @@ export interface components {
             colonias: components["schemas"]["colonia_riesgo"][];
             /** @description Reportes históricos del periodo por tipo de incidente, de mayor a menor. */
             categorias: components["schemas"]["conteo_categoria"][];
+        };
+        /** @description Archivo de incidentes históricos importado (.xlsx o .csv). Sus filas cuentan para el riesgo junto con los reportes marcados como históricos. */
+        dataset_historico: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Nombre que se le dio al importar; si no se dio, el del archivo.
+             * @example Lluvias Rosarito 1980-2026
+             */
+            nombre: string;
+            /**
+             * @description Nombre original del archivo subido.
+             * @example Tijuana_Reporta_categorias_con_municipios.xlsx
+             */
+            archivo: string;
+            /** @description Incidentes importados. */
+            filas: number;
+            /**
+             * Format: uuid
+             * @description Usuario que lo importó; null si ese usuario ya no existe.
+             */
+            cargado_por: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description Archivo .xlsx o .csv con el formato de importación: una fila de encabezados y un incidente por fila. Columnas obligatorias: Latitud, Longitud, Mes/año del Incidente y Categoria. Opcionales: Colonia, Personas afectadas (total) y Fallecidos (pueden faltar o ir vacías). No importan el orden, las mayúsculas ni los acentos, y las columnas de más se ignoran. En un .xlsx se lee la primera hoja que tenga esos encabezados; en un .csv el separador puede ser coma, punto y coma o tabulador. La fecha va como fecha de Excel, AAAA-MM, AAAA-MM-DD, MM/AAAA o DD/MM/AAAA; solo se guardan el mes y el año. */
+        importar_dataset_request: {
+            /** Format: binary */
+            file: string;
+            /** @description Nombre del dataset; si no se manda, se usa el del archivo. */
+            nombre?: string;
+        };
+        /** @description Problema de una fila del archivo importado. */
+        error_fila_importacion: {
+            /**
+             * @description Renglón del archivo (el encabezado es el 1).
+             * @example 33
+             */
+            fila: number;
+            /**
+             * @description Columna con el problema, como se llama en el formato; vacía si es de toda la fila.
+             * @example Mes/año del Incidente
+             */
+            columna: string;
+            /** @example falta la fecha */
+            mensaje: string;
+        };
+        /** @description El archivo tiene filas inválidas y no se importó nada. errores trae los primeros 100 errores y total_errores cuenta todos los errores del archivo, no las filas: una fila inválida puede tener varios (por ejemplo, fecha y categoría). */
+        error_importacion: {
+            message: string;
+            total_errores: number;
+            errores: components["schemas"]["error_fila_importacion"][];
         };
     };
     responses: never;
@@ -3101,6 +3209,232 @@ export interface operations {
                 };
             };
             /** @description Datos inválidos (desde posterior a hasta o incidente_id fuera de rango) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El rol del usuario no tiene acceso a riesgo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    listarDatasetsHistoricos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Datasets importados */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dataset_historico"][];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El rol del usuario no tiene acceso a riesgo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    importarDatasetHistorico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["importar_dataset_request"];
+            };
+        };
+        responses: {
+            /** @description Dataset importado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["dataset_historico"];
+                };
+            };
+            /** @description Archivo faltante, multipart inválido, archivo que no es .xlsx ni .csv o sin los encabezados del formato */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El rol del usuario no tiene acceso a riesgo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Ese archivo ya se importó */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El archivo es demasiado grande */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Hay filas inválidas; no se importó nada */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_importacion"];
+                };
+            };
+        };
+    };
+    eliminarDatasetHistorico: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                datasetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dataset borrado */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ID de dataset inválido (no es un UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description No autenticado */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El rol del usuario no tiene acceso a riesgo */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Dataset no encontrado */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
+    exportarRiesgo: {
+        parameters: {
+            query?: {
+                formato?: "csv" | "xlsx";
+                incidente_id?: number[];
+                desde?: string;
+                hasta?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Archivo con los incidentes históricos */
+            200: {
+                headers: {
+                    "Content-Disposition": string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description Datos inválidos (desde posterior a hasta) */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -8,7 +8,112 @@ package sqlc
 import (
 	"context"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const createDatasetHistorico = `-- name: CreateDatasetHistorico :one
+INSERT INTO dataset_historico (nombre, archivo, sha256, filas, cargado_por)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, nombre, archivo, sha256, filas, cargado_por, created_at
+`
+
+type CreateDatasetHistoricoParams struct {
+	Nombre     string     `json:"nombre"`
+	Archivo    string     `json:"archivo"`
+	Sha256     string     `json:"sha256"`
+	Filas      int        `json:"filas"`
+	CargadoPor *uuid.UUID `json:"cargado_por"`
+}
+
+func (q *Queries) CreateDatasetHistorico(ctx context.Context, arg CreateDatasetHistoricoParams) (DatasetHistorico, error) {
+	row := q.db.QueryRow(ctx, createDatasetHistorico,
+		arg.Nombre,
+		arg.Archivo,
+		arg.Sha256,
+		arg.Filas,
+		arg.CargadoPor,
+	)
+	var i DatasetHistorico
+	err := row.Scan(
+		&i.ID,
+		&i.Nombre,
+		&i.Archivo,
+		&i.Sha256,
+		&i.Filas,
+		&i.CargadoPor,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+type CreateIncidentesHistoricosParams struct {
+	DatasetID         uuid.UUID   `json:"dataset_id"`
+	Fila              int         `json:"fila"`
+	IncidenteID       int         `json:"incidente_id"`
+	Colonia           *string     `json:"colonia"`
+	Fecha             pgtype.Date `json:"fecha"`
+	Latitude          float64     `json:"latitude"`
+	Longitude         float64     `json:"longitude"`
+	PersonasAfectadas *int        `json:"personas_afectadas"`
+	Fallecidos        *int        `json:"fallecidos"`
+}
+
+const deleteDatasetHistorico = `-- name: DeleteDatasetHistorico :one
+DELETE FROM dataset_historico
+WHERE id = $1
+RETURNING id, nombre, archivo, sha256, filas, cargado_por, created_at
+`
+
+// Sus filas se borran con él (ON DELETE CASCADE).
+func (q *Queries) DeleteDatasetHistorico(ctx context.Context, id uuid.UUID) (DatasetHistorico, error) {
+	row := q.db.QueryRow(ctx, deleteDatasetHistorico, id)
+	var i DatasetHistorico
+	err := row.Scan(
+		&i.ID,
+		&i.Nombre,
+		&i.Archivo,
+		&i.Sha256,
+		&i.Filas,
+		&i.CargadoPor,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listCategoriasCatalogo = `-- name: ListCategoriasCatalogo :many
+SELECT i.id, i.nombre, i.etiqueta
+FROM incidentes i
+ORDER BY i.id
+`
+
+type ListCategoriasCatalogoRow struct {
+	ID       int    `json:"id"`
+	Nombre   string `json:"nombre"`
+	Etiqueta string `json:"etiqueta"`
+}
+
+// Catálogo para reconocer la categoría de cada fila al importar un dataset.
+func (q *Queries) ListCategoriasCatalogo(ctx context.Context) ([]ListCategoriasCatalogoRow, error) {
+	rows, err := q.db.Query(ctx, listCategoriasCatalogo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCategoriasCatalogoRow
+	for rows.Next() {
+		var i ListCategoriasCatalogoRow
+		if err := rows.Scan(&i.ID, &i.Nombre, &i.Etiqueta); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const listCeldasCalor = `-- name: ListCeldasCalor :many
 
@@ -26,7 +131,7 @@ FROM (
                          $1::float8,
                          $1::float8) AS celda,
            h.peso
-    FROM reporte_historico_peso h
+    FROM riesgo_historico h
     WHERE h.geom && ST_MakeEnvelope($2::float8, $3::float8,
                                     $4::float8, $5::float8, 4326)::geography
     -- && compara cajas e incluye el borde: un área ancha se pide en tramos
@@ -69,8 +174,9 @@ type ListCeldasCalorRow struct {
 	CeldaY    float64 `json:"celda_y"`
 }
 
-// Todas las consultas leen la vista reporte_historico_peso (migración 002):
-// solo reportes históricos válidos, con su peso. Ver backend/GUIA_RIESGO.md.
+// Las consultas del riesgo leen la vista riesgo_historico (migración 004): los
+// reportes históricos válidos y las filas de los datasets importados, con su
+// peso. Ver backend/GUIA_RIESGO.md.
 //
 // sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 // cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
@@ -123,7 +229,7 @@ const listColoniasHistorico = `-- name: ListColoniasHistorico :many
 SELECT h.colonia::text AS colonia,
        count(*)::int AS reportes,
        sum(h.peso)::float8 AS peso
-FROM reporte_historico_peso h
+FROM riesgo_historico h
 WHERE h.colonia IS NOT NULL
 AND ($1::int[] IS NULL OR h.incidente_id = ANY($1::int[]))
 AND ($2::timestamptz IS NULL OR h.created_at >= $2::timestamptz)
@@ -176,7 +282,7 @@ func (q *Queries) ListColoniasHistorico(ctx context.Context, arg ListColoniasHis
 const listConteoCategorias = `-- name: ListConteoCategorias :many
 SELECT h.incidente_id,
        count(*)::int AS total
-FROM reporte_historico_peso h
+FROM riesgo_historico h
 WHERE ($1::int[] IS NULL OR h.incidente_id = ANY($1::int[]))
 AND ($2::timestamptz IS NULL OR h.created_at >= $2::timestamptz)
 AND ($3::timestamptz IS NULL OR h.created_at <= $3::timestamptz)
@@ -216,10 +322,113 @@ func (q *Queries) ListConteoCategorias(ctx context.Context, arg ListConteoCatego
 	return items, nil
 }
 
+const listDatasetsHistoricos = `-- name: ListDatasetsHistoricos :many
+SELECT d.id, d.nombre, d.archivo, d.sha256, d.filas, d.cargado_por, d.created_at
+FROM dataset_historico d
+ORDER BY d.created_at DESC, d.id
+`
+
+func (q *Queries) ListDatasetsHistoricos(ctx context.Context) ([]DatasetHistorico, error) {
+	rows, err := q.db.Query(ctx, listDatasetsHistoricos)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DatasetHistorico
+	for rows.Next() {
+		var i DatasetHistorico
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nombre,
+			&i.Archivo,
+			&i.Sha256,
+			&i.Filas,
+			&i.CargadoPor,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExportarHistorico = `-- name: ListExportarHistorico :many
+SELECT h.origen,
+       COALESCE(d.nombre, '')::text AS dataset,
+       COALESCE(h.colonia, '')::text AS colonia,
+       ST_Y(h.geom::geometry)::float8 AS latitude,
+       ST_X(h.geom::geometry)::float8 AS longitude,
+       h.created_at,
+       i.etiqueta::text AS categoria,
+       h.personas_afectadas,
+       h.fallecidos
+FROM riesgo_historico h
+JOIN incidentes i ON i.id = h.incidente_id
+LEFT JOIN dataset_historico d ON d.id = h.dataset_id
+WHERE ($1::int[] IS NULL OR h.incidente_id = ANY($1::int[]))
+AND ($2::timestamptz IS NULL OR h.created_at >= $2::timestamptz)
+AND ($3::timestamptz IS NULL OR h.created_at <= $3::timestamptz)
+ORDER BY h.created_at, h.origen, latitude, longitude
+`
+
+type ListExportarHistoricoParams struct {
+	IncidenteIds []int      `json:"incidente_ids"`
+	Desde        *time.Time `json:"desde"`
+	Hasta        *time.Time `json:"hasta"`
+}
+
+type ListExportarHistoricoRow struct {
+	Origen            string    `json:"origen"`
+	Dataset           string    `json:"dataset"`
+	Colonia           string    `json:"colonia"`
+	Latitude          float64   `json:"latitude"`
+	Longitude         float64   `json:"longitude"`
+	CreatedAt         time.Time `json:"created_at"`
+	Categoria         string    `json:"categoria"`
+	PersonasAfectadas *int      `json:"personas_afectadas"`
+	Fallecidos        *int      `json:"fallecidos"`
+}
+
+// Lo que se exporta: las dos fuentes, con las columnas del formato de
+// importación más el origen. Mismo filtro que el resumen.
+func (q *Queries) ListExportarHistorico(ctx context.Context, arg ListExportarHistoricoParams) ([]ListExportarHistoricoRow, error) {
+	rows, err := q.db.Query(ctx, listExportarHistorico, arg.IncidenteIds, arg.Desde, arg.Hasta)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExportarHistoricoRow
+	for rows.Next() {
+		var i ListExportarHistoricoRow
+		if err := rows.Scan(
+			&i.Origen,
+			&i.Dataset,
+			&i.Colonia,
+			&i.Latitude,
+			&i.Longitude,
+			&i.CreatedAt,
+			&i.Categoria,
+			&i.PersonasAfectadas,
+			&i.Fallecidos,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listZonasRiesgo = `-- name: ListZonasRiesgo :many
 WITH puntos AS (
     SELECT h.colonia, h.peso, a_metros(h.geom::geometry) AS g
-    FROM reporte_historico_peso h
+    FROM riesgo_historico h
     WHERE ($2::int[] IS NULL OR h.incidente_id = ANY($2::int[]))
     AND ($3::timestamptz IS NULL OR h.created_at >= $3::timestamptz)
     AND ($4::timestamptz IS NULL OR h.created_at <= $4::timestamptz)

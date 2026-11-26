@@ -1,0 +1,15 @@
+type: object
+description: >-
+  El archivo tiene filas inválidas y no se importó nada. errores trae los primeros 100 errores y total_errores
+  cuenta todos los errores del archivo, no las filas: una fila inválida puede tener varios (por ejemplo, fecha y
+  categoría).
+required: [message, total_errores, errores]
+properties:
+  message:
+    type: string
+  total_errores:
+    type: integer
+  errores:
+    type: array
+    items:
+      $ref: '../../openapi.yaml#/components/schemas/ErrorFilaImportacion'

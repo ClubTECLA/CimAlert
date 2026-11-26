@@ -1,5 +1,6 @@
--- Todas las consultas leen la vista reporte_historico_peso (migración 002):
--- solo reportes históricos válidos, con su peso. Ver backend/GUIA_RIESGO.md.
+-- Las consultas del riesgo leen la vista riesgo_historico (migración 004): los
+-- reportes históricos válidos y las filas de los datasets importados, con su
+-- peso. Ver backend/GUIA_RIESGO.md.
 --
 -- sqlc no conoce las funciones de PostGIS, así que cada parámetro lleva su
 -- cast explícito; sin él se generaría como interface{}. Los filtros de tipo de
@@ -27,7 +28,7 @@ FROM (
                          sqlc.arg(tamano_celda_m)::float8,
                          sqlc.arg(tamano_celda_m)::float8) AS celda,
            h.peso
-    FROM reporte_historico_peso h
+    FROM riesgo_historico h
     WHERE h.geom && ST_MakeEnvelope(sqlc.arg(min_lng)::float8, sqlc.arg(min_lat)::float8,
                                     sqlc.arg(max_lng)::float8, sqlc.arg(max_lat)::float8, 4326)::geography
     -- && compara cajas e incluye el borde: un área ancha se pide en tramos
@@ -57,7 +58,7 @@ GROUP BY c.celda;
 -- por posición porque sqlc no entiende la notación eps := ...
 WITH puntos AS (
     SELECT h.colonia, h.peso, a_metros(h.geom::geometry) AS g
-    FROM reporte_historico_peso h
+    FROM riesgo_historico h
     WHERE (sqlc.narg(incidente_ids)::int[] IS NULL OR h.incidente_id = ANY(sqlc.narg(incidente_ids)::int[]))
     AND (sqlc.narg(desde)::timestamptz IS NULL OR h.created_at >= sqlc.narg(desde)::timestamptz)
     AND (sqlc.narg(hasta)::timestamptz IS NULL OR h.created_at <= sqlc.narg(hasta)::timestamptz)
@@ -96,7 +97,7 @@ LIMIT sqlc.arg(limite)::int;
 SELECT h.colonia::text AS colonia,
        count(*)::int AS reportes,
        sum(h.peso)::float8 AS peso
-FROM reporte_historico_peso h
+FROM riesgo_historico h
 WHERE h.colonia IS NOT NULL
 AND (sqlc.narg(incidente_ids)::int[] IS NULL OR h.incidente_id = ANY(sqlc.narg(incidente_ids)::int[]))
 AND (sqlc.narg(desde)::timestamptz IS NULL OR h.created_at >= sqlc.narg(desde)::timestamptz)
@@ -109,9 +110,55 @@ LIMIT sqlc.arg(limite)::int;
 -- Barras de "Incidentes por categoría". La suma de total es total_historicos.
 SELECT h.incidente_id,
        count(*)::int AS total
-FROM reporte_historico_peso h
+FROM riesgo_historico h
 WHERE (sqlc.narg(incidente_ids)::int[] IS NULL OR h.incidente_id = ANY(sqlc.narg(incidente_ids)::int[]))
 AND (sqlc.narg(desde)::timestamptz IS NULL OR h.created_at >= sqlc.narg(desde)::timestamptz)
 AND (sqlc.narg(hasta)::timestamptz IS NULL OR h.created_at <= sqlc.narg(hasta)::timestamptz)
 GROUP BY h.incidente_id
 ORDER BY total DESC, h.incidente_id;
+
+-- name: ListCategoriasCatalogo :many
+-- Catálogo para reconocer la categoría de cada fila al importar un dataset.
+SELECT i.id, i.nombre, i.etiqueta
+FROM incidentes i
+ORDER BY i.id;
+
+-- name: CreateDatasetHistorico :one
+INSERT INTO dataset_historico (nombre, archivo, sha256, filas, cargado_por)
+VALUES (sqlc.arg(nombre), sqlc.arg(archivo), sqlc.arg(sha256), sqlc.arg(filas), sqlc.arg(cargado_por))
+RETURNING *;
+
+-- name: CreateIncidentesHistoricos :copyfrom
+INSERT INTO incidente_historico (dataset_id, fila, incidente_id, colonia, fecha, latitude, longitude, personas_afectadas, fallecidos)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
+
+-- name: ListDatasetsHistoricos :many
+SELECT d.*
+FROM dataset_historico d
+ORDER BY d.created_at DESC, d.id;
+
+-- name: DeleteDatasetHistorico :one
+-- Sus filas se borran con él (ON DELETE CASCADE).
+DELETE FROM dataset_historico
+WHERE id = sqlc.arg(id)
+RETURNING *;
+
+-- name: ListExportarHistorico :many
+-- Lo que se exporta: las dos fuentes, con las columnas del formato de
+-- importación más el origen. Mismo filtro que el resumen.
+SELECT h.origen,
+       COALESCE(d.nombre, '')::text AS dataset,
+       COALESCE(h.colonia, '')::text AS colonia,
+       ST_Y(h.geom::geometry)::float8 AS latitude,
+       ST_X(h.geom::geometry)::float8 AS longitude,
+       h.created_at,
+       i.etiqueta::text AS categoria,
+       h.personas_afectadas,
+       h.fallecidos
+FROM riesgo_historico h
+JOIN incidentes i ON i.id = h.incidente_id
+LEFT JOIN dataset_historico d ON d.id = h.dataset_id
+WHERE (sqlc.narg(incidente_ids)::int[] IS NULL OR h.incidente_id = ANY(sqlc.narg(incidente_ids)::int[]))
+AND (sqlc.narg(desde)::timestamptz IS NULL OR h.created_at >= sqlc.narg(desde)::timestamptz)
+AND (sqlc.narg(hasta)::timestamptz IS NULL OR h.created_at <= sqlc.narg(hasta)::timestamptz)
+ORDER BY h.created_at, h.origen, latitude, longitude;

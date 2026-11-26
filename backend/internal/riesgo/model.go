@@ -3,6 +3,8 @@ package riesgo
 import (
 	"math"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Parámetros del modelo de riesgo (ver backend/GUIA_RIESGO.md). Cambiar
@@ -10,7 +12,8 @@ import (
 // reporte_historico_peso, es una versión nueva del modelo: subir
 // VersionModelo.
 const (
-	VersionModelo = 1
+	// 2: entran los datasets importados (migración 004).
+	VersionModelo = 2
 
 	// Zonas (DBSCAN): un reporte forma zona si tiene al menos MinPuntos
 	// reportes (contándose) a menos de EpsM metros. Calibrado con los datos
@@ -163,4 +166,23 @@ func NombreZona(colonia string) string {
 		return NombreZonaSinColonia
 	}
 	return colonia
+}
+
+// Dataset histórico importado.
+type Dataset struct {
+	ID         uuid.UUID
+	Nombre     string
+	Archivo    string
+	Filas      int
+	CargadoPor *uuid.UUID
+	CreatedAt  time.Time
+}
+
+// ImportarTxParams es lo que guarda Store.ImportarDataset en una transacción.
+type ImportarTxParams struct {
+	Nombre  string
+	Archivo string
+	Sha256  string
+	ActorID uuid.UUID
+	Filas   []FilaDataset
 }

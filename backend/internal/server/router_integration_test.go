@@ -170,7 +170,7 @@ func newTestClient(t *testing.T, opts ...opcionTest) *testClient {
 		})),
 		Centros: centro.NewHandler(centros),
 		Areas:   area.NewHandler(area.NewService(reportes, centros)),
-		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)))),
+		Riesgo:  riesgo.NewHandler(riesgo.NewService(riesgo.NewStore(testPool(t)), geo.PoligonoBC)),
 	}, testJWTSecret, usuarios.GetPasswordChangedAtByUserID, routerOpts...)
 
 	return &testClient{t: t, router: router, multimedia: almacen, mailer: mailer, verificador: verificador}

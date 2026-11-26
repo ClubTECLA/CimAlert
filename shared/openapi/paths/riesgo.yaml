@@ -83,11 +83,203 @@ obtenerResumenRiesgo:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
 
+datasetsHistoricos:
+  get:
+    operationId: listarDatasetsHistoricos
+    description: Datasets históricos importados, del más reciente al más antiguo.
+    security:
+      - bearerAuth: [admin, moderador, analista, proteccion_civil, rescatista]
+    responses:
+      '200':
+        description: Datasets importados
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/DatasetHistorico'
+      '401':
+        description: No autenticado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: El rol del usuario no tiene acceso a riesgo
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+  post:
+    operationId: importarDatasetHistorico
+    description: >-
+      Importa un archivo .xlsx o .csv de incidentes históricos (formato en ImportarDatasetRequest). Valida todas las
+      filas antes de guardar: si alguna es inválida no importa nada y responde 422 con los errores por fila. La
+      categoría se busca en el catálogo por nombre o etiqueta, sin importar mayúsculas ni acentos ("Derrumbe" cuenta
+      como deslave). El mismo archivo no se puede importar dos veces. Queda en el historial
+      (riesgo.importar_dataset). El body es de máximo 1 MiB.
+    security:
+      - bearerAuth: [admin, moderador, analista, proteccion_civil, rescatista]
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            $ref: '#/components/schemas/ImportarDatasetRequest'
+    responses:
+      '201':
+        description: Dataset importado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetHistorico'
+      '400':
+        description: Archivo faltante, multipart inválido, archivo que no es .xlsx ni .csv o sin los encabezados del formato
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: No autenticado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: El rol del usuario no tiene acceso a riesgo
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '409':
+        description: Ese archivo ya se importó
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '413':
+        description: El archivo es demasiado grande
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '422':
+        description: Hay filas inválidas; no se importó nada
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorImportacion'
+
+datasetHistoricoPorId:
+  delete:
+    operationId: eliminarDatasetHistorico
+    description: Borra el dataset y todos sus incidentes. Queda en el historial (riesgo.eliminar_dataset).
+    security:
+      - bearerAuth: [admin, moderador, analista, proteccion_civil, rescatista]
+    parameters:
+      - name: datasetId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    responses:
+      '204':
+        description: Dataset borrado
+      '400':
+        description: ID de dataset inválido (no es un UUID)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: No autenticado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: El rol del usuario no tiene acceso a riesgo
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '404':
+        description: Dataset no encontrado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
+exportarRiesgo:
+  get:
+    operationId: exportarRiesgo
+    description: >-
+      Descarga los incidentes históricos (reportes marcados como históricos y filas de los datasets) con el mismo
+      filtro que el resumen. Las columnas son las del formato de importación más Origen (reporte o dataset) y
+      Dataset, así que el archivo se puede volver a importar (las dos últimas se ignoran al importar). El CSV va en
+      UTF-8 con BOM para que Excel respete los acentos, y un texto que empieza con =, +, - o @ lleva ' adelante para
+      que no se tome como fórmula (al importar se quita). Volver a importarlo sigue los límites de la importación
+      (50,000 filas y 1 MiB; una exportación más grande se parte por periodo o categoría) y se suma a lo que ya hay:
+      si los datasets originales siguen cargados, sus filas quedan duplicadas. Solo lectura: no registra nada en el
+      historial.
+    security:
+      - bearerAuth: [admin, moderador, analista, proteccion_civil, rescatista]
+    parameters:
+      - { name: formato, in: query, required: false,
+        schema: { type: string, enum: [csv, xlsx], default: csv } }
+      - { name: incidente_id, in: query, required: false, style: form, explode: true,
+        schema: { type: array, items: { type: integer } } }
+      - { name: desde, in: query, required: false, schema: { type: string, format: date-time } }
+      - { name: hasta, in: query, required: false, schema: { type: string, format: date-time } }
+    responses:
+      '200':
+        description: Archivo con los incidentes históricos
+        headers:
+          Content-Disposition:
+            required: true
+            schema:
+              type: string
+              example: attachment; filename="riesgo-historico-2026-11-19.csv"
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+            schema:
+              type: string
+              format: binary
+      '400':
+        description: Datos inválidos (desde posterior a hasta)
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: No autenticado
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '403':
+        description: El rol del usuario no tiene acceso a riesgo
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
 components:
   schemas:
     MapaCalor:
       $ref: '../schemas/riesgo/mapa_calor.yaml'
     ResumenRiesgo:
       $ref: '../schemas/riesgo/resumen_riesgo.yaml'
+    DatasetHistorico:
+      $ref: '../schemas/riesgo/dataset_historico.yaml'
+    ImportarDatasetRequest:
+      $ref: '../schemas/riesgo/importar_dataset_request.yaml'
+    ErrorImportacion:
+      $ref: '../schemas/riesgo/error_importacion.yaml'
     ErrorResponse:
       $ref: '../schemas/error_response.yaml'

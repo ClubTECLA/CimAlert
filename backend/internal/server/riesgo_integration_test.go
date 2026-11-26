@@ -112,8 +112,8 @@ func TestRiesgo(t *testing.T) {
 		if len(res.Colonias) != 1 || res.Colonias[0].Nombre != "Colonia Prueba Riesgo" || res.Colonias[0].Reportes != 6 {
 			t.Errorf("colonias = %+v, quería [Colonia Prueba Riesgo, 6]", res.Colonias)
 		}
-		if res.VersionModelo != 1 {
-			t.Errorf("version_modelo = %d, quería 1", res.VersionModelo)
+		if res.VersionModelo != 2 {
+			t.Errorf("version_modelo = %d, quería 2", res.VersionModelo)
 		}
 	})
 

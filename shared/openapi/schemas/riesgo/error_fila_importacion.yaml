@@ -1,0 +1,15 @@
+type: object
+description: Problema de una fila del archivo importado.
+required: [fila, columna, mensaje]
+properties:
+  fila:
+    type: integer
+    description: Renglón del archivo (el encabezado es el 1).
+    example: 33
+  columna:
+    type: string
+    description: Columna con el problema, como se llama en el formato; vacía si es de toda la fila.
+    example: Mes/año del Incidente
+  mensaje:
+    type: string
+    example: falta la fecha
