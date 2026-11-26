@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,9 @@ const (
 	maxPersonas          = 1000000
 	xlsxMaxDescomprimido = 64 << 20
 	xlsxMaxXML           = 32 << 20
+	// xlsxMaxColumnas por renglón (ver leerHoja). El formato usa 7 columnas
+	// y los archivos reales llegan a 14.
+	xlsxMaxColumnas = 100
 )
 
 // Columnas del formato de importación, con el nombre que se muestra en los
@@ -432,11 +436,9 @@ func leerXLSX(contenido []byte) (tabla, error) {
 
 	var faltanPrimera []string
 	for i, hoja := range f.GetSheetList() {
-		// RawCellValue: los números sin el formato de la celda (las fechas como
-		// número de serie y las coordenadas con todos sus decimales).
-		renglones, err := f.GetRows(hoja, excelize.Options{RawCellValue: true})
+		renglones, err := leerHoja(f, hoja)
 		if err != nil {
-			return tabla{}, formatoInvalido("no se pudo leer la hoja %q", hoja)
+			return tabla{}, err
 		}
 		t, faltan := armarTabla(renglones, 1)
 		if faltan == nil {
@@ -451,6 +453,66 @@ func leerXLSX(contenido []byte) (tabla, error) {
 		}
 	}
 	return tabla{}, formatoInvalido("ninguna hoja tiene los encabezados del formato; en la primera faltan: %s", strings.Join(faltanPrimera, ", "))
+}
+
+// leerHoja lee una hoja renglón por renglón (lo mismo que GetRows, pero sin
+// juntar la hoja entera antes de revisarla). excelize rellena cada renglón con
+// celdas vacías hasta su última celda con dato: con un valor en la columna XFD
+// (la 16,384), un .xlsx de 12 KB con 1,000 renglones pedía más de 1 GB. Por eso:
+//   - un renglón con más de xlsxMaxColumnas rechaza el archivo en cuanto se lee;
+//   - de los renglones de datos solo se guarda hasta la última columna del formato;
+//   - el límite de filas se aplica mientras se lee;
+//   - si el encabezado (el primer renglón no vacío) no es del formato, la hoja
+//     no se sigue leyendo: armarTabla dice qué le falta.
+func leerHoja(f *excelize.File, hoja string) ([][]string, error) {
+	rows, err := f.Rows(hoja)
+	if err != nil {
+		return nil, formatoInvalido("no se pudo leer la hoja %q", hoja)
+	}
+	defer rows.Close()
+
+	var renglones [][]string
+	hasta := -1 // columnas que se guardan de cada renglón; -1 = aún sin encabezado
+	datos := 0
+	for rows.Next() {
+		// RawCellValue: los números sin el formato de la celda (las fechas como
+		// número de serie y las coordenadas con todos sus decimales).
+		r, err := rows.Columns(excelize.Options{RawCellValue: true})
+		if err != nil {
+			return nil, formatoInvalido("no se pudo leer la hoja %q", hoja)
+		}
+		if len(r) > xlsxMaxColumnas {
+			return nil, formatoInvalido("la hoja %q tiene un renglón con más de %d columnas", hoja, xlsxMaxColumnas)
+		}
+		vacio := strings.TrimSpace(strings.Join(r, "")) == ""
+		if hasta < 0 {
+			renglones = append(renglones, r)
+			if vacio {
+				continue
+			}
+			columnas, faltan := columnasDelEncabezado(r)
+			if faltan != nil {
+				break
+			}
+			for _, i := range columnas {
+				hasta = max(hasta, i+1)
+			}
+			continue
+		}
+		r = slices.Clone(r[:min(len(r), hasta)])
+		if !vacio && strings.TrimSpace(strings.Join(r, "")) != "" {
+			// Mismo límite que LeerDataset, que solo cuenta los renglones con
+			// algo en las columnas del formato; aquí se corta antes de guardarlos.
+			if datos++; datos > MaxFilasDataset {
+				return nil, formatoInvalido("el archivo tiene más de %d filas", MaxFilasDataset)
+			}
+		}
+		renglones = append(renglones, r)
+	}
+	if err := rows.Error(); err != nil {
+		return nil, formatoInvalido("no se pudo leer la hoja %q", hoja)
+	}
+	return renglones, nil
 }
 
 func leerCSV(contenido []byte) (tabla, error) {
@@ -511,8 +573,24 @@ func armarTabla(renglones [][]string, primero int) (tabla, []string) {
 		return tabla{}, columnasObligatorias
 	}
 
+	columnas, faltan := columnasDelEncabezado(renglones[inicio])
+	if faltan != nil {
+		return tabla{}, faltan
+	}
+
+	t := tabla{columnas: columnas}
+	for i := inicio + 1; i < len(renglones); i++ {
+		t.filas = append(t.filas, filaCruda{num: primero + i, celdas: renglones[i]})
+	}
+	return t, nil
+}
+
+// columnasDelEncabezado reconoce las columnas del formato en un encabezado
+// (columna del formato → índice; si una se repite, cuenta la primera) y
+// devuelve las obligatorias que faltan.
+func columnasDelEncabezado(encabezado []string) (map[string]int, []string) {
 	columnas := map[string]int{}
-	for i, enc := range renglones[inicio] {
+	for i, enc := range encabezado {
 		col, ok := aliasColumnas[normalizar(enc)]
 		if !ok {
 			continue // columna de más
@@ -527,15 +605,7 @@ func armarTabla(renglones [][]string, primero int) (tabla, []string) {
 			faltan = append(faltan, col)
 		}
 	}
-	if faltan != nil {
-		return tabla{}, faltan
-	}
-
-	t := tabla{columnas: columnas}
-	for i := inicio + 1; i < len(renglones); i++ {
-		t.filas = append(t.filas, filaCruda{num: primero + i, celdas: renglones[i]})
-	}
-	return t, nil
+	return columnas, faltan
 }
 
 // separadorCSV elige entre coma, punto y coma y tabulador según cuál aparece

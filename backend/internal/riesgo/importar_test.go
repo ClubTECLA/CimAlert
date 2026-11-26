@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -199,6 +200,77 @@ func TestLeerDataset_XLSXSinEncabezados(t *testing.T) {
 	buf, _ := f.WriteToBuffer()
 	_, err := LeerDataset(buf.Bytes(), catalogoPrueba, zonaPrueba, ahoraPrueba)
 	if !errors.Is(err, ErrFormatoInvalido) || !strings.Contains(err.Error(), "ninguna hoja tiene los encabezados") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// xlsxConRenglones arma un .xlsx con el encabezado del formato y n renglones
+// de datos; extra pone además un valor en esa columna de cada renglón (0 = no).
+func xlsxConRenglones(t *testing.T, n, extra int) []byte {
+	t.Helper()
+	f := excelize.NewFile()
+	defer f.Close()
+	sw, err := f.NewStreamWriter("Sheet1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sw.SetRow("A1", []any{"Latitud", "Longitud", "Fecha", "Categoria"}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 2; i <= n+1; i++ {
+		fila := []any{32.5, -117.05, "2024-01", "Socavón"}
+		if extra > 0 {
+			fila = append(fila, make([]any, extra-len(fila)-1)...)
+			fila = append(fila, "x")
+		}
+		celda, _ := excelize.CoordinatesToCellName(1, i)
+		if err := sw.SetRow(celda, fila); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := sw.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// Un valor en la última columna de Excel (XFD) hace que excelize rellene cada
+// renglón con 16,384 celdas: un archivo de pocos KB pedía más de 1 GB.
+func TestLeerDataset_XLSXRenglonDemasiadoAncho(t *testing.T) {
+	contenido := xlsxConRenglones(t, 1000, 16384)
+	var m runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&m)
+	antes := m.TotalAlloc
+	_, err := LeerDataset(contenido, catalogoPrueba, zonaPrueba, ahoraPrueba)
+	runtime.ReadMemStats(&m)
+
+	if !errors.Is(err, ErrFormatoInvalido) || err.Error() != `la hoja "Sheet1" tiene un renglón con más de 100 columnas` {
+		t.Errorf("err = %v", err)
+	}
+	asignado := m.TotalAlloc - antes
+	t.Logf("archivo de %d KB, asignó %d KB", len(contenido)>>10, asignado>>10)
+	if asignado > 32<<20 {
+		t.Errorf("asignó %d MB; el tope de columnas debería cortar antes", asignado>>20)
+	}
+}
+
+// Con el tope justo, un valor en la columna 100 (fuera del formato) se ignora.
+func TestLeerDataset_XLSXColumnaDeMasDentroDelTope(t *testing.T) {
+	filas, err := LeerDataset(xlsxConRenglones(t, 2, xlsxMaxColumnas), catalogoPrueba, zonaPrueba, ahoraPrueba)
+	if err != nil || len(filas) != 2 {
+		t.Fatalf("filas = %d, err = %v", len(filas), err)
+	}
+}
+
+// El límite de filas corta mientras se lee la hoja, no después de juntarla.
+func TestLeerDataset_XLSXDemasiadasFilas(t *testing.T) {
+	_, err := LeerDataset(xlsxConRenglones(t, MaxFilasDataset+1, 0), catalogoPrueba, zonaPrueba, ahoraPrueba)
+	if !errors.Is(err, ErrFormatoInvalido) || err.Error() != "el archivo tiene más de 50000 filas" {
 		t.Errorf("err = %v", err)
 	}
 }

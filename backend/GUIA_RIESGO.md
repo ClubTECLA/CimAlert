@@ -274,6 +274,14 @@ encabezados y separadores, así que un archivo de casi 1 MiB recibe `413` y conv
 unos KB de margen. Además, hasta 50 000 filas, y un `.xlsx` puede ocupar hasta 64 MiB descomprimido.
 El archivo real de 72 filas pesa 53 KB.
 
+En un `.xlsx`, un renglón puede tener hasta 100 columnas (el formato usa 7 y los
+archivos reales llegan a 14); uno con más rechaza el archivo con `400`. La hoja se lee
+renglón por renglón y de cada uno solo se guardan las columnas del formato: Excel
+rellena un renglón con celdas vacías hasta su última celda con dato, y sin ese tope un
+`.xlsx` de pocos KB con un valor en la última columna (XFD) pedía más de 1 GB de
+memoria. Si un archivo real choca con el tope, se borran las celdas que sobran a la
+derecha de la tabla.
+
 Importar y borrar quedan en el `historial` (`riesgo.importar_dataset`,
 `riesgo.eliminar_dataset`, entidad `dataset_historico`) con el nombre, el archivo y
 las filas.
