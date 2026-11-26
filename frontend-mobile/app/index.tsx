@@ -1,13 +1,13 @@
 import { Redirect, useRouter } from 'expo-router';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AuthMapBackground } from '../src/components/auth/AuthMapBackground';
-import { BotonPildora } from '../src/components/BotonPildora';
-import { LocationPinIcon } from '../src/components/icons/LocationPinIcon';
-import { usePermisosVistos } from '../src/features/bienvenida/permisosVistos';
-import { useSessionStore } from '../src/lib/session';
-import { colors } from '../src/theme/colors';
-import { fontFamily } from '../src/theme/typography';
+import { AuthMapBackground } from '@/components/auth/AuthMapBackground';
+import { BotonPildora } from '@/components/BotonPildora';
+import { LocationPinIcon } from '@/components/icons/LocationPinIcon';
+import { usePermisosVistos } from '@/features/bienvenida/permisosVistos';
+import { useSessionStore } from '@/lib/session';
+import { colors } from '@/theme/colors';
+import { fontFamily } from '@/theme/typography';
 
 export default function Bienvenida() {
   const router = useRouter();

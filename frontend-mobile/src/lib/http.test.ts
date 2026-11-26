@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // La sesión persiste en AsyncStorage (módulo nativo): aquí solo importa el token.
-vi.mock('./session', () => ({ useSessionStore: { getState: () => ({ token: 'tok-123' }) } }));
+const { expirarSesion } = vi.hoisted(() => ({ expirarSesion: vi.fn() }));
+vi.mock('./session', () => ({ useSessionStore: { getState: () => ({ token: 'tok-123', expirarSesion }) } }));
 vi.mock('./env', () => ({ env: { apiUrl: 'http://localhost/api/v1', useMocks: false } }));
 
 import { ErrorRed, http } from './http';
@@ -47,6 +48,81 @@ describe('http', () => {
     await http('/reportes/r-1/multimedia', { method: 'POST', body: new FormData() });
 
     expect(cabecerasDe(fetchMock).Authorization).toBe('Bearer tok-123');
+  });
+
+  it('devuelve el JSON de la respuesta', async () => {
+    await expect(http('/reportes')).resolves.toEqual({ ok: true });
+  });
+
+  it.each([202, 204])('una respuesta %i sin cuerpo devuelve undefined', async (status) => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status }));
+
+    await expect(http('/auth/recovery', { method: 'POST' })).resolves.toBeUndefined();
+  });
+
+  describe('sesión rechazada', () => {
+    beforeEach(() => expirarSesion.mockClear());
+
+    it('un 401 con sesión cierra la sesión con el token que se mandó y sigue lanzando el error', async () => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'no autenticado' }, 401));
+
+      await expect(http('/auth/me')).rejects.toMatchObject({ status: 401 });
+      expect(expirarSesion).toHaveBeenCalledWith('tok-123');
+    });
+
+    it('si quien llama manda su propio token, el 401 se reporta con ese token y no con el de la sesión', async () => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'no autenticado' }, 401));
+
+      await expect(http('/auth/me', { headers: { Authorization: 'Bearer otro' } })).rejects.toMatchObject({ status: 401 });
+      // expirarSesion('otro') no cierra la sesión guardada (tok-123): solo actúa si es el token actual.
+      expect(expirarSesion).toHaveBeenCalledWith('otro');
+    });
+
+    it('un authorization en minúsculas reemplaza al de la sesión: se manda y se reporta solo ese', async () => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'no autenticado' }, 401));
+
+      await expect(http('/auth/me', { headers: { authorization: 'Bearer otro' } })).rejects.toMatchObject({ status: 401 });
+      const enviados = cabecerasDe(fetchMock);
+      expect(Object.keys(enviados).filter((k) => k.toLowerCase() === 'authorization')).toEqual(['authorization']);
+      expect(expirarSesion).toHaveBeenCalledWith('otro');
+      expect(expirarSesion).not.toHaveBeenCalledWith('tok-123');
+    });
+
+    it('una ruta pública (auth: false) no manda el token y su 401 no cierra la sesión', async () => {
+      // Alguien con sesión abierta se equivoca de contraseña en el login: 401 por credenciales.
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'credenciales invalidas' }, 401));
+
+      await expect(http('/auth/login', { method: 'POST' }, { auth: false })).rejects.toMatchObject({ status: 401 });
+      expect(cabecerasDe(fetchMock).Authorization).toBeUndefined();
+      expect(expirarSesion).not.toHaveBeenCalled();
+    });
+
+    it('en una ruta pública, ni un Authorization puesto a mano hace que el 401 cierre la sesión', async () => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'credenciales invalidas' }, 401));
+
+      await expect(
+        http('/auth/login', { method: 'POST', headers: { Authorization: 'Bearer tok-123' } }, { auth: false }),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(expirarSesion).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['una lista de pares', [['Authorization', 'Bearer otro']] as [string, string][]],
+      ['un objeto Headers', new Headers({ Authorization: 'Bearer otro' })],
+    ])('el token de quien llama en %s reemplaza al de la sesión', async (_, headers) => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'no autenticado' }, 401));
+
+      await expect(http('/auth/me', { headers })).rejects.toMatchObject({ status: 401 });
+      const enviados = Object.entries(cabecerasDe(fetchMock)).filter(([k]) => k.toLowerCase() === 'authorization');
+      expect(enviados.map(([, v]) => v)).toEqual(['Bearer otro']);
+      expect(expirarSesion).toHaveBeenCalledWith('otro');
+    });
+
+    it('otros errores (403, 500) no tocan la sesión', async () => {
+      fetchMock.mockResolvedValueOnce(respuestaJson({ message: 'prohibido' }, 403));
+      await expect(http('/reportes')).rejects.toMatchObject({ status: 403 });
+      expect(expirarSesion).not.toHaveBeenCalled();
+    });
   });
 
   describe('tiempo límite', () => {

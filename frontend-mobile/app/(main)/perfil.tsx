@@ -1,9 +1,9 @@
 import React from 'react';
 import { router } from 'expo-router';
 import { PerfilScreen } from '@/screens/PerfilScreen';
-import { queryClient } from '@/lib/query-client';
-import { useEsInvitado, useSessionStore } from '@/lib/session';
-import { perfilKeys, useMiPerfil, useMisReportes } from '@/features/perfil/hooks';
+import { puedeSimularSesion, useEsInvitado, useSessionStore } from '@/lib/session';
+import { sesionApi } from '@/features/sesion/api';
+import { useMiPerfil, useMisReportes } from '@/features/perfil/hooks';
 import { nombreVisible } from '@/features/perfil/nombre';
 
 export default function Perfil() {
@@ -15,9 +15,11 @@ export default function Perfil() {
   const misReportes = useMisReportes();
 
   const cerrarSesion = () => {
-    // Sin esto, el siguiente usuario vería un instante el perfil del anterior.
-    queryClient.removeQueries({ queryKey: perfilKeys.me });
-    queryClient.removeQueries({ queryKey: perfilKeys.misReportes });
+    // Avisa al backend sin esperar: la sesión se cierra en el teléfono aunque la petición falle.
+    if (!esInvitado && !puedeSimularSesion) {
+      sesionApi.logout().catch((error: unknown) => console.warn('Logout request failed:', error));
+    }
+    // app/_layout.tsx borra de la caché el perfil y los reportes del usuario al quedar sin token.
     limpiarSesion();
   };
 

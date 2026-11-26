@@ -7,8 +7,8 @@ import { env } from './env';
 /** `null`: todavía no elige (Bienvenida). `invitado`: solo ve el mapa y los reportes. */
 export type ModoSesion = 'invitado' | 'usuario';
 
-// El login aún no está conectado al backend: con mocks, terminar el registro o el inicio de
-// sesión deja esta sesión de prueba para poder recorrer la app como usuario.
+// Con mocks (sin backend), terminar el registro o el inicio de sesión deja esta sesión de prueba
+// para poder recorrer la app como usuario. Con backend real se guarda el token de /auth/login o /auth/register.
 const TOKEN_SIMULADO = 'sesion-simulada';
 
 interface SessionState {
@@ -20,11 +20,26 @@ interface SessionState {
   iniciarSesion: (token?: string) => void;
   /** Cierra la sesión o sale del modo invitado: vuelve a la Bienvenida. */
   clear: () => void;
+  /** El backend rechazó `token` (401: venció o se cambió la contraseña). Cierra la sesión y avisa,
+   * pero solo si ese sigue siendo el token actual: varias peticiones rechazadas a la vez, o una que
+   * llega después de iniciar sesión de nuevo, no deben cerrar la sesión nueva ni avisar dos veces. */
+  expirarSesion: (token: string) => void;
+}
+
+type AlExpirar = () => void;
+const alExpirar = new Set<AlExpirar>();
+
+/** Avisa cuando el backend rechaza la sesión. Devuelve la función para dejar de escuchar. */
+export function onSesionExpirada(cb: AlExpirar): () => void {
+  alExpirar.add(cb);
+  return () => {
+    alExpirar.delete(cb);
+  };
 }
 
 export const useSessionStore = create<SessionState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       modo: null,
       setToken: (token) => set({ token }),
@@ -34,6 +49,11 @@ export const useSessionStore = create<SessionState>()(
         if (efectivo !== null) set({ token: efectivo, modo: 'usuario' });
       },
       clear: () => set({ token: null, modo: null }),
+      expirarSesion: (token) => {
+        if (get().token !== token) return;
+        set({ token: null, modo: null });
+        alExpirar.forEach((cb) => cb());
+      },
     }),
     {
       // Se recuerda entre aperturas: quien ya eligió (invitado o con sesión) entra directo al mapa.

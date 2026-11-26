@@ -1,3 +1,6 @@
+// Pruebas de mappers.ts: la traducción de las respuestas del backend (shared/openapi) a los tipos
+// que usan las pantallas de mobile. Si el backend cambia un campo o un estado, aquí se nota antes
+// que en la app.
 import { describe, expect, it } from 'vitest';
 import {
   categoriaDeIncidente,
@@ -15,8 +18,10 @@ import {
   type ReporteResumenApi,
 } from './mappers';
 
+// Fecha fija para que el `created_at` de respaldo de mapearResumen sea predecible.
 const AHORA = new Date('2026-10-22T12:00:00.000Z');
 
+// Arma una entrada del catálogo `GET /incidentes`; solo importan id, nombre (slug) y etiqueta.
 const incidente = (id: number, nombre: string, etiqueta = nombre): IncidenteApi => ({
   id,
   nombre,
@@ -30,6 +35,7 @@ const incidente = (id: number, nombre: string, etiqueta = nombre): IncidenteApi 
 
 const catalogo = [incidente(1, 'luz'), incidente(2, 'socavon'), incidente(7, 'incendio', 'Incendio')];
 
+// Un reporte como llega en la lista (`GET /reportes/cercanos`); cada test cambia solo lo que prueba.
 const resumen = (parcial: Partial<ReporteResumenApi> = {}): ReporteResumenApi => ({
   id: 'r1',
   incidente_id: 2,
@@ -43,6 +49,8 @@ const resumen = (parcial: Partial<ReporteResumenApi> = {}): ReporteResumenApi =>
   ...parcial,
 });
 
+// El backend tiene 5 estados y mobile muestra 3. Comprueba cada equivalencia y que lo que no se
+// debe mostrar (Descartado o un estado nuevo que mobile no conozca) quede fuera del mapa.
 describe('mapearEstado', () => {
   it.each([
     ['Pendiente', 'pendiente'],
@@ -59,6 +67,8 @@ describe('mapearEstado', () => {
   });
 });
 
+// La categoría (icono y filtro del mapa) sale del slug del incidente. Comprueba que una categoría
+// nueva del backend funcione sin cambiar mobile, y que un incidente desconocido no rompa la lista.
 describe('categoriaDeIncidente', () => {
   it('usa el nombre (slug) del incidente', () => {
     expect(categoriaDeIncidente(incidente(2, 'socavon'))).toBe('socavon');
@@ -73,6 +83,9 @@ describe('categoriaDeIncidente', () => {
   });
 });
 
+// Cómo se firma un comentario: el personal (cualquier rol que no sea ciudadano) firma con el nombre
+// de su rol y el ciudadano queda anónimo. También cubre roles nuevos o raros, para que nunca se
+// muestre algo vacío ni se rompa con nombres que existen en Object ("constructor").
 describe('esRolOficial / autorDeComentario', () => {
   it('todo rol distinto de ciudadano es oficial y se firma con el nombre del rol', () => {
     expect(esRolOficial('rescatista')).toBe(true);
@@ -103,6 +116,8 @@ describe('esRolOficial / autorDeComentario', () => {
   });
 });
 
+// Las fotos las sirve nginx en /multimedia, fuera de /api/v1. Comprueba que la URL de la foto se
+// arme con el host de la API (con o sin puerto) y sin el prefijo de la API.
 describe('origenDeApi / urlMultimedia', () => {
   it('quita la ruta (/api/v1) y deja esquema + host + puerto', () => {
     expect(origenDeApi('http://10.0.2.2/api/v1')).toBe('http://10.0.2.2');
@@ -120,6 +135,8 @@ describe('origenDeApi / urlMultimedia', () => {
   });
 });
 
+// Cada elemento de la lista del mapa: comprueba campo por campo la traducción y que un reporte
+// Descartado no llegue al mapa.
 describe('mapearResumen', () => {
   it('traduce campos del backend al tipo Reporte de mobile', () => {
     expect(mapearResumen(resumen(), catalogo, AHORA)).toEqual({
@@ -144,6 +161,8 @@ describe('mapearResumen', () => {
   });
 });
 
+// Cada comentario del hilo: el autor sale del rol, no del username, para que un ciudadano nunca
+// quede expuesto aunque el backend mande su nombre.
 describe('mapearComentario', () => {
   it('un rol oficial firma con el nombre del rol, no con el username', () => {
     const c = mapearComentario({
@@ -181,6 +200,8 @@ describe('mapearComentario', () => {
   });
 });
 
+// La pantalla de detalle: a diferencia de la lista, trae fecha real, etiquetas y foto. Comprueba de
+// dónde sale cada una y el caso de un Descartado abierto por enlace directo.
 describe('mapearDetalle', () => {
   const detalle = (parcial: Partial<ReporteApi> = {}): ReporteApi => ({
     ...resumen(),
@@ -216,6 +237,8 @@ describe('mapearDetalle', () => {
   });
 });
 
+// Las zonas que vigilan las alertas cercanas: un reporte resuelto sigue en el mapa, pero ya no debe
+// generar alertas.
 describe('zonasActivas', () => {
   const base = { titulo: 'X', categorias: [], tags: [], lat: 32.5, lng: -117, upvotes: 0, user_id: 'u1', created_at: '' };
 

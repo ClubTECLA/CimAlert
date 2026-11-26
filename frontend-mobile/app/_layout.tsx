@@ -1,11 +1,13 @@
 import { useEffect } from 'react';
+import { Alert } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/query-client';
-import { useSesionCargada, useSessionStore } from '@/lib/session';
+import { onSesionExpirada, useSesionCargada, useSessionStore } from '@/lib/session';
+import { perfilKeys } from '@/features/perfil/hooks';
 import { iniciarSesionDev } from '@/lib/devAuth';
 // Define la tarea de zonas de peligro en el ámbito global (debe existir aunque no haya vistas).
 import '@/lib/alertasCercanas';
@@ -39,6 +41,33 @@ export default function RootLayout() {
   useEffect(() => {
     if (sesionCargada) void iniciarSesionDev();
   }, [sesionCargada]);
+
+  // Al cambiar de sesión (login, registro, cerrar sesión o sesión vencida) lo que se pidió con el
+  // token anterior, o sin token como invitado, ya no vale: se vuelve a pedir con el nuevo. Sin esto,
+  // al entrar desde el modo invitado el mapa seguía con el error de los reportes que pidió sin token.
+  useEffect(
+    () =>
+      useSessionStore.subscribe((estado, anterior) => {
+        if (estado.token === anterior.token) return;
+        // Los datos de la cuenta (perfil, mis reportes) se borran en cualquier cambio de token: al cerrar
+        // sesión y también al pasar de una cuenta a otra, para que la nueva no vea los del anterior.
+        queryClient.removeQueries({ queryKey: perfilKeys.me });
+        queryClient.removeQueries({ queryKey: perfilKeys.misReportes });
+        // Una petición que seguía en curso salió con el token anterior (o sin token, como invitado), y
+        // `invalidateQueries` no cancela la primera carga de una consulta: se cancela antes de volver a pedir.
+        void queryClient.cancelQueries().then(() => queryClient.invalidateQueries());
+      }),
+    [],
+  );
+
+  // El backend rechazó la sesión (http.ts ya la cerró y la navegación vuelve sola a la Bienvenida).
+  useEffect(
+    () =>
+      onSesionExpirada(() =>
+        Alert.alert('Tu sesión expiró', 'Vuelve a iniciar sesión para seguir reportando y comentando.')
+      ),
+    [],
+  );
 
   useEffect(() => {
     if (listo) {

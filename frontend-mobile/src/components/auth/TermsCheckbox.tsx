@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../../theme/colors';
-import { fontFamily } from '../../theme/typography';
+import { colors } from '@/theme/colors';
+import { fontFamily } from '@/theme/typography';
 
 type Props = {
   checked: boolean;

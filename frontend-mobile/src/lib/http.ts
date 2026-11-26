@@ -51,29 +51,48 @@ export async function fetchConRed(
 export async function http<T>(
   path: string,
   init: RequestInit = {},
-  { tiempoLimiteMs }: { tiempoLimiteMs?: number } = {},
+  {
+    tiempoLimiteMs,
+    auth = true,
+  }: {
+    tiempoLimiteMs?: number;
+    /** `false` en las rutas públicas (login, registro, recuperación): no se manda el token de la sesión,
+     * así que su 401 (p. ej. contraseña incorrecta) nunca se confunde con una sesión vencida. */
+    auth?: boolean;
+  } = {},
 ): Promise<T> {
-  const token = useSessionStore.getState().token;
+  const token = auth ? useSessionStore.getState().token : null;
   // Con un formulario (subir una foto) `fetch` fija el Content-Type con su boundary; forzar JSON lo rompería.
   const esFormulario = init.body instanceof FormData;
 
-  const response = await fetchConRed(
-    `${env.apiUrl}${path}`,
-    {
-      ...init,
-      headers: {
-        ...(!esFormulario && { 'Content-Type': 'application/json' }),
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...init.headers,
-      },
-    },
-    tiempoLimiteMs,
-  );
+  const headers: Record<string, string> = {
+    ...(!esFormulario && { 'Content-Type': 'application/json' }),
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+  // Los headers de quien llama van al final y reemplazan a los de arriba aunque cambien las mayúsculas
+  // ("authorization" sustituye a "Authorization"): HTTP no las distingue y no deben quedar las dos.
+  // `new Headers` acepta las tres formas de RequestInit.headers: objeto, lista de pares o Headers.
+  new Headers(init.headers).forEach((valor, nombre) => {
+    for (const k of Object.keys(headers)) if (k.toLowerCase() === nombre.toLowerCase()) delete headers[k];
+    headers[nombre] = valor;
+  });
+  // El token que de verdad se mandó: quien llama puede poner su propio Authorization.
+  const autorizacion = Object.entries(headers).find(([k]) => k.toLowerCase() === 'authorization')?.[1];
+  const tokenEnviado = autorizacion?.startsWith('Bearer ') ? autorizacion.slice('Bearer '.length) : null;
+
+  const response = await fetchConRed(`${env.apiUrl}${path}`, { ...init, headers }, tiempoLimiteMs);
 
   if (!response.ok) {
+    // Con sesión, un 401 significa que el token ya no sirve (venció a las 24 h o se cambió la
+    // contraseña): se cierra la sesión en el teléfono en vez de seguir fallando en cada pantalla.
+    // Solo si el rechazado fue el token de la sesión: expirarSesion además ignora uno que ya no es el actual.
+    // Nunca en una ruta pública (`auth: false`): ahí un 401 es de credenciales, no de la sesión.
+    if (response.status === 401 && auth && tokenEnviado) useSessionStore.getState().expirarSesion(tokenEnviado);
     const body = (await response.json().catch(() => null)) as { message?: string } | null;
     throw new ApiError(response.status, body?.message ?? `HTTP ${response.status}`);
   }
 
-  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+  // Sin cuerpo (204, o 202 de POST /auth/recovery) no hay JSON que leer.
+  const cuerpo = await response.text();
+  return (cuerpo ? JSON.parse(cuerpo) : undefined) as T;
 }

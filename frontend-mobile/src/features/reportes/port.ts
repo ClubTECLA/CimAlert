@@ -17,7 +17,9 @@ export interface ReportesApi {
   listar(opciones?: { desde?: string; centro?: { lat: number; lng: number }; radioM?: number }): Promise<Reporte[]>;
   /** Detalle de un reporte: a diferencia de la lista, trae la fecha real, las etiquetas y la foto. */
   detalle(id: string): Promise<Reporte>;
-  /** Reportes activos a menos de `radioM` metros del punto, del más cercano al más lejano. */
+  /** Reportes activos a menos de `radioM` metros del punto, del más cercano al más lejano. Usa el
+   * endpoint del backend (`GET /reportes/cercanos` con `lat`, `lng` y `radio`, vía `listar`); no
+   * filtra por distancia en el cliente. */
   cercanos(lat: number, lng: number, radioM: number): Promise<ZonaPeligro[]>;
   crear(req: CrearReporteRequest): Promise<Reporte>;
   /** Sube la foto (JPEG ya reducido) a un reporte y devuelve su URL pública. Solo el creador del

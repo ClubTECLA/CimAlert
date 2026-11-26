@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
-import { colors } from '../../theme/colors';
-import { fontFamily } from '../../theme/typography';
+import { colors } from '@/theme/colors';
+import { fontFamily } from '@/theme/typography';
 import { EyeIcon } from '../icons/EyeIcon';
+import { useAlEnfocar } from './teclado';
 
 type Props = Omit<TextInputProps, 'secureTextEntry'> & {
   label: string;
 };
 
-export function PasswordField({ label, style, ...inputProps }: Props) {
+export function PasswordField({ label, style, onFocus, ...inputProps }: Props) {
+  const alEnfocar = useAlEnfocar(onFocus);
   const [visible, setVisible] = useState(false);
 
   return (
@@ -20,6 +22,7 @@ export function PasswordField({ label, style, ...inputProps }: Props) {
           placeholderTextColor={colors.inputPlaceholder}
           secureTextEntry={!visible}
           {...inputProps}
+          onFocus={alEnfocar}
         />
         <Pressable
           onPress={() => setVisible((v) => !v)}
