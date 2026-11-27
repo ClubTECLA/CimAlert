@@ -1,6 +1,7 @@
 // Package mantenimiento revisa cada madrugada los archivos nuevos del servicio
 // multimedia contra la base de datos: aparta los que no cumplen las reglas o no
-// tienen fila, borra las filas sin archivo y vacía la cuarentena vieja.
+// tienen fila, borra las filas sin archivo y vacía la cuarentena vieja. De
+// paso borra las sesiones (refresh tokens) vencidas o revocadas hace tiempo.
 package mantenimiento
 
 import (
@@ -32,6 +33,9 @@ const (
 	// minFilasParaProporcion es desde cuántas filas en la ventana tiene sentido el
 	// freno por proporción: con pocas, que falte una no dice nada.
 	minFilasParaProporcion = 10
+
+	// sesionesRevocadas es cuánto se conserva una sesión revocada antes de borrarla.
+	sesionesRevocadas = 7 * 24 * time.Hour
 )
 
 // ErrFreno indica que la pasada no actuó porque iba a tocar demasiado, lo que
@@ -45,6 +49,7 @@ type store interface {
 	ListMultimediaPathsExistentes(ctx context.Context, paths []string) ([]string, error)
 	ListMultimediaPathsCreadas(ctx context.Context, arg sqlc.ListMultimediaPathsCreadasParams) ([]string, error)
 	DeleteMultimediaPorPaths(ctx context.Context, paths []string) (int64, error)
+	DeleteSesionesViejas(ctx context.Context, arg sqlc.DeleteSesionesViejasParams) (int64, error)
 }
 
 // Cliente es lo que el job necesita del servicio multimedia; *almacen.Cliente lo cumple.
@@ -119,13 +124,25 @@ func (j *Job) correrConReintentos(ctx context.Context) {
 // Pasar hace una pasada completa: revisa lo nuevo desde el último corte y vacía
 // la cuarentena vieja. Solo avanza el corte si todo salió bien, así una pasada
 // fallida se repite sobre la misma ventana (la primera vez, el corte es el inicio
-// de la ventana inicial).
+// de la ventana inicial). Las sesiones se limpian aunque falle multimedia.
 func (j *Job) Pasar(ctx context.Context) error {
 	ahora := j.ahora()
-	if err := j.revisar(ctx, ahora); err != nil {
-		return err
+	err := j.revisar(ctx, ahora)
+	if err == nil {
+		err = j.vaciarCuarentena(ctx, ahora)
 	}
-	return j.vaciarCuarentena(ctx, ahora)
+	return errors.Join(err, j.limpiarSesiones(ctx, ahora))
+}
+
+// limpiarSesiones borra las sesiones vencidas y las revocadas hace más de sesionesRevocadas.
+func (j *Job) limpiarSesiones(ctx context.Context, ahora time.Time) error {
+	revocadas := ahora.Add(-sesionesRevocadas)
+	n, err := j.store.DeleteSesionesViejas(ctx, sqlc.DeleteSesionesViejasParams{VencidasAntes: ahora, RevocadasAntes: &revocadas})
+	if err != nil {
+		return fmt.Errorf("borrar sesiones viejas: %w", err)
+	}
+	slog.InfoContext(ctx, "old sessions deleted", "rows", n)
+	return nil
 }
 
 // plan es lo que una pasada va a hacer.

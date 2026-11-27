@@ -36,6 +36,8 @@ type Querier interface {
 	CreateMultimedia(ctx context.Context, arg CreateMultimediaParams) (Multimedia, error)
 	CreatePIN(ctx context.Context, arg CreatePINParams) error
 	CreateReporte(ctx context.Context, arg CreateReporteParams) (Reporte, error)
+	// Las fechas vienen del reloj de la API, como password_changed_at.
+	CreateSesion(ctx context.Context, arg CreateSesionParams) error
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
 	// Agrega los tags que el usuario aún no tenía; los que ya tenía los salta el
 	// UNIQUE (reporte_id, tag_id, added_by), así que repetir la petición no
@@ -50,6 +52,8 @@ type Querier interface {
 	// ubicaciones, puntos_origen, conteos, score y users_reports. Los archivos
 	// del servicio multimedia no: esos los borra el servicio después.
 	DeleteReporteById(ctx context.Context, id uuid.UUID) (DeleteReporteByIdRow, error)
+	// Sesiones vencidas antes de @vencidas_antes o revocadas antes de @revocadas_antes.
+	DeleteSesionesViejas(ctx context.Context, arg DeleteSesionesViejasParams) (int64, error)
 	// Quita los tags que el usuario había confirmado en el reporte y ya no
 	// vienen en tag_ids. Con un arreglo vacío quita todos los suyos (no uno NULL:
 	// con NULL no borraría nada). El trigger trg_update_tag_counts descuenta.
@@ -73,9 +77,13 @@ type Querier interface {
 	GetPuntoOrigenByReporteId(ctx context.Context, reporteID uuid.UUID) (GetPuntoOrigenByReporteIdRow, error)
 	// La etiqueta del incidente se trae para armar el título (reporte.Titulo).
 	GetReporteById(ctx context.Context, id uuid.UUID) (GetReporteByIdRow, error)
+	// Encuentra la sesión por su token actual o por el anterior (ya rotado).
+	GetSesionPorTokenHash(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetTipoCentroById(ctx context.Context, id int) (TiposCentro, error)
 	GetUserByEmail(ctx context.Context, email *string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	// El usuario de la sesión, para validarlo y firmar el token de acceso nuevo.
+	GetUserConRolPorID(ctx context.Context, id uuid.UUID) (GetUserConRolPorIDRow, error)
 	// El bloqueo serializa los intentos concurrentes de vincular la misma cuenta.
 	GetUserWithRolByEmailForUpdate(ctx context.Context, email *string) (GetUserWithRolByEmailForUpdateRow, error)
 	GetUserWithRolByGoogleSub(ctx context.Context, providerID *string) (GetUserWithRolByGoogleSubRow, error)
@@ -151,6 +159,12 @@ type Querier interface {
 	// control del buzón (recuperación) y este vínculo con Google. Como en
 	// SetNewPasswordByUserID, $2 viene del reloj de la API.
 	RemovePasswordByUserID(ctx context.Context, arg RemovePasswordByUserIDParams) (User, error)
+	RevocarSesionPorID(ctx context.Context, id uuid.UUID) error
+	RevocarSesionPorTokenHash(ctx context.Context, tokenHash string) error
+	RevocarSesionesPorUserID(ctx context.Context, userID uuid.UUID) error
+	// Condicional: de dos refresh concurrentes con el mismo token solo uno rota;
+	// el otro ve 0 filas y entra por la ventana de gracia.
+	RotarSesion(ctx context.Context, arg RotarSesionParams) (int64, error)
 	SetCorteMantenimiento(ctx context.Context, arg SetCorteMantenimientoParams) error
 	// password_changed_at solo se escribe en dos lugares: un flujo que probó el
 	// control del buzón (recuperación) y el vínculo con Google que quita el

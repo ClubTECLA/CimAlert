@@ -77,6 +77,11 @@ type Config struct {
 	// DocsEnabled publica /v1/docs y /v1/openapi.json. Apagado por defecto.
 	DocsEnabled bool
 
+	// CookiePath es el Path de la cookie del refresh token, tal como lo ve el
+	// navegador (con el /api que nginx quita). CookieSecure la marca Secure.
+	CookiePath   string
+	CookieSecure bool
+
 	RecoverySecret string
 	MailDriver     string
 
@@ -131,6 +136,15 @@ func Load() (Config, error) {
 	}
 	if err := validarRecuperacion(cfg.RecoverySecret, cfg.MailDriver); err != nil {
 		return Config{}, err
+	}
+
+	cfg.CookiePath = getEnvOrDefault("COOKIE_PATH", "/api/v1/auth")
+	cfg.CookieSecure = true
+	if raw := os.Getenv("COOKIE_SECURE"); raw != "" {
+		cfg.CookieSecure, err = strconv.ParseBool(raw)
+		if err != nil {
+			return Config{}, fmt.Errorf("invalid COOKIE_SECURE: %w", err)
+		}
 	}
 
 	if raw := os.Getenv("DOCS_ENABLED"); raw != "" {

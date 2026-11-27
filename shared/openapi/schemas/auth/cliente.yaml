@@ -1,0 +1,7 @@
+type: string
+enum: [web, mobile]
+default: web
+description: >-
+  Dónde se entrega el refresh token. `web` lo pone en la cookie HttpOnly
+  `refresh_token`; `mobile` lo devuelve en `refresh_token` del body, para
+  guardarlo en el almacenamiento seguro del dispositivo.

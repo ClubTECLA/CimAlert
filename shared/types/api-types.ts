@@ -186,7 +186,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Registra una cuenta con correo electrónico y contraseña y devuelve los datos de sesión junto con un token de acceso. La contraseña debe tener entre 8 y 72 bytes. Responde 409 si el correo ya está registrado. */
+        /** @description Registra una cuenta con correo electrónico y contraseña y devuelve los datos de sesión junto con un token de acceso. La contraseña debe tener entre 8 y 72 bytes. Responde 409 si el correo ya está registrado. Abre una sesión. En el web el refresh token llega en la cookie HttpOnly `refresh_token`; con `client` = `mobile`, en `refresh_token` del body. */
         post: operations["register"];
         delete?: never;
         options?: never;
@@ -203,7 +203,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Inicia sesión con correo electrónico y contraseña y devuelve un token de acceso para autenticar las demás rutas. */
+        /** @description Inicia sesión con correo electrónico y contraseña y devuelve un token de acceso para autenticar las demás rutas. Abre una sesión. En el web el refresh token llega en la cookie HttpOnly `refresh_token`; con `client` = `mobile`, en `refresh_token` del body. */
         post: operations["login"];
         delete?: never;
         options?: never;
@@ -220,7 +220,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Inicia sesión con un ID token de Google. Si no existe una cuenta para esa identidad de Google, la vincula con la cuenta del mismo email (si Google es la autoridad del email) o crea una cuenta nueva. Responde 200 también cuando crea la cuenta; `created` distingue los dos casos. */
+        /** @description Inicia sesión con un ID token de Google. Si no existe una cuenta para esa identidad de Google, la vincula con la cuenta del mismo email (si Google es la autoridad del email) o crea una cuenta nueva. Responde 200 también cuando crea la cuenta; `created` distingue los dos casos. Abre una sesión. En el web el refresh token llega en la cookie HttpOnly `refresh_token`; con `client` = `mobile`, en `refresh_token` del body. */
         post: operations["loginGoogle"];
         delete?: never;
         options?: never;
@@ -245,6 +245,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Renueva el token de acceso con el refresh token de la sesión y rota el refresh token (el anterior deja de servir). El web manda la cookie `refresh_token` sin body y recibe la cookie nueva; el móvil manda `refresh_token` en el body y recibe el nuevo en la respuesta. Si la sesión no es válida responde 401 y borra la cookie: hay que iniciar sesión de nuevo. Un error interno responde 500 y conserva la cookie. Si llegan body y cookie, gana el body. */
+        post: operations["refresh"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/logout": {
         parameters: {
             query?: never;
@@ -254,7 +271,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description Confirma el cierre de sesión. Como el servidor no conserva los tokens, el cliente debe descartar el token de acceso. */
+        /** @description Cierra la sesión actual: revoca su refresh token (de la cookie o del body) y borra la cookie. No pide token de acceso, que puede haber expirado, y responde 204 aunque la sesión no exista. El cliente debe descartar también el token de acceso. */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -557,6 +574,8 @@ export interface components {
         RegisterRequest: components["schemas"]["register_request"];
         LoginRequest: components["schemas"]["login_request"];
         AuthResponse: components["schemas"]["auth_response"];
+        Cliente: components["schemas"]["cliente"];
+        RefreshRequest: components["schemas"]["refresh_request"];
         GoogleLoginRequest: components["schemas"]["google_login_request"];
         GoogleAuthResponse: components["schemas"]["google_auth_response"];
         Usuario: components["schemas"]["usuario"];
@@ -719,11 +738,23 @@ export interface components {
         };
         /** @description Contraseña local. Registro y recuperación comparten esta regla. */
         password: string;
+        /**
+         * @description Dónde se entrega el refresh token. `web` lo pone en la cookie HttpOnly `refresh_token`; `mobile` lo devuelve en `refresh_token` del body, para guardarlo en el almacenamiento seguro del dispositivo.
+         * @default web
+         * @enum {string}
+         */
+        cliente: "web" | "mobile";
         register_request: {
             /** Format: email */
             email: string;
             username: string;
             password: components["schemas"]["password"];
+            /**
+             * @description Con true la sesión dura hasta 90 días (30 sin usarse); con false, hasta 7 días (1 sin usarse) y la cookie se borra al cerrar el navegador.
+             * @default false
+             */
+            remember_me?: boolean;
+            client?: components["schemas"]["cliente"];
         };
         usuario: {
             /** Format: uuid */
@@ -740,15 +771,29 @@ export interface components {
             token_type: string;
             expires_in: number;
             user: components["schemas"]["usuario"];
+            /** @description Solo con `client` = `mobile`. En el web el refresh token va en la cookie HttpOnly `refresh_token`. */
+            refresh_token?: string;
         };
         login_request: {
             /** Format: email */
             email: string;
             password: string;
+            /**
+             * @description Con true la sesión dura hasta 90 días (30 sin usarse); con false, hasta 7 días (1 sin usarse) y la cookie se borra al cerrar el navegador.
+             * @default false
+             */
+            remember_me?: boolean;
+            client?: components["schemas"]["cliente"];
         };
         google_login_request: {
             /** @description ID token de Google obtenido con el SDK de inicio de sesión del cliente. */
             id_token: string;
+            /**
+             * @description Con true la sesión dura hasta 90 días (30 sin usarse); con false, hasta 7 días (1 sin usarse) y la cookie se borra al cerrar el navegador.
+             * @default false
+             */
+            remember_me?: boolean;
+            client?: components["schemas"]["cliente"];
         };
         google_auth_response: components["schemas"]["auth_response"] & {
             /** @description true si esta petición creó la cuenta. */
@@ -761,6 +806,10 @@ export interface components {
             email: string;
             username: string;
             rol_name: string;
+        };
+        refresh_request: {
+            /** @description Refresh token de una sesión móvil. El web no manda body; usa la cookie. */
+            refresh_token: string;
         };
         /** @description Solicitud para recuperar la contraseña de un usuario. */
         recovery_request: {
@@ -2060,14 +2109,93 @@ export interface operations {
             };
         };
     };
+    refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                /** @description Refresh token de una sesión web (cookie HttpOnly que pone el login). */
+                refresh_token?: string;
+            };
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["refresh_request"];
+            };
+        };
+        responses: {
+            /** @description Sesión renovada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["auth_response"];
+                };
+            };
+            /** @description `refresh_token` falta o está vacío en el body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `sesión inválida o expirada` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El body es demasiado grande */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description `demasiadas solicitudes` (límite por IP) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+        };
+    };
     logout: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
+            cookie?: {
+                /** @description Refresh token de una sesión web (cookie HttpOnly que pone el login). */
+                refresh_token?: string;
+            };
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["refresh_request"];
+            };
+        };
         responses: {
             /** @description Sesión cerrada */
             204: {
@@ -2075,6 +2203,33 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `refresh_token` falta o está vacío en el body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description El body es demasiado grande */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
+            };
+            /** @description Error interno del servidor */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["error_response"];
+                };
             };
         };
     };

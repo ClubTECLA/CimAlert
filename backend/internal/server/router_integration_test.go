@@ -160,7 +160,7 @@ func newTestClient(t *testing.T, opts ...opcionTest) *testClient {
 		Reportes:    reporte.NewHandler(reportes),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(testPool(t)))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(testPool(t)))),
-		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), usuario.NewRecuperacion(usuarios, mailer, []byte(testJWTSecret))),
+		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), usuario.NewRecuperacion(usuarios, mailer, []byte(testJWTSecret)), usuario.CookieConfig{Path: testCookiePath, Secure: true}),
 		Multimedia: multimedia.NewHandler(multimedia.NewService(sqlc.New(testPool(t)), almacen, multimedia.OpcionesFoto{
 			MaxBytes:   3 << 20,
 			MaxPixeles: 16_000_000,

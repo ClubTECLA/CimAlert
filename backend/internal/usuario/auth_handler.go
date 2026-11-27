@@ -2,6 +2,8 @@ package usuario
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"time"
 	"unicode/utf8"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/ClubTECLA/cimalert/backend/internal/httpapi"
 	"github.com/ClubTECLA/cimalert/backend/internal/httperr"
 	"github.com/ClubTECLA/cimalert/backend/internal/middleware"
+	"github.com/gin-gonic/gin"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -31,40 +34,52 @@ func (h *Handler) Register(ctx context.Context, request httpapi.RegisterRequestO
 		return httpapi.Register400JSONResponse{Message: "password debe tener entre 8 y 72 bytes"}, nil
 	}
 
-	user, token, ttl, err := h.auth.Register(ctx, string(request.Body.Email), username, password)
+	user, t, err := h.auth.Register(ctx, string(request.Body.Email), username, password, verdad(request.Body.RememberMe))
 	if err != nil {
 		return nil, err
 	}
 
-	return httpapi.Register201JSONResponse(toAuthResponse(user, token, ttl)), nil
+	resp, err := h.entregar(ctx, user, t, esMovil(request.Body.Client))
+	if err != nil {
+		return nil, err
+	}
+	return httpapi.Register201JSONResponse(resp), nil
 }
 
 // Login valida el email y password, y devuelve un token de acceso firmado.
 func (h *Handler) Login(ctx context.Context, request httpapi.LoginRequestObject) (httpapi.LoginResponseObject, error) {
-	user, token, ttl, err := h.auth.Login(ctx, string(request.Body.Email), request.Body.Password)
+	user, t, err := h.auth.Login(ctx, string(request.Body.Email), request.Body.Password, verdad(request.Body.RememberMe))
 	if err != nil {
 		return nil, err
 	}
 
-	return httpapi.Login200JSONResponse(toAuthResponse(user, token, ttl)), nil
+	resp, err := h.entregar(ctx, user, t, esMovil(request.Body.Client))
+	if err != nil {
+		return nil, err
+	}
+	return httpapi.Login200JSONResponse(resp), nil
 }
 
 // LoginGoogle inicia sesión con un ID token de Google. Responde 200 también
 // cuando crea la cuenta; created distingue los dos casos.
 func (h *Handler) LoginGoogle(ctx context.Context, request httpapi.LoginGoogleRequestObject) (httpapi.LoginGoogleResponseObject, error) {
-	user, token, ttl, created, err := h.auth.LoginGoogle(ctx, request.Body.IdToken)
+	user, t, created, err := h.auth.LoginGoogle(ctx, request.Body.IdToken, verdad(request.Body.RememberMe))
 	if err != nil {
 		return nil, err
 	}
 
+	a, err := h.entregar(ctx, user, t, esMovil(request.Body.Client))
+	if err != nil {
+		return nil, err
+	}
 	// oapi-codegen genera un struct plano para el allOf de GoogleAuthResponse.
-	a := toAuthResponse(user, token, ttl)
 	return httpapi.LoginGoogle200JSONResponse{
-		AccessToken: a.AccessToken,
-		TokenType:   a.TokenType,
-		ExpiresIn:   a.ExpiresIn,
-		User:        a.User,
-		Created:     created,
+		AccessToken:  a.AccessToken,
+		TokenType:    a.TokenType,
+		ExpiresIn:    a.ExpiresIn,
+		RefreshToken: a.RefreshToken,
+		User:         a.User,
+		Created:      created,
 	}, nil
 }
 
@@ -83,8 +98,39 @@ func (h *Handler) Me(ctx context.Context, request httpapi.MeRequestObject) (http
 	return httpapi.Me200JSONResponse(toUsuarioMeResponse(user)), nil
 }
 
-// Logout cierra la sesión. El token no se guarda en el servidor, así que solo responde 204.
+// Refresh renueva la sesión con el refresh token del body (móvil) o de la
+// cookie (web) y lo devuelve rotado por el mismo camino.
+func (h *Handler) Refresh(ctx context.Context, request httpapi.RefreshRequestObject) (httpapi.RefreshResponseObject, error) {
+	token, movil := refreshDe(request.Body, request.Params.RefreshToken)
+	user, t, err := h.auth.Refresh(ctx, token)
+	if errors.Is(err, ErrSesionInvalida) && !movil {
+		// Una cookie que ya no sirve se borra, para que el web no la siga mandando.
+		if errCookie := h.borrarCookie(ctx); errCookie != nil {
+			return nil, errCookie
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := h.entregar(ctx, user, t, movil)
+	if err != nil {
+		return nil, err
+	}
+	return httpapi.Refresh200JSONResponse(resp), nil
+}
+
+// Logout revoca la sesión del refresh token (body o cookie) y borra la cookie.
 func (h *Handler) Logout(ctx context.Context, request httpapi.LogoutRequestObject) (httpapi.LogoutResponseObject, error) {
+	token, movil := refreshDe(request.Body, request.Params.RefreshToken)
+	if err := h.auth.Logout(ctx, token); err != nil {
+		return nil, err
+	}
+	if !movil {
+		if err := h.borrarCookie(ctx); err != nil {
+			return nil, err
+		}
+	}
 	return httpapi.Logout204Response{}, nil
 }
 
@@ -120,6 +166,59 @@ func (h *Handler) RestablecerContrasena(ctx context.Context, request httpapi.Res
 
 	return httpapi.RestablecerContrasena204Response{}, nil
 }
+
+// entregar arma la respuesta de sesión: en el móvil el refresh token va en
+// el body; en el web, en la cookie. Sin refresh token (ventana de gracia) no
+// toca la cookie.
+func (h *Handler) entregar(ctx context.Context, user sqlc.User, t Tokens, movil bool) (httpapi.AuthResponse, error) {
+	resp := toAuthResponse(user, t.Access, t.TTL)
+	switch {
+	case t.Refresh == "":
+	case movil:
+		resp.RefreshToken = &t.Refresh
+	default:
+		// Sin remember_me es cookie de sesión (sin Max-Age): se borra al cerrar el navegador.
+		maxAge := 0
+		if t.RememberMe {
+			maxAge = int(time.Until(t.Expira).Seconds())
+		}
+		if err := h.ponerCookie(ctx, t.Refresh, maxAge); err != nil {
+			return httpapi.AuthResponse{}, err
+		}
+	}
+	return resp, nil
+}
+
+func (h *Handler) borrarCookie(ctx context.Context) error {
+	return h.ponerCookie(ctx, "", -1)
+}
+
+// ponerCookie escribe la cookie del refresh token. Los handlers strict reciben
+// el *gin.Context como context.Context; es la única forma de poner una cookie.
+func (h *Handler) ponerCookie(ctx context.Context, valor string, maxAge int) error {
+	gc, ok := ctx.(*gin.Context)
+	if !ok {
+		return errors.New("ponerCookie: el contexto no es un *gin.Context")
+	}
+	gc.SetSameSite(http.SameSiteStrictMode)
+	gc.SetCookie(cookieRefresh, valor, maxAge, h.cookie.Path, "", h.cookie.Secure, true)
+	return nil
+}
+
+// refreshDe devuelve el refresh token del body (móvil) o, sin body, el de la cookie.
+func refreshDe(body *httpapi.RefreshRequest, cookie *string) (token string, movil bool) {
+	if body != nil {
+		return body.RefreshToken, true
+	}
+	if cookie != nil {
+		return *cookie, false
+	}
+	return "", false
+}
+
+func esMovil(c *httpapi.Cliente) bool { return c != nil && *c == httpapi.Mobile }
+
+func verdad(b *bool) bool { return b != nil && *b }
 
 // toAuthResponse convierte un sqlc.User y un token en la respuesta de login/register.
 func toAuthResponse(user sqlc.User, token string, ttl time.Duration) httpapi.AuthResponse {

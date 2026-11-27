@@ -6,3 +6,9 @@ properties:
     format: email
   password:
     type: string
+  remember_me:
+    type: boolean
+    default: false
+    description: Con true la sesión dura hasta 90 días (30 sin usarse); con false, hasta 7 días (1 sin usarse) y la cookie se borra al cerrar el navegador.
+  client:
+    $ref: '../../openapi.yaml#/components/schemas/Cliente'

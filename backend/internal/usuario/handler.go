@@ -11,13 +11,24 @@ import (
 // Handler implementa las operaciones de autenticación y de usuarios del
 // contrato; el servidor lo embebe junto con los de las demás funcionalidades.
 type Handler struct {
-	auth *Auth
-	svc  *Service
-	rec  *Recuperacion
+	auth   *Auth
+	svc    *Service
+	rec    *Recuperacion
+	cookie CookieConfig
 }
 
-func NewHandler(auth *Auth, svc *Service, rec *Recuperacion) *Handler {
-	return &Handler{auth: auth, svc: svc, rec: rec}
+// CookieConfig es dónde y cómo se pone la cookie del refresh token del web.
+type CookieConfig struct {
+	// Path es la ruta que ve el navegador (con el /api que nginx quita).
+	Path   string
+	Secure bool
+}
+
+// cookieRefresh es el nombre de la cookie; el contrato la declara igual.
+const cookieRefresh = "refresh_token"
+
+func NewHandler(auth *Auth, svc *Service, rec *Recuperacion, cookie CookieConfig) *Handler {
+	return &Handler{auth: auth, svc: svc, rec: rec, cookie: cookie}
 }
 
 // toUsuarioResumen converts a stored user summary to the API representation,

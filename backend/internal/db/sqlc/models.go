@@ -231,12 +231,16 @@ type RecoveryPin struct {
 }
 
 type RefreshToken struct {
-	ID        uuid.UUID  `json:"id"`
-	UserID    uuid.UUID  `json:"user_id"`
-	TokenHash string     `json:"token_hash"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	RevokedAt *time.Time `json:"revoked_at"`
-	CreatedAt time.Time  `json:"created_at"`
+	ID            uuid.UUID  `json:"id"`
+	UserID        uuid.UUID  `json:"user_id"`
+	TokenHash     string     `json:"token_hash"`
+	ExpiresAt     time.Time  `json:"expires_at"`
+	RevokedAt     *time.Time `json:"revoked_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+	PrevTokenHash *string    `json:"prev_token_hash"`
+	PwdAt         string     `json:"pwd_at"`
+	RememberMe    bool       `json:"remember_me"`
+	LastUsedAt    time.Time  `json:"last_used_at"`
 }
 
 type Reporte struct {

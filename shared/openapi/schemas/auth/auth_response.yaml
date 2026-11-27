@@ -9,3 +9,6 @@ properties:
     type: integer
   user:
     $ref: './usuario.yaml'
+  refresh_token:
+    type: string
+    description: Solo con `client` = `mobile`. En el web el refresh token va en la cookie HttpOnly `refresh_token`.
