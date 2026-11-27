@@ -1,7 +1,7 @@
 register:
   post:
     operationId: register
-    description: Registra una cuenta con correo electrónico y contraseña y devuelve los datos de sesión junto con un token de acceso. La contraseña debe tener entre 8 y 72 bytes. Responde 409 si el correo ya está registrado.
+    description: Registra una cuenta con correo electrónico y contraseña y devuelve los datos de sesión junto con un token de acceso. La contraseña debe tener entre 8 y 72 bytes. Responde 409 si el correo ya está registrado. Abre una sesión. En el web el refresh token llega en la cookie HttpOnly `refresh_token`; con `client` = `mobile`, en `refresh_token` del body.
     tags: [Autenticación]
     security: []
     requestBody:
@@ -39,7 +39,7 @@ register:
 login:
   post:
     operationId: login
-    description: Inicia sesión con correo electrónico y contraseña y devuelve un token de acceso para autenticar las demás rutas.
+    description: Inicia sesión con correo electrónico y contraseña y devuelve un token de acceso para autenticar las demás rutas. Abre una sesión. En el web el refresh token llega en la cookie HttpOnly `refresh_token`; con `client` = `mobile`, en `refresh_token` del body.
     tags: [Autenticación]
     security: []
     requestBody:
@@ -93,7 +93,9 @@ google:
       Inicia sesión con un ID token de Google. Si no existe una cuenta para esa
       identidad de Google, la vincula con la cuenta del mismo email (si Google es
       la autoridad del email) o crea una cuenta nueva. Responde 200 también cuando
-      crea la cuenta; `created` distingue los dos casos.
+      crea la cuenta; `created` distingue los dos casos. Abre una sesión. En
+      el web el refresh token llega en la cookie HttpOnly `refresh_token`; con
+      `client` = `mobile`, en `refresh_token` del body.
     tags: [Autenticación]
     security: []
     requestBody:
@@ -183,15 +185,114 @@ me:
             schema:
               $ref: '#/components/schemas/ErrorResponse'
 
+refresh:
+  post:
+    operationId: refresh
+    description: >-
+      Renueva el token de acceso con el refresh token de la sesión y rota el
+      refresh token (el anterior deja de servir). El web manda la cookie
+      `refresh_token` sin body y recibe la cookie nueva; el móvil manda
+      `refresh_token` en el body y recibe el nuevo en la respuesta. Si la
+      sesión no es válida responde 401 y borra la cookie: hay que iniciar
+      sesión de nuevo. Un error interno responde 500 y conserva la cookie. Si
+      llegan body y cookie, gana el body.
+    tags: [Autenticación]
+    security: []
+    parameters:
+      - name: refresh_token
+        in: cookie
+        required: false
+        description: Refresh token de una sesión web (cookie HttpOnly que pone el login).
+        schema:
+          type: string
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RefreshRequest'
+    responses:
+      '200':
+        description: Sesión renovada
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthResponse'
+      '400':
+        description: '`refresh_token` falta o está vacío en el body'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '413':
+        description: El body es demasiado grande
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '401':
+        description: '`sesión inválida o expirada`'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '429':
+        description: '`demasiadas solicitudes` (límite por IP)'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+
 logout:
   post:
     operationId: logout
-    description: Confirma el cierre de sesión. Como el servidor no conserva los tokens, el cliente debe descartar el token de acceso.
+    description: >-
+      Cierra la sesión actual: revoca su refresh token (de la cookie o del
+      body) y borra la cookie. No pide token de acceso, que puede haber
+      expirado, y responde 204 aunque la sesión no exista. El cliente debe
+      descartar también el token de acceso.
     tags: [Autenticación]
     security: []
+    parameters:
+      - name: refresh_token
+        in: cookie
+        required: false
+        description: Refresh token de una sesión web (cookie HttpOnly que pone el login).
+        schema:
+          type: string
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RefreshRequest'
     responses:
       '204':
         description: Sesión cerrada
+      '400':
+        description: '`refresh_token` falta o está vacío en el body'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '413':
+        description: El body es demasiado grande
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
+      '500':
+        description: Error interno del servidor
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ErrorResponse'
 
 recovery:
   post:
@@ -309,6 +410,8 @@ components:
       $ref: '../schemas/auth/auth_response.yaml'
     GoogleLoginRequest:
       $ref: '../schemas/auth/google_login_request.yaml'
+    RefreshRequest:
+      $ref: '../schemas/auth/refresh_request.yaml'
     GoogleAuthResponse:
       $ref: '../schemas/auth/google_auth_response.yaml'
     Usuario:

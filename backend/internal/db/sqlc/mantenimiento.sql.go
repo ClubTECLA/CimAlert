@@ -22,6 +22,25 @@ func (q *Queries) DeleteMultimediaPorPaths(ctx context.Context, paths []string) 
 	return result.RowsAffected(), nil
 }
 
+const deleteSesionesViejas = `-- name: DeleteSesionesViejas :execrows
+DELETE FROM refresh_tokens
+WHERE expires_at < $1 OR revoked_at < $2
+`
+
+type DeleteSesionesViejasParams struct {
+	VencidasAntes  time.Time  `json:"vencidas_antes"`
+	RevocadasAntes *time.Time `json:"revocadas_antes"`
+}
+
+// Sesiones vencidas antes de @vencidas_antes o revocadas antes de @revocadas_antes.
+func (q *Queries) DeleteSesionesViejas(ctx context.Context, arg DeleteSesionesViejasParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSesionesViejas, arg.VencidasAntes, arg.RevocadasAntes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getCorteMantenimiento = `-- name: GetCorteMantenimiento :one
 SELECT ultimo_corte FROM mantenimiento_estado WHERE nombre = $1
 `

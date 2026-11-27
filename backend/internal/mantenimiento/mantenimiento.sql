@@ -16,3 +16,8 @@ SELECT path FROM multimedia WHERE created_at >= @desde AND created_at < @hasta;
 
 -- name: DeleteMultimediaPorPaths :execrows
 DELETE FROM multimedia WHERE path = ANY(@paths::text[]);
+
+-- name: DeleteSesionesViejas :execrows
+-- Sesiones vencidas antes de @vencidas_antes o revocadas antes de @revocadas_antes.
+DELETE FROM refresh_tokens
+WHERE expires_at < @vencidas_antes OR revoked_at < @revocadas_antes;

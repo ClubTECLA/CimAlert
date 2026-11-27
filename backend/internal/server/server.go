@@ -63,7 +63,7 @@ func New(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (*gin.Engin
 		Reportes:    reporte.NewHandler(reportes),
 		Incidentes:  incidente.NewHandler(incidente.NewService(incidente.NewStore(pool))),
 		Comentarios: comentario.NewHandler(comentario.NewService(comentario.NewStore(pool))),
-		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), rec),
+		Usuarios:    usuario.NewHandler(auth, usuario.NewService(usuarios), rec, usuario.CookieConfig{Path: cfg.CookiePath, Secure: cfg.CookieSecure}),
 		// multimedia no tiene operaciones de varias sentencias: le basta con
 		// las consultas que genera sqlc.
 		Multimedia: multimedia.NewHandler(multimedia.NewService(sqlc.New(pool), archivos, multimedia.OpcionesFoto{

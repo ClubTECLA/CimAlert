@@ -85,7 +85,8 @@ func (s *Store) CreatePinRecuperacion(ctx context.Context, arg CreatePinTxParams
 }
 
 // ResetPasswordTx, en una transacción, guarda el nuevo password_hash, pone
-// password_changed_at a la hora actual de la API y cierra el token de reset.
+// password_changed_at a la hora actual de la API, cierra el token de reset y
+// revoca todas las sesiones del usuario.
 // Devuelve ErrCodigoInvalido si el token ya se usó, se canceló o expiró.
 func (s *Store) ResetPasswordTx(ctx context.Context, arg ResetPasswordTxParams) error {
 	return db.ExecTx(ctx, s.pool, func(q *sqlc.Queries) error {
@@ -99,6 +100,10 @@ func (s *Store) ResetPasswordTx(ctx context.Context, arg ResetPasswordTxParams) 
 		}
 		if filas == 0 {
 			return ErrCodigoInvalido
+		}
+		// Cierra todas las sesiones: quien cambió la contraseña puede estar echando a un intruso.
+		if err := q.RevocarSesionesPorUserID(ctx, arg.UserID); err != nil {
+			return err
 		}
 		changedAt := time.Now()
 		if err := q.SetNewPasswordByUserID(ctx, sqlc.SetNewPasswordByUserIDParams{
@@ -210,8 +215,11 @@ func (s *Store) loginGoogleOnce(ctx context.Context, p GoogleLoginParams) (Googl
 			if err := q.DeleteLocalAuthProviderByUserID(ctx, row.User.ID); err != nil {
 				return err
 			}
-			// Cierra los PIN y tokens de reset que alguien más pudo pedir.
+			// Cierra los PIN, tokens de reset y sesiones que alguien más pudo abrir.
 			if err := q.CancelPINByUserID(ctx, row.User.ID); err != nil {
+				return err
+			}
+			if err := q.RevocarSesionesPorUserID(ctx, row.User.ID); err != nil {
 				return err
 			}
 		}

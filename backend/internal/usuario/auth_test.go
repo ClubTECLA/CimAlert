@@ -35,6 +35,14 @@ type fakeAuthStore struct {
 	googleErr     error
 	googleParams  GoogleLoginParams
 	googleLlamado bool
+
+	// sesiones son las filas de refresh_tokens (ver sesion_test.go).
+	sesiones []*sqlc.RefreshToken
+	// errSesion, si no es nil, lo devuelve GetSesionPorTokenHash (base caída).
+	errSesion error
+	// rivalRota hace que el próximo RotarSesion rote primero con otro token y
+	// devuelva 0 filas, como si otra petición hubiera ganado la carrera.
+	rivalRota bool
 }
 
 func (f *fakeAuthStore) LoginGoogleTx(_ context.Context, p GoogleLoginParams) (GoogleLoginResult, error) {
@@ -108,12 +116,12 @@ func TestAuthService_RegisterAndLogin(t *testing.T) {
 		t.Fatalf("NewAuth() error = %v", err)
 	}
 
-	user, token, ttl, err := svc.Register(ctx, "  Test@Example.com  ", "tester", "s3cretpw")
+	user, tk, err := svc.Register(ctx, "  Test@Example.com  ", "tester", "s3cretpw", false)
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
-	if token == "" || ttl != time.Hour {
-		t.Fatalf("Register() token/ttl = %q/%v, want non-empty token and ttl=1h", token, ttl)
+	if tk.Access == "" || tk.Refresh == "" || tk.TTL != time.Hour {
+		t.Fatalf("Register() tokens = %+v, want access y refresh no vacíos y ttl=1h", tk)
 	}
 	if user.Email == nil || *user.Email != "test@example.com" {
 		t.Fatalf("Register() email = %v, want normalized \"test@example.com\"", user.Email)
@@ -122,18 +130,18 @@ func TestAuthService_RegisterAndLogin(t *testing.T) {
 		t.Fatalf("Register() rolID = %d, want 1 (rol por defecto)", user.RolID)
 	}
 
-	if _, _, _, err := svc.Register(ctx, "test@example.com", "otro", "s3cretpw"); !errors.Is(err, ErrEmailTaken) {
+	if _, _, err := svc.Register(ctx, "test@example.com", "otro", "s3cretpw", false); !errors.Is(err, ErrEmailTaken) {
 		t.Fatalf("Register() with duplicate email error = %v, want ErrEmailTaken", err)
 	}
 
-	if _, _, _, err := svc.Login(ctx, "test@example.com", "wrong-password"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "test@example.com", "wrong-password", false); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("Login() with wrong password error = %v, want ErrInvalidCredentials", err)
 	}
-	if _, _, _, err := svc.Login(ctx, "nobody@example.com", "whatever"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "nobody@example.com", "whatever", false); !errors.Is(err, ErrInvalidCredentials) {
 		t.Fatalf("Login() with unknown email error = %v, want ErrInvalidCredentials", err)
 	}
-	if _, token, _, err := svc.Login(ctx, "test@example.com", "s3cretpw"); err != nil || token == "" {
-		t.Fatalf("Login() with correct credentials error = %v, token = %q", err, token)
+	if _, tk, err := svc.Login(ctx, "test@example.com", "s3cretpw", false); err != nil || tk.Access == "" {
+		t.Fatalf("Login() with correct credentials error = %v, token = %q", err, tk.Access)
 	}
 
 	if _, err := svc.GetUser(ctx, uuid.New()); !errors.Is(err, ErrUserNotFound) {
@@ -169,21 +177,21 @@ func TestAuthService_TokenLlevaRol(t *testing.T) {
 		t.Fatalf("NewAuth() error = %v", err)
 	}
 
-	_, token, _, err := svc.Register(ctx, "test@example.com", "tester", "s3cretpw")
+	_, tk, err := svc.Register(ctx, "test@example.com", "tester", "s3cretpw", false)
 	if err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
-	if rol := rolDelToken(t, token, secret); rol != "ciudadano" {
+	if rol := rolDelToken(t, tk.Access, secret); rol != "ciudadano" {
 		t.Fatalf("Register() token rol = %q, want \"ciudadano\" (rol por defecto)", rol)
 	}
 
 	// Login lee el rol actual de la base, no asume el rol por defecto.
 	store.rolName = "admin"
-	_, token, _, err = svc.Login(ctx, "test@example.com", "s3cretpw")
+	_, tk, err = svc.Login(ctx, "test@example.com", "s3cretpw", false)
 	if err != nil {
 		t.Fatalf("Login() error = %v", err)
 	}
-	if rol := rolDelToken(t, token, secret); rol != "admin" {
+	if rol := rolDelToken(t, tk.Access, secret); rol != "admin" {
 		t.Fatalf("Login() token rol = %q, want \"admin\"", rol)
 	}
 }
@@ -289,7 +297,7 @@ func TestLoginGoogle_Errores(t *testing.T) {
 			store := &fakeAuthStore{googleErr: tt.storeErr}
 			a := authConGoogle(t, store, tt.verifier, &fakeMailer{enviado: make(chan string, 1)})
 
-			_, _, _, _, err := a.LoginGoogle(context.Background(), "token")
+			_, _, _, err := a.LoginGoogle(context.Background(), "token", false)
 			if err == nil {
 				t.Fatal("LoginGoogle() error = nil, quería un error")
 			}
@@ -344,12 +352,12 @@ func TestLoginGoogle_Exito(t *testing.T) {
 			claims.HD = "empresa.mx"
 			a := authConGoogle(t, store, fakeGoogleVerifier{claims: claims}, mailer)
 
-			user, token, ttl, created, err := a.LoginGoogle(context.Background(), "token")
+			user, tk, created, err := a.LoginGoogle(context.Background(), "token", false)
 			if err != nil {
 				t.Fatalf("LoginGoogle() error = %v", err)
 			}
-			if user.ID != usuario.ID || ttl != time.Hour || created != tt.res.Created {
-				t.Errorf("LoginGoogle() user/ttl/created = %v/%v/%v", user.ID, ttl, created)
+			if user.ID != usuario.ID || tk.TTL != time.Hour || created != tt.res.Created {
+				t.Errorf("LoginGoogle() user/ttl/created = %v/%v/%v", user.ID, tk.TTL, created)
 			}
 
 			// Lo que llega al store: email normalizado, sub y hd tal cual.
@@ -360,7 +368,7 @@ func TestLoginGoogle_Exito(t *testing.T) {
 
 			// El token sale de la fila que devolvió el store.
 			var tc tokenClaims
-			if _, err := jwt.ParseWithClaims(token, &tc, func(*jwt.Token) (any, error) { return []byte(secretoGoogle), nil }); err != nil {
+			if _, err := jwt.ParseWithClaims(tk.Access, &tc, func(*jwt.Token) (any, error) { return []byte(secretoGoogle), nil }); err != nil {
 				t.Fatalf("token inválido: %v", err)
 			}
 			if tc.Subject != usuario.ID.String() || tc.Rol != "ciudadano" || tc.PwdAt != middleware.VersionCredencial(usuario.PasswordChangedAt) {
@@ -406,18 +414,18 @@ func TestLogin_Suspendido(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAuth() error = %v", err)
 	}
-	if _, _, _, err := svc.Register(ctx, "ana@example.com", "ana", "s3cretpw"); err != nil {
+	if _, _, err := svc.Register(ctx, "ana@example.com", "ana", "s3cretpw", false); err != nil {
 		t.Fatalf("Register() error = %v", err)
 	}
 	u := store.byEmail["ana@example.com"]
 	u.State = sqlc.NullUserState{UserState: sqlc.UserStateSuspendido, Valid: true}
 	store.byEmail["ana@example.com"] = u
 
-	if _, _, _, err := svc.Login(ctx, "ana@example.com", "s3cretpw"); !errors.Is(err, ErrUsuarioSuspendido) {
+	if _, _, err := svc.Login(ctx, "ana@example.com", "s3cretpw", false); !errors.Is(err, ErrUsuarioSuspendido) {
 		t.Errorf("Login() con el password correcto error = %v, quería ErrUsuarioSuspendido", err)
 	}
 	// Sin el password correcto no se revela la suspensión.
-	if _, _, _, err := svc.Login(ctx, "ana@example.com", "incorrecto"); !errors.Is(err, ErrInvalidCredentials) {
+	if _, _, err := svc.Login(ctx, "ana@example.com", "incorrecto", false); !errors.Is(err, ErrInvalidCredentials) {
 		t.Errorf("Login() con un password incorrecto error = %v, quería ErrInvalidCredentials", err)
 	}
 }

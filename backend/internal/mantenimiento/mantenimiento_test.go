@@ -36,6 +36,9 @@ type mundo struct {
 	errArchivos   error
 	errBorrarFila error
 	errCuarentena map[string]error
+
+	// limpiezaSesiones es lo que recibió DeleteSesionesViejas; nil si no se llamó.
+	limpiezaSesiones *sqlc.DeleteSesionesViejasParams
 }
 
 // inicioVentanaTest es el corte que se guarda en la primera pasada, antes de revisar nada.
@@ -108,6 +111,11 @@ func (m *mundo) DeleteMultimediaPorPaths(ctx context.Context, paths []string) (i
 		}
 	}
 	return n, nil
+}
+
+func (m *mundo) DeleteSesionesViejas(ctx context.Context, arg sqlc.DeleteSesionesViejasParams) (int64, error) {
+	m.limpiezaSesiones = &arg
+	return 0, nil
 }
 
 func (m *mundo) Archivos(ctx context.Context, desde, hasta time.Time) ([]almacen.Archivo, error) {
@@ -404,6 +412,22 @@ func TestPasar_ErrorDeMultimediaDevuelveError(t *testing.T) {
 	}
 	if !m.sinAvanzar() || m.purgas != 0 {
 		t.Errorf("corte = %v, purgas = %d, want nada avanzado", m.corte, m.purgas)
+	}
+}
+
+func TestPasar_LimpiaSesionesAunqueFalleMultimedia(t *testing.T) {
+	j, m := nuevoJob()
+	m.errArchivos = errors.New("multimedia caído")
+
+	if err := j.Pasar(context.Background()); err == nil {
+		t.Fatal("Pasar() = nil, want error")
+	}
+	got := m.limpiezaSesiones
+	if got == nil {
+		t.Fatal("DeleteSesionesViejas no se llamó")
+	}
+	if !got.VencidasAntes.Equal(ahoraTest) || got.RevocadasAntes == nil || !got.RevocadasAntes.Equal(ahoraTest.Add(-7*24*time.Hour)) {
+		t.Errorf("DeleteSesionesViejas(%v, %v), want (%v, %v)", got.VencidasAntes, got.RevocadasAntes, ahoraTest, ahoraTest.Add(-7*24*time.Hour))
 	}
 }
 

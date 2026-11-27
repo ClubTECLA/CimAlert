@@ -26,6 +26,9 @@ var (
 	ErrGoogleVinculoNoPermitido = errors.New("google link not allowed")
 	ErrGoogleNoConfigurado      = errors.New("google login not configured")
 	ErrGoogleNoDisponible       = errors.New("google keys unavailable")
+
+	// ErrSesionInvalida cubre todo rechazo del refresh token, sin decir por qué.
+	ErrSesionInvalida = errors.New("invalid or expired session")
 )
 
 // ReglasHTTP dice con qué status y mensaje responde la API cada error de
@@ -44,4 +47,5 @@ var ReglasHTTP = []httperr.Regla{
 	{Err: ErrGoogleVinculoNoPermitido, Status: http.StatusConflict, Message: "esta cuenta no puede vincularse con Google; inicia sesión con tu contraseña"},
 	{Err: ErrGoogleNoConfigurado, Status: http.StatusServiceUnavailable, Message: "login con Google no configurado"},
 	{Err: ErrGoogleNoDisponible, Status: http.StatusServiceUnavailable, Message: "login con Google no disponible"},
+	{Err: ErrSesionInvalida, Status: http.StatusUnauthorized, Message: "sesión inválida o expirada"},
 }

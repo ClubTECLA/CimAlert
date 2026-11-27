@@ -231,9 +231,10 @@ func NewRouter(h Handlers, jwtSecret string, passwordChangedAt middleware.Passwo
 			middleware.RequireRole(string(httpapi.BearerAuthScopes)),
 			// Límite por IP de recuperación de contraseña, para frenar la fuerza bruta de PINs entre cuentas.
 			middleware.RateLimitPorIP(cfg.rateLimitRafaga, middleware.RateLimitIntervalo, "/v1/auth/recovery", "/v1/auth/recovery/verify", "/v1/auth/recovery/reset"),
-			// Límite por IP de inicio de sesión (login y google), cada ruta con su propio contador.
+			// Límite por IP de inicio de sesión (login, google y refresh), cada ruta con su propio contador.
 			middleware.RateLimitPorIP(cfg.sesionRafaga, cfg.sesionIntervalo, "/v1/auth/google"),
 			middleware.RateLimitPorIP(cfg.sesionRafaga, cfg.sesionIntervalo, "/v1/auth/login"),
+			middleware.RateLimitPorIP(cfg.sesionRafaga, cfg.sesionIntervalo, "/v1/auth/refresh"),
 			// Antes del validador, que lee el body completo para validarlo.
 			middleware.BodyLimitFunc(func(c *gin.Context) int64 {
 				if c.FullPath() == rutaMultimedia {

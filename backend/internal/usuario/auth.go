@@ -36,6 +36,13 @@ type authStore interface {
 	GetDefaultRole(ctx context.Context) (sqlc.Role, error)
 	GetUserWithRolByID(ctx context.Context, id uuid.UUID) (sqlc.GetUserWithRolByIDRow, error)
 	LoginGoogleTx(ctx context.Context, p GoogleLoginParams) (GoogleLoginResult, error)
+
+	CreateSesion(ctx context.Context, arg sqlc.CreateSesionParams) error
+	GetSesionPorTokenHash(ctx context.Context, tokenHash string) (sqlc.RefreshToken, error)
+	GetUserConRolPorID(ctx context.Context, id uuid.UUID) (sqlc.GetUserConRolPorIDRow, error)
+	RotarSesion(ctx context.Context, arg sqlc.RotarSesionParams) (int64, error)
+	RevocarSesionPorID(ctx context.Context, id uuid.UUID) error
+	RevocarSesionPorTokenHash(ctx context.Context, tokenHash string) error
 }
 
 // googleVerifier verifica el ID token de Google; lo cumple googleid.Verificador
@@ -82,14 +89,13 @@ func NewAuth(ctx context.Context, store authStore, secret []byte, ttl time.Durat
 	return a, nil
 }
 
-// Register crea el usuario con password local y devuelve el token de acceso
-// ya firmado, junto con su tiempo de vida.
-func (s *Auth) Register(ctx context.Context, email, username, password string) (sqlc.User, string, time.Duration, error) {
+// Register crea el usuario con password local y le abre una sesión.
+func (s *Auth) Register(ctx context.Context, email, username, password string, rememberMe bool) (sqlc.User, Tokens, error) {
 	email = normalizeEmail(email)
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return sqlc.User{}, "", 0, err
+		return sqlc.User{}, Tokens{}, err
 	}
 	hashed := string(hash)
 
@@ -101,28 +107,28 @@ func (s *Auth) Register(ctx context.Context, email, username, password string) (
 	})
 	if err != nil {
 		if db.IsUniqueViolation(err) {
-			return sqlc.User{}, "", 0, ErrEmailTaken
+			return sqlc.User{}, Tokens{}, ErrEmailTaken
 		}
-		return sqlc.User{}, "", 0, err
+		return sqlc.User{}, Tokens{}, err
 	}
 
-	token, err := s.issueToken(user, s.defaultRoleName)
+	t, err := s.abrirSesion(ctx, user, s.defaultRoleName, rememberMe)
 	if err != nil {
-		return sqlc.User{}, "", 0, err
+		return sqlc.User{}, Tokens{}, err
 	}
-	return user, token, s.ttl, nil
+	return user, t, nil
 }
 
 // Login valida el password contra el hash guardado. Si el email no existe o
 // el usuario no tiene password local, compara igual contra un hash dummy
 // para no revelar cuál de los dos casos sucedió.
-func (s *Auth) Login(ctx context.Context, email, password string) (sqlc.User, string, time.Duration, error) {
+func (s *Auth) Login(ctx context.Context, email, password string, rememberMe bool) (sqlc.User, Tokens, error) {
 	email = normalizeEmail(email)
 
 	user, err := s.store.GetUserByEmail(ctx, &email)
 	notFound := db.IsNotFound(err)
 	if err != nil && !notFound {
-		return sqlc.User{}, "", 0, err
+		return sqlc.User{}, Tokens{}, err
 	}
 
 	hash := dummyPasswordHash
@@ -131,26 +137,26 @@ func (s *Auth) Login(ctx context.Context, email, password string) (sqlc.User, st
 	}
 
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) != nil {
-		return sqlc.User{}, "", 0, ErrInvalidCredentials
+		return sqlc.User{}, Tokens{}, ErrInvalidCredentials
 	}
 	if notFound || user.PasswordHash == nil {
-		return sqlc.User{}, "", 0, ErrInvalidCredentials
+		return sqlc.User{}, Tokens{}, ErrInvalidCredentials
 	}
 	// Después de bcrypt: solo quien sabe el password se entera de la suspensión.
 	if estaSuspendido(user.State) {
-		return sqlc.User{}, "", 0, ErrUsuarioSuspendido
+		return sqlc.User{}, Tokens{}, ErrUsuarioSuspendido
 	}
 
 	row, err := s.store.GetUserWithRolByID(ctx, user.ID)
 	if err != nil {
-		return sqlc.User{}, "", 0, err
+		return sqlc.User{}, Tokens{}, err
 	}
 
-	token, err := s.issueToken(user, row.RolName)
+	t, err := s.abrirSesion(ctx, user, row.RolName, rememberMe)
 	if err != nil {
-		return sqlc.User{}, "", 0, err
+		return sqlc.User{}, Tokens{}, err
 	}
-	return user, token, s.ttl, nil
+	return user, t, nil
 }
 
 // razonesGoogle es el campo reason del log de LoginGoogle para cada error.
@@ -178,9 +184,9 @@ func razonGoogle(err error) string {
 }
 
 // LoginGoogle inicia sesión con un ID token de Google: lo verifica, busca,
-// vincula o crea la cuenta y devuelve el token de acceso. El bool es true si
-// creó la cuenta. Escribe un solo registro de log por llamada.
-func (s *Auth) LoginGoogle(ctx context.Context, idToken string) (_ sqlc.User, _ string, _ time.Duration, _ bool, err error) {
+// vincula o crea la cuenta y le abre una sesión. El bool es true si creó la
+// cuenta. Escribe un solo registro de log por llamada.
+func (s *Auth) LoginGoogle(ctx context.Context, idToken string, rememberMe bool) (_ sqlc.User, _ Tokens, _ bool, err error) {
 	var (
 		claims googleid.Claims
 		res    GoogleLoginResult
@@ -208,19 +214,19 @@ func (s *Auth) LoginGoogle(ctx context.Context, idToken string) (_ sqlc.User, _ 
 	}()
 
 	if s.google == nil {
-		return sqlc.User{}, "", 0, false, ErrGoogleNoConfigurado
+		return sqlc.User{}, Tokens{}, false, ErrGoogleNoConfigurado
 	}
 
 	claims, err = s.google.Verificar(ctx, idToken)
 	if err != nil {
 		claims = googleid.Claims{}
 		if errors.Is(err, googleid.ErrClavesNoDisponibles) {
-			return sqlc.User{}, "", 0, false, ErrGoogleNoDisponible
+			return sqlc.User{}, Tokens{}, false, ErrGoogleNoDisponible
 		}
-		return sqlc.User{}, "", 0, false, ErrTokenGoogleInvalido
+		return sqlc.User{}, Tokens{}, false, ErrTokenGoogleInvalido
 	}
 	if !claims.EmailVerified || claims.Email == "" {
-		return sqlc.User{}, "", 0, false, ErrEmailGoogleNoVerificado
+		return sqlc.User{}, Tokens{}, false, ErrEmailGoogleNoVerificado
 	}
 
 	email := normalizeEmail(claims.Email)
@@ -233,23 +239,25 @@ func (s *Auth) LoginGoogle(ctx context.Context, idToken string) (_ sqlc.User, _ 
 		DefaultRoleName: s.defaultRoleName,
 	})
 	if err != nil {
-		return sqlc.User{}, "", 0, false, err
+		return sqlc.User{}, Tokens{}, false, err
 	}
 
-	// Siempre de la fila que devolvió el store: si se quitó el password, su
-	// password_changed_at nuevo va en el pwd_at del token.
-	token, err := s.issueToken(res.User, res.RolNombre)
-	if err != nil {
-		return sqlc.User{}, "", 0, false, err
-	}
-
+	// Antes de abrir la sesión: el vínculo ya quedó guardado, así que el aviso
+	// debe salir aunque falle la sesión.
 	if res.PasswordRemoved {
 		userID := res.User.ID
 		enviarEnSegundoPlano(ctx, userID, "aviso de vínculo con Google", func(ctx context.Context) error {
 			return s.mailer.EnviarAvisoCuentaVinculadaGoogle(ctx, userID, email)
 		})
 	}
-	return res.User, token, s.ttl, res.Created, nil
+
+	// Siempre de la fila que devolvió el store: si se quitó el password, su
+	// password_changed_at nuevo va en el pwd_at del token y de la sesión.
+	t, err := s.abrirSesion(ctx, res.User, res.RolNombre, rememberMe)
+	if err != nil {
+		return sqlc.User{}, Tokens{}, false, err
+	}
+	return res.User, t, res.Created, nil
 }
 
 // GetUser devuelve el usuario con su rol según el id.
